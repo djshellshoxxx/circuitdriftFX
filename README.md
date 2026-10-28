@@ -1,16 +1,36 @@
 # CircuitDrift
 
-CircuitDrift is a proposed audio effect plugin exploring dynamic analog circuits, component condition, thermal behavior, power-supply sag, and their interaction with audio.
+CircuitDrift is a planned audio effect plugin exploring dynamic circuits, component aging, temperature, power-supply sag and creative analog-inspired modulation.
 
-This repository currently contains the product vision and the prompt for researching and producing the engine specification package. The engine is not implemented or validated yet.
+**Status: specification/planning stage. No plugin DSP, GUI or release binaries are implemented yet.**
 
-## Project documents
+## Product and UX
 
-- [Product vision](docs/PRODUCT_VISION.md) — the author's supplied description, preserved as provided.
-- [Engine research and specification prompt](docs/prompts/ENGINE_SPECIFICATION_PROMPT.md) — the detailed assignment for the next research/development agent.
+- [Original product vision](docs/PRODUCT_VISION.md)
+- [UX design brief](docs/UX_DESIGN_BRIEF.md): PCB Workbench, Easy Mode/Tone State Sphere, direct gestures, lifecycle and analytical displays
+- [Planned feature register](docs/planned-features/FEATURE_REGISTER.md): all 23 requested features
 
-## Next step
+## Engineering package
 
-Give a repository-connected research/coding agent the contents of [the specification prompt](docs/prompts/ENGINE_SPECIFICATION_PROMPT.md). It directs the agent to inspect authoritative sources, write the engineering specifications and supporting research into this repository, validate their consistency, and commit the results.
+- [Specification index](docs/planned-features/README.md)
+- [UX interaction and display contracts](docs/planned-features/08-ux-interaction-and-displays.md)
+- [Decisions and resolved overlaps](docs/planned-features/DECISIONS.md)
+- [Parameter registry](docs/planned-features/parameters.json)
+- [Acceptance criteria](docs/planned-features/ACCEPTANCE.md)
+- [Research sources and limits](docs/planned-features/SOURCES.md)
+- [Open research/implementation gates](docs/planned-features/OPEN_QUESTIONS.md)
+- [Implementation plan](tasks/FEATURE_IMPLEMENTATION_PLAN.md)
+- [Specification review](docs/planned-features/SPEC_REVIEW.md)
 
-Physical claims in the vision are research targets. The specification process must distinguish supported circuit behavior, conditional approximations, and proposed creative effects.
+## Continue development
+
+Use the [engine research/specification prompt](docs/prompts/ENGINE_SPECIFICATION_PROMPT.md), now expanded to include the feature and UX package. Close the physical-model evidence gaps before claiming validated hardware emulation.
+
+Requested builds are VST3, AU v2, AAX Native and CLAP on the applicable Windows/macOS architectures; adapter, licensing, signing and host validation remain planned work.
+
+Validate the documentation package with:
+```sh
+python3 tools/validate_planned_features.py
+```
+
+That command checks specification consistency and example data. It does not build or test a plugin.

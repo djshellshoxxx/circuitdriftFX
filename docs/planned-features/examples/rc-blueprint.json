@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "example.rc",
+  "name": "Synthetic RC validation fixture",
+  "modelRegistryVersion": "fixture-v1",
+  "nodes": [
+    "0",
+    "in",
+    "out"
+  ],
+  "components": [
+    {
+      "id": "R1",
+      "modelId": "fixture.resistor",
+      "pins": {
+        "p": "in",
+        "n": "out"
+      },
+      "parameters": {
+        "resistanceOhm": 10000
+      },
+      "position": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "C1",
+      "modelId": "fixture.capacitor",
+      "pins": {
+        "p": "out",
+        "n": "0"
+      },
+      "parameters": {
+        "capacitanceF": 1e-8
+      },
+      "position": [
+        1,
+        0,
+        0
+      ]
+    }
+  ],
+  "ports": {
+    "input": "in",
+    "output": "out",
+    "ground": "0"
+  },
+  "macroBindings": []
+}

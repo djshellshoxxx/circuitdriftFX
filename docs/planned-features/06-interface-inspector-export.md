@@ -1,0 +1,43 @@
+# Vector interface, education, PCB inspector and media export
+
+Planned contract for CD-F03/F07/F08/F17; T03/T07/T08/T17. Detailed interaction/display definitions are in [UX contracts](08-ux-interaction-and-displays.md). Source constraints: S01/S08/S10/S13/S16.
+
+## Responsive vector shell
+
+Logical base window 1000x720; scale 0.75..2.0 default 1, independent of OS display pixel density. Minimum supported logical viewport 750x540. At narrow width <900 logical pixels, inspector details become a drawer and the bottom diagnostics use tabs; the four macros and utility controls remain reachable. Larger windows expand the canvas/plots, not text indefinitely. Store scale, theme and last view per instance; never as automated sound parameters. Host resize refusal keeps prior host bounds and fits/reflows content instead of cropping controls.
+
+Use vector text/icons/control geometry; PCB meshes/textures are distinct render assets with LOD and resource budgets. Dark brushed-metal and Light themes have equivalent information hierarchy. Text contrast target >=4.5:1 and interactive outlines >=3:1, numeric values and symbols accompany color. Focus order, keyboard adjustment, numeric entry, screen-reader control names, tooltips and reduced motion are mandatory. Retina/HiDPI device scale changes recreate graphic resources outside audio and retain logical positions. A/B, bypass and utility controls are always reachable.
+
+## Engine telemetry -> analysis -> rendering
+
+The DSP is authoritative for component values. ComponentSnapshot contains schemaVersion, graphGeneration, sampleIndex, epoch, componentId, temperatureK, dissipationW, terminalVoltagesV, branchCurrentsA, normalizedRail, effective parameter subset, validity flags and fault state. At most 64 component records, published 30 times/second. Per-sample rail aggregate is reduced to 1 kHz with min/max and mean; meters have true sample peak and RMS summaries at 60 Hz. Sample timestamps, not arrival times, drive visual alignment.
+
+Audio uses SPSC preallocated queues to one analysis worker. Worker fans out immutable UI and capture snapshots; do not share a single-reader FIFO among multiple consumers. For full buffers, audio drops the new telemetry batch, increments a counter and continues; UI may drain stale frames to most recent. Do not overwrite a buffer while a reader owns it. Audio analysis taps are enabled only when needed, antialiased to <=48 kHz, and capped to a 16384-frame four-channel ring (256 KiB float32); no raw oversampled electrical stream goes to GUI.
+
+GPU rendering occurs on a dedicated rendering context coordinated with JUCE's message thread; controls/focus remain on message thread. Proposed renderer adapter is OpenGL where verified on the selected platform, with native Metal/Direct3D alternatives through the same abstraction. No claim JUCE automatically supplies all listed backends. Version/platform GPU choice is an implementation gate. Close the editor -> stop graphics and analysis unless an explicit capture is active. Audio output must remain bit-identical with displays on/off in a deterministic fixture.
+
+Target 60 FPS while visible, p95 frame CPU <=4 ms and GPU <=8 ms on runtime reference hardware at 1000x720, 64 components, one plot active. Easy Mode offers 30 FPS battery/low-motion option. Degrade visual bloom/shadows/mesh LOD first, then 30 FPS, then 2D schematic/meter fallback. Never lower DSP quality in response to GUI load. Reopening, GPU loss or unsupported hardware restores interactive 2D controls, not a blank editor.
+
+## Inspector data and education
+
+Select component -> focus highlight and inspector panel with identity, nominal/base/effective values, units, live temperature/voltage, condition and source/model validity. Overlay enum Off/Thermal/Voltage/Signal plus X-Ray toggle; switch changes display only. Thermal colors use component-specific normal/stress reference temperatures, not universal "tube failure at 80 °C". Voltage maps use the selected rail's declared scale and show signed values. Signal lines show direction/relative magnitude of simulated currents; near zero, fade instead of implying a fixed flow.
+
+Tooltip opens after 450 ms hover or keyboard focus, dismisses on Escape, stays pinnable for touch. Short version <=60 words; educational expansion <=250 words with model/source link and "what changes in audio" section. Text is bundled/versioned and works offline. A germanium diode appears only if a supported model/blueprint contains one; "pull-up" is a resistor's circuit role, not a separate material. Explain Johnson noise separately from excess noise/composition. Never promise every resistor swap changes sound audibly.
+
+T17 compares selected component telemetry against a test circuit to float conversion tolerance, validates units/generation, tests queue overload and confirms no modulation from visual smoothing. Stale data >250 ms receives a Stale badge rather than fabricated continued readings.
+
+## Screenshot/GIF/video exporter
+
+Local capture states: Idle -> Armed -> Recording -> Finalizing -> Completed, Cancelled or Failed. A user chooses format, framing, duration, audio inclusion and local destination before Record. Defaults: 9:16 portrait 1080x1920 MP4, 30 FPS, 10 s, audio off. Other framing 1:1 (1080 square), 16:9 (1920x1080). Max recording 60 s MP4 or 15 s GIF. PNG screenshot uses current selected canvas/overlay at chosen aspect. Capture canvas includes only CircuitDrift-owned visuals and optional user-selected controls; no desktop/window capture, account names, cloud browser or arbitrary DAW content.
+
+GIF: 540x960/540x540/960x540, 20 FPS, indexed <=256-color palette, 5-centisecond frame delay, no audio, loop toggle. MP4: H.264 8-bit 4:2:0, target 8 Mbit/s, optional stereo AAC 48 kHz/192 kbit/s. Native encoders: Windows Media Foundation, macOS AVAssetWriter; check available codec/config before recording (S10/S16). Encoding/resampling/palette conversion occur on worker. If unavailable offer PNG/GIF instead, with error; never silently create a different format. Dependency/license review is required before bundling a fallback encoder.
+
+Audio capture is an explicit tap of the final plugin output only, after protection, with already-declared latency. It is not a recording of the whole DAW/master. Preallocate 2 seconds of stereo float audio at the active rate, three GPU frame slots and at most three CPU readback buffers. Starting/stopping toggles a bounded audio copy only; all file writes are worker-side. Video frames carry audio sample-index PTS, compensating output-tap versus internal telemetry latency. When transport seeks during recording, stop and finalize the current segment with a discontinuity status; do not create non-monotonic timestamps. Without audio callbacks, allow visual-only screenshot, not an invented audio-synced recording.
+
+Render to an offscreen target using recorded state snapshots, not blocking synchronous GPU readback on the audio/message thread. Main-thread Record hands a job to capture worker. If video encoder falls behind, repeat the most recent frame with the correct timestamps and count drops; warn at >2% repeated frames. If audio ring would overflow, stop capture and finalize with an explicit error; never silently discard audio or stall processing. Disk-full/permission-denied/codec failure cancels the job and cleans incomplete temporary files. Final output appears only after successful mux finalization and atomic rename.
+
+Capture memory ceiling is an additional 64 MiB, shown in the capability/budget report; full active-recording target <184 MB including the base 120 MB. This is an explicit scoped exception to the requested idle-memory target, not hidden unlimited growth. Three 1080x1920 RGBA buffers cost about 24.9 MB before GPU copies; enforce GPU+CPU resource accounting and reduce to two CPU buffers or 720x1280 if the adapter would exceed the cap. Do not retain all 60 seconds of frames in RAM.
+
+No automated social login, upload or posting. The output is a local file suitable for user sharing. Platform upload requirements can change; these are export presets, not guaranteed acceptance by Instagram/TikTok/YouTube.
+
+T03 decodes output to verify dimensions, codec/container, frame count/duration and monotonic timestamps. For a 60 s click/flash fixture at every native sample rate, A/V skew <=one 30 FPS frame and accumulated drift <=20 ms. GUI close, minimize, display-scale change, 2x encoder stall, disk-full and cancelled jobs must leave audio processing unaffected. T07 checks 75/100/125/150/200% across OS scale factors and host resize denial; T08 verifies all shipped model tooltips offline and keyboard/touch operation.
