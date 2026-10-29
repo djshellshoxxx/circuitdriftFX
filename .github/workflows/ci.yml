@@ -1,0 +1,20 @@
+name: ci
+on:
+  push:
+    paths-ignore: ['**.md', 'docs/**/*.md']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**/*.md']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON
+      - run: cmake --build build --parallel 4
+      - run: ctest --test-dir build --output-on-failure --parallel 4
