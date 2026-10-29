@@ -1,5 +1,7 @@
 # Checkpoint
 
+See docs/HANDOFF.md for the current resume point (PR #1 merged to main as 29ca74b).
+
 - Repo: djshellshoxxx/circuitdriftfx, branch `claude/circuitdriftfx-implementation-dknarc`, base main a69c201. Session started in an unrelated checkout (CLASSifiedisRUPTed); circuitdriftfx was attached and cloned to /home/user/circuitdriftfx.
 - Toolchain found: cmake, g++, clang++, python3. Not checked/installed: JUCE 8, CLAP SDK, AAX SDK (G08/G09), Windows/macOS toolchains, plugin validators/hosts.
 - Done: P01 partial (CMake targets cd_core/cd_dsp, generated registry), P03 primitives (thermal network, HPF, soft clip, gain matcher).
