@@ -6,11 +6,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(CD_SANITIZE "ASan+UBSan for tests" OFF)
 
 # cd_core: IDs, units, parameter registry. No JUCE/UI/network dependency.
-add_library(cd_core STATIC src/core/ParameterRegistry.cpp)
+add_library(cd_core STATIC src/core/ParameterRegistry.cpp src/core/Json.cpp)
 target_include_directories(cd_core PUBLIC src)
 # cd_dsp: portable math core; depends only on cd_core.
 add_library(cd_dsp STATIC src/dsp/ThermalNetwork.cpp src/dsp/OutputProtection.cpp
-  src/dsp/Oversampling.cpp)
+  src/dsp/Oversampling.cpp src/dsp/DeviceManifest.cpp src/dsp/MnaSolver.cpp)
 target_link_libraries(cd_dsp PUBLIC cd_core)
 foreach(t cd_core cd_dsp)
   target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic)

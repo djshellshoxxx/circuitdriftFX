@@ -115,6 +115,12 @@ for p in registry:
         need(abs(inverse-u) < 1e-12, f'mapping roundtrip {p["id"]}')
 print(f"PASS: {len(registry)} parameter IDs, defaults, enums and mapping roundtrips")
 
+manifest_schema = read_json(DOCS / "schemas/device-manifest.schema.json")
+manifest = read_json(DOCS / "examples/fixture-diode.manifest.json")
+schema_check(manifest, manifest_schema)
+need(manifest["provenance"]["kind"] == "synthetic-fixture", "example manifest must be labelled synthetic")
+print("PASS: synthetic diode manifest example matches device-manifest schema")
+
 schema = read_json(DOCS / "schemas/blueprint.schema.json")
 example = read_json(DOCS / "examples/rc-blueprint.json")
 

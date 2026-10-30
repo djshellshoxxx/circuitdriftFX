@@ -1,14 +1,18 @@
 // Acceptance tests: T20 (thermal), T21 (oversampling), T22 (HPF), T23 (soft clip / gain match),
-// registry invariants (P01).
+// registry invariants (P01), strict JSON + device manifests + MNA/Newton on SYNTHETIC fixtures (P02).
 // Plain-assert harness: no third-party dependency, deterministic, no I/O.
 #include <algorithm>
 #include <cmath>
 #include <complex>
 #include <string>
 #include <cstdio>
+#include <cstring>
 #include <set>
 #include <vector>
+#include "core/Json.h"
 #include "core/ParameterRegistry.h"
+#include "dsp/DeviceManifest.h"
+#include "dsp/MnaSolver.h"
 #include "dsp/OutputProtection.h"
 #include "dsp/Oversampling.h"
 #include "dsp/ThermalNetwork.h"
@@ -197,6 +201,186 @@ static void t21_oversampling() {
     }
 }
 
+// ---- P02 strict JSON, device manifests, MNA/Newton (synthetic fixtures only) -----------------
+static void p02_json() {
+    core::JsonValue v; std::string e;
+    CHECK(core::parseJson(R"({"a":[1,-2.5e-3,true,null,"xé😀"],"b":{}})", v, e), "valid: %s", e.c_str());
+    core::JsonValue w;
+    CHECK(core::parseJson(core::writeJson(v), w, e) && core::writeJson(w) == core::writeJson(v), "roundtrip");
+    CHECK(v.get("a")->array[4].string == "x\xC3\xA9\xF0\x9F\x98\x80", "utf8 decode");
+    auto n = core::JsonValue::makeNumber(0.1 + 0.2);
+    CHECK(core::parseJson(core::writeJson(n), w, e) && w.number == n.number, "exact double");
+    const char* badDocs[] = {R"({"a":1,"a":2})", "[1,]", "01", "NaN", "1e999", "-", "1.", R"("\x")", "\"\xC0\xAF\"",
+                             "\"\x01\"", "[1] x", R"("\ud800")", R"("\udc00")", "{\"a\" 1}", "tru", "", "\"\xED\xA0\x80\""};
+    for (const char* d : badDocs) CHECK(!core::parseJson(d, v, e), "accepted bad doc %s", d);
+    std::string deep(21, '['); deep += std::string(21, ']');
+    CHECK(!core::parseJson(deep, v, e), "depth 21");
+    std::string ok20(20, '['); ok20 += std::string(20, ']');
+    CHECK(core::parseJson(ok20, v, e) && core::jsonDepth(v) == 20, "depth 20 %s", e.c_str());
+    core::JsonLimits small; small.maxBytes = 4;
+    CHECK(!core::parseJson("[1,2]", v, e, small), "size bound");
+}
+
+static void p02_manifest() {
+    const auto& cat = dsp::syntheticFixtureCatalogue();
+    CHECK(cat.size() == 3, "catalogue %zu", cat.size());
+    for (const auto& m : cat) CHECK(m.provenance == dsp::ProvenanceKind::SyntheticFixture, "%s synthetic label", m.modelId.c_str());
+    const auto* d = dsp::findSyntheticFixture("fixture.diode");
+    CHECK(d && d->equation == dsp::DeviceEquation::ShockleyDiode && d->maxExpArg == 40 && d->params.size() == 3, "diode fixture");
+    // Mutations of the diode fixture that must be rejected.
+    const std::pair<const char*, const char*> muts[] = {
+        {"\"kind\":\"synthetic-fixture\"", "\"kind\":\"guessed\""},
+        {"\"kind\":\"synthetic-fixture\"", "\"kind\":\"measured\""},           // measured without source
+        {"\"equation\":\"shockley-diode\"", "\"equation\":\"12AX7\""},
+        {"\"min\":0.5,\"max\":4,\"default\":1}", "\"min\":0.5,\"max\":4,\"default\":5}"},
+        {"\"min\":0.5,\"max\":4", "\"min\":5,\"max\":4"},
+        {"\"currentA\":1e-3", "\"currentA\":0"},
+        {"\"pins\":[\"anode\",\"cathode\"]", "\"pins\":[\"anode\"]"},
+        {"\"unit\":\"A\"", "\"unit\":\"mA\""},
+        {"\"maxExpArg\":40", "\"maxExpArg\":-1"},
+        {",\"domain\":{\"maxExpArg\":40}", ""},
+        {"\"revision\":1", "\"revision\":1,\"extra\":0"},
+        {"\"schemaVersion\":1", "\"schemaVersion\":2"},
+    };
+    for (const auto& mu : muts) {
+        std::string t = dsp::syntheticFixtureJson(2);
+        const auto at = t.find(mu.first);
+        CHECK(at != std::string::npos, "mutation anchor %s", mu.first);
+        if (at == std::string::npos) continue;
+        t.replace(at, std::strlen(mu.first), mu.second);
+        core::JsonValue j; std::string e; dsp::DeviceManifest m;
+        CHECK(!(core::parseJson(t, j, e) && dsp::parseDeviceManifest(j, m, e)), "accepted mutation -> %s", mu.second);
+    }
+}
+
+static dsp::NetElement dev(const char* id, int a, int b, std::initializer_list<double> p) {
+    dsp::NetElement e; e.model = dsp::findSyntheticFixture(id); e.a = a; e.b = b;
+    int k = 0; for (double v : p) e.param[k++] = v;
+    return e;
+}
+static dsp::NetElement src(dsp::NetElement::Kind k, int a, int b, double v) { dsp::NetElement e; e.kind = k; e.a = a; e.b = b; e.value = v; return e; }
+using K = dsp::NetElement::Kind;
+const double kIs = 1e-14, kN = 1.0, kVt = 0.025852;  // fixture.diode defaults (synthetic)
+static double diodeI(double v) { const double a = v / (kN * kVt); return a > 40 ? kIs * (std::exp(40.0) * (1 + a - 40) - 1) : kIs * (std::exp(a) - 1); }
+
+// Root of a strictly increasing scalar function by bisection (independent of Newton/LU).
+template <class Fn> static double bisect(Fn g, double lo, double hi) {
+    for (int i = 0; i < 200; ++i) { const double mid = 0.5 * (lo + hi); (g(mid) > 0 ? hi : lo) = mid; }
+    return 0.5 * (lo + hi);
+}
+
+static void p02_mna() {
+    std::string e;
+    // (1) Analytic Jacobian vs central differences, diode biased across and beyond the exp cap.
+    {
+        dsp::Netlist n; n.nodes = 2;
+        n.elements = {src(K::VoltageSource, 1, 0, 0.0), dev("fixture.resistor", 1, 2, {100.0}),
+                      dev("fixture.diode", 2, 0, {kIs, kN, kVt}), dev("fixture.capacitor", 2, 0, {1e-8})};
+        dsp::MnaSolver s; CHECK(s.prepare(n, 1e-5, {}, e), "prepare jac: %s", e.c_str());
+        const int m = s.unknowns();
+        for (double vd : {-1.0, 0.0, 0.3, 0.6, 0.9, 1.2}) {
+            std::vector<double> x = {0.5, vd, 1e-3}, F(m), J(m * m), Fp(m), Fm(m);
+            s.evaluate(x.data(), F.data(), J.data(), false);
+            for (int c = 0; c < m; ++c) {
+                const double hstep = 1e-7 * (1 + std::fabs(x[c]));
+                auto xp = x, xm = x; xp[c] += hstep; xm[c] -= hstep;
+                s.evaluate(xp.data(), Fp.data(), nullptr, false); s.evaluate(xm.data(), Fm.data(), nullptr, false);
+                for (int r = 0; r < m; ++r) {
+                    // FD noise scales with |F_r|/hstep, so tolerance is relative to the row's largest entry.
+                    double rowMax = 0; for (int q = 0; q < m; ++q) rowMax = std::max(rowMax, std::fabs(J[r * m + q]));
+                    const double fd = (Fp[r] - Fm[r]) / (2 * hstep), an = J[r * m + c];
+                    CHECK(std::fabs(fd - an) <= 1e-6 * (rowMax + 1e-3), "J[%d][%d] vd %g an %g fd %g", r, c, vd, an, fd);
+                }
+            }
+        }
+    }
+    // (2) Synthetic RC (R=10k, C=10n, tau=100 us) step at 192 kHz vs the exact BE recurrence.
+    {
+        dsp::Netlist n; n.nodes = 2;
+        n.elements = {src(K::VoltageSource, 1, 0, 0.0), dev("fixture.resistor", 1, 2, {1e4}), dev("fixture.capacitor", 2, 0, {1e-8})};
+        const double h = 1.0 / 192000, r = h / 1e-4;
+        dsp::MnaSolver s; CHECK(s.prepare(n, h, {8, 1e-7}, e), "prepare rc: %s", e.c_str());
+        s.setSource(0, 1.0);
+        double ref = 0, worst = 0, worstA = 0;
+        for (int i = 1; i <= 1920; ++i) {
+            CHECK(s.step(), "rc step %d", i);
+            ref = (ref + r) / (1 + r);
+            worst = std::max(worst, std::fabs(s.voltage(2) - ref));
+            worstA = std::max(worstA, std::fabs(s.voltage(2) - (1 - std::exp(-i * h / 1e-4))));
+            CHECK(s.lastIterations() <= 2, "linear iterations %d", s.lastIterations());
+        }
+        CHECK(worst <= 1e-12, "rc vs BE recurrence %g", worst);
+        CHECK(worstA <= 0.5 * r, "rc vs analytic %g (BE first-order bound %g)", worstA, 0.5 * r);
+        CHECK(std::fabs(s.unknown(2) + (1 - s.voltage(2)) / 1e4) < 1e-12, "source branch current");
+    }
+    // (3) Synthetic diode + resistor DC point vs bisection on (V-v)/R = I(v).
+    {
+        dsp::Netlist n; n.nodes = 2;
+        n.elements = {src(K::VoltageSource, 1, 0, 1.0), dev("fixture.resistor", 1, 2, {1000.0}), dev("fixture.diode", 2, 0, {kIs, kN, kVt})};
+        dsp::MnaSolver s; CHECK(s.prepare(n, 1e-5, {}, e), "prepare dc: %s", e.c_str());
+        const double vd = bisect([](double v) { return diodeI(v) - (1.0 - v) / 1000.0; }, 0.0, 1.0);
+        CHECK(std::fabs(s.voltage(2) - vd) <= 1e-9, "diode dc %.12f ref %.12f", s.voltage(2), vd);
+        CHECK(s.lastScaledResidual() <= 1e-7 && s.lastIterations() <= dsp::MnaSolver::kDcIterations, "dc residual %g iters %d",
+              s.lastScaledResidual(), s.lastIterations());
+    }
+    // (4) Synthetic antiparallel-diode clipper with C, 2 V 1 kHz drive, 192 kHz, Studio cap 8:
+    //     per-step reference solves the same BE scalar equation by bisection.
+    {
+        dsp::Netlist n; n.nodes = 2;
+        n.elements = {src(K::VoltageSource, 1, 0, 0.0), dev("fixture.resistor", 1, 2, {1000.0}), dev("fixture.diode", 2, 0, {kIs, kN, kVt}),
+                      dev("fixture.diode", 0, 2, {kIs, kN, kVt}), dev("fixture.capacitor", 2, 0, {1e-8})};
+        const double h = 1.0 / 192000, C = 1e-8;
+        dsp::MnaSolver s; CHECK(s.prepare(n, h, {8, 1e-7}, e), "prepare clip: %s", e.c_str());
+        double vref = 0, worst = 0; int maxIt = 0;
+        for (int i = 1; i <= 384; ++i) {
+            const double vs = 2.0 * std::sin(2 * M_PI * 1000.0 * i * h);
+            s.setSource(0, vs);
+            CHECK(s.step(), "clip step %d", i);
+            const double vo = vref;
+            vref = bisect([&](double v) { return C * (v - vo) / h + (v - vs) / 1000.0 + diodeI(v) - diodeI(-v); }, -3.0, 3.0);
+            worst = std::max(worst, std::fabs(s.voltage(2) - vref));
+            maxIt = std::max(maxIt, s.lastIterations());
+        }
+        CHECK(worst <= 1e-8, "clipper vs bisection %g V", worst);
+        CHECK(maxIt <= 8 && s.failures() == 0, "clipper iterations %d failures %ld", maxIt, s.failures());
+        // Failure containment: 1 Newton iteration cannot converge a large nonlinear jump.
+        dsp::MnaSolver f; CHECK(f.prepare(n, h, {1, 1e-7}, e), "prepare cap1");
+        std::vector<double> before(f.stateSize()), after(f.stateSize());
+        for (int k = 0; k < 3; ++k) {
+            f.getState(before.data());
+            f.setSource(0, k % 2 ? -50.0 : 50.0);
+            CHECK(!f.step(), "cap1 step %d should fail", k);
+            f.getState(after.data());
+            CHECK(before == after, "failed step committed state");
+        }
+        CHECK(f.failures() == 3 && f.needsFallback(), "fallback flag");
+    }
+    // (5) Rejections.
+    {
+        dsp::MnaSolver s;
+        dsp::Netlist n; n.nodes = 2;
+        n.elements = {src(K::VoltageSource, 1, 0, 1.0), dev("fixture.capacitor", 1, 2, {1e-8})};  // node 2 floating at DC
+        CHECK(!s.prepare(n, 1e-5, {}, e), "floating accepted");
+        n.elements = {src(K::VoltageSource, 1, 0, 1.0), src(K::VoltageSource, 1, 0, 2.0), dev("fixture.resistor", 1, 2, {1e3}),
+                      dev("fixture.resistor", 2, 0, {1e3})};
+        CHECK(!s.prepare(n, 1e-5, {}, e), "V loop accepted");
+        n.elements = {src(K::VoltageSource, 1, 0, 1.0), dev("fixture.resistor", 1, 2, {0.0}), dev("fixture.resistor", 2, 0, {1e3})};
+        CHECK(!s.prepare(n, 1e-5, {}, e), "R outside manifest bounds accepted");
+        n.elements = {src(K::VoltageSource, 1, 0, 1.0), dev("fixture.resistor", 1, 1, {1e3}), dev("fixture.resistor", 2, 0, {1e3})};
+        CHECK(!s.prepare(n, 1e-5, {}, e), "a==b accepted");
+        n.elements = {src(K::VoltageSource, 1, 0, 1.0), dev("fixture.resistor", 1, 2, {1e3}), dev("fixture.resistor", 2, 0, {1e3})};
+        CHECK(s.prepare(n, 1e-5, {}, e), "divider: %s", e.c_str());
+        CHECK(std::fabs(s.voltage(2) - 0.5) < 1e-12, "divider %g", s.voltage(2));
+        CHECK(!s.prepare(n, 0.0, {}, e) && !s.prepare(n, 1e-5, {13, 1e-7}, e), "h/options accepted");
+        dsp::Netlist sc = n; sc.currentScaleA = 0; CHECK(!s.prepare(sc, 1e-5, {}, e), "scale accepted");
+        dsp::Netlist big = n; big.nodes = 33; CHECK(!s.prepare(big, 1e-5, {}, e), "33 nodes accepted");
+        dsp::Netlist nm = n; nm.elements[1].model = nullptr; CHECK(!s.prepare(nm, 1e-5, {}, e), "missing manifest accepted");
+        dsp::Netlist nl; nl.nodes = 1; nl.elements.push_back(src(K::VoltageSource, 1, 0, 1.0));
+        for (int k = 0; k < 9; ++k) nl.elements.push_back(dev("fixture.diode", 1, 0, {kIs, kN, kVt}));
+        CHECK(!s.prepare(nl, 1e-5, {}, e), "9 nonlinear accepted");
+    }
+}
+
 static void t22_hpf() {
     for (double fs : {44100.0, 48000.0, 96000.0, 192000.0}) {
         dsp::ButterworthHpf f; CHECK(f.design(fs, 15.0), "design");
@@ -243,7 +427,7 @@ static void t23_clip_match() {
 }
 
 int main() {
-    registry(); t20_thermal(); t21_oversampling(); t22_hpf(); t23_clip_match();
+    registry(); t20_thermal(); t21_oversampling(); t22_hpf(); t23_clip_match(); p02_json(); p02_manifest(); p02_mna();
     std::printf(g_fail ? "FAILED (%d)\n" : "ALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }
