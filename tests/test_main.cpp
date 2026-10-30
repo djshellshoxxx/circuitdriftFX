@@ -1,5 +1,6 @@
 // Acceptance tests: T20 (thermal), T22 (HPF), T23 (soft clip / gain match), registry invariants (P01).
 // Plain-assert harness: no third-party dependency, deterministic, no I/O.
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <string>
@@ -7,6 +8,7 @@
 #include <set>
 #include <vector>
 #include "core/ParameterRegistry.h"
+#include "dsp/Halfband2x.h"
 #include "dsp/OutputProtection.h"
 #include "dsp/ThermalNetwork.h"
 
@@ -103,8 +105,48 @@ static void t23_clip_match() {
     CHECK(gm.gain() <= 4.0 + 1e-9 && gm.gain() > 3.5, "clamp %g", gm.gain());
 }
 
+// T21 (partial): 2x halfband stage. Passband ripple <=0.01 dB to 0.2 fs_hi, stopband <=-100 dB from 0.3 fs_hi.
+static void t21_halfband() {
+    dsp::Halfband2x hb; hb.prepare();
+    const auto& h = hb.coefficients();
+    for (std::size_t n = 0; n < dsp::Halfband2x::kTaps; ++n) {
+        CHECK(std::fabs(h[n] - h[dsp::Halfband2x::kTaps - 1 - n]) < 1e-15, "symmetry %zu", n);
+        const long off = long(n) - long(dsp::Halfband2x::kHalf);
+        if (off != 0 && off % 2 == 0) CHECK(std::fabs(h[n]) < 1e-15, "half-band zero at %zu", n);
+    }
+    auto mag = [&](double f) {
+        double re = 0, im = 0;
+        for (std::size_t n = 0; n < dsp::Halfband2x::kTaps; ++n) {
+            re += h[n] * std::cos(2 * M_PI * f * n); im -= h[n] * std::sin(2 * M_PI * f * n);
+        }
+        return std::hypot(re, im);
+    };
+    double worstPass = 0, worstStop = -1e9;
+    for (int i = 0; i <= 400; ++i) {
+        worstPass = std::max(worstPass, std::fabs(20 * std::log10(mag(0.2 * i / 400.0))));
+        worstStop = std::max(worstStop, 20 * std::log10(mag(0.3 + 0.2 * i / 400.0)));
+    }
+    CHECK(worstPass <= 0.01, "passband ripple %g dB", worstPass);
+    CHECK(worstStop <= -100.0, "stopband %g dB", worstStop);
+    // Round trip of an in-band tone at fs_lo=48 kHz: quadrature amplitude over steady state within 0.01 dB.
+    dsp::Halfband2x up, down; up.prepare(); down.prepare();
+    const double fs = 48000; const int total = int(fs), from = total / 2;
+    double inI = 0, inQ = 0, outI = 0, outQ = 0;
+    for (int i = 0; i < total; ++i) {
+        const double x = std::sin(2 * M_PI * 1000.0 * i / fs);
+        double a, b; up.upsample(x, a, b);
+        const double y = down.downsample(a, b);
+        if (i >= from) {
+            const double c = std::cos(2 * M_PI * 1000.0 * i / fs), sn = std::sin(2 * M_PI * 1000.0 * i / fs);
+            inI += x * c; inQ += x * sn; outI += y * c; outQ += y * sn;
+        }
+    }
+    const double peakIn = std::hypot(inI, inQ), peakOut = std::hypot(outI, outQ);
+    CHECK(std::fabs(20 * std::log10(peakOut / peakIn)) <= 0.01, "round trip %g dB", 20 * std::log10(peakOut / peakIn));
+}
+
 int main() {
-    registry(); t20_thermal(); t22_hpf(); t23_clip_match();
+    registry(); t20_thermal(); t22_hpf(); t23_clip_match(); t21_halfband();
     std::printf(g_fail ? "FAILED (%d)\n" : "ALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }
