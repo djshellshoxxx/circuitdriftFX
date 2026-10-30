@@ -9,7 +9,8 @@ option(CD_SANITIZE "ASan+UBSan for tests" OFF)
 add_library(cd_core STATIC src/core/ParameterRegistry.cpp)
 target_include_directories(cd_core PUBLIC src)
 # cd_dsp: portable math core; depends only on cd_core.
-add_library(cd_dsp STATIC src/dsp/ThermalNetwork.cpp src/dsp/OutputProtection.cpp)
+add_library(cd_dsp STATIC src/dsp/ThermalNetwork.cpp src/dsp/OutputProtection.cpp
+  src/dsp/Oversampling.cpp)
 target_link_libraries(cd_dsp PUBLIC cd_core)
 foreach(t cd_core cd_dsp)
   target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic)
