@@ -1,6 +1,8 @@
 // Acceptance tests: T20 (thermal), T21 (oversampling), T22 (HPF), T23 (soft clip / gain match),
-// registry invariants (P01), strict JSON + device manifests + MNA/Newton on SYNTHETIC fixtures (P02).
-// Plain-assert harness: no third-party dependency, deterministic, no I/O.
+// registry invariants (P01), strict JSON + device manifests + MNA/Newton on SYNTHETIC fixtures (P02),
+// state documents/migration/checkpoints (P04, part of T24).
+// Plain-assert harness: no third-party dependency, deterministic; only file I/O is the P04 atomic-save
+// check in the system temp directory.
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -16,6 +18,9 @@
 #include "dsp/OutputProtection.h"
 #include "dsp/Oversampling.h"
 #include "dsp/ThermalNetwork.h"
+#include "state/StateDocument.h"
+#include <filesystem>
+#include <fstream>
 
 static int g_fail = 0;
 #define CHECK(c, ...) do { if (!(c)) { ++g_fail; std::printf("FAIL %s:%d %s | ", __FILE__, __LINE__, #c); std::printf(__VA_ARGS__); std::printf("\n"); } } while (0)
@@ -381,6 +386,144 @@ static void p02_mna() {
     }
 }
 
+// ---- P04 state documents ---------------------------------------------------------------------
+// SYNTHETIC fixture documents: values are arbitrary, not authored factory content.
+static const char* kSession = R"({"schemaVersion":1,"product":"CircuitDrift","kind":"session","engineModelVersion":"0.0.1-dev",
+ "minReaderVersion":1,"author":"fixture","title":"Synthetic session","tags":["test"],"createdAt":"2026-10-30T12:00:00Z",
+ "requiredFeatures":["CD-F21"],"blueprints":[{"schemaVersion":1,"id":"example.rc","components":[{"id":"R1","modelId":"fixture.resistor"}]}],
+ "baseParameters":{"hpf.frequency":20,"quality.oversampling":3},"macros":{},"timeline":{},"faults":[],"seed":42,
+ "ui":{"theme":"dark"},"x-note":"kept"})";
+
+static std::uint64_t fnv1a(const std::string& t) { std::uint64_t h = 1469598103934665603ull; for (unsigned char c : t) { h ^= c; h *= 1099511628211ull; } return h; }
+
+// Test-only synthetic v0 -> v1 migration: v0 called the parameter map "params".
+static bool migrateFixtureV0(core::JsonValue& d, std::string& why) {
+    core::JsonValue* p = d.get("params");
+    if (!p) { why = "v0 without params"; return false; }
+    core::JsonValue moved = *p;
+    for (std::size_t k = 0; k < d.object.size(); ++k) if (d.object[k].first == "params") { d.object.erase(d.object.begin() + long(k)); break; }
+    d.set("baseParameters", std::move(moved));
+    d.set("schemaVersion", core::JsonValue::makeNumber(1));
+    return true;
+}
+static bool migrateBroken(core::JsonValue&, std::string&) { return true; }  // forgets to advance version
+
+static void p04_state() {
+    state::StateDocument d; std::string e; state::LoadReport rep;
+    CHECK(state::loadState(kSession, d, e, state::productionMigrations(), &rep), "load: %s", e.c_str());
+    CHECK(d.kind == state::DocKind::Session && d.seed == 42 && d.baseParameters.size() == 2 && d.ui && d.metadata.size() == 1, "fields");
+    CHECK(rep.sourceVersion == 1 && rep.migrationsApplied == 0, "report");
+    // Save -> load -> save is a fixed point (canonical).
+    const std::string s1 = state::saveState(d);
+    state::StateDocument d2; CHECK(state::loadState(s1, d2, e), "reload: %s", e.c_str());
+    CHECK(state::saveState(d2) == s1, "canonical roundtrip");
+
+    // Rejections (each a single mutation of the synthetic session).
+    const std::pair<const char*, const char*> muts[] = {
+        {"\"seed\":42", "\"seed\":42,\"seed\":43"},                   // duplicate key
+        {"\"seed\":42", "\"seed\":4.5"},
+        {"\"seed\":42", "\"seed\":1e999"},                             // non-finite
+        {"\"schemaVersion\":1,\"product\"", "\"schemaVersion\":2,\"product\""},  // newer major
+        {"\"minReaderVersion\":1", "\"minReaderVersion\":2"},
+        {"\"product\":\"CircuitDrift\"", "\"product\":\"Other\""},
+        {"\"kind\":\"session\"", "\"kind\":\"preset\""},
+        {"\"CD-F21\"", "\"CD-F99\""},                                  // unknown required feature
+        {"\"fixture.resistor\"", "\"12AX7\""},                         // unknown model (G01)
+        {"\"hpf.frequency\":20", "\"hpf.frequency\":5"},               // out of range: rejected, not clamped
+        {"\"hpf.frequency\":20", "\"hpf.nope\":20"},                   // unknown parameter
+        {"\"quality.oversampling\":3", "\"quality.oversampling\":2.5"},
+        {"\"2026-10-30T12:00:00Z\"", "\"yesterday\""},
+        {"\"faults\":[]", "\"faults\":1"},
+        {"\"kind\":\"session\"", "\"kind\":\"scene\""},                // scene with 'blueprints'
+    };
+    for (const auto& mu : muts) {
+        std::string t = kSession;
+        const auto at = t.find(mu.first);
+        CHECK(at != std::string::npos, "anchor %s", mu.first);
+        if (at == std::string::npos) continue;
+        t.replace(at, std::strlen(mu.first), mu.second);
+        state::StateDocument x;
+        CHECK(!state::loadState(t, x, e), "accepted mutation %s", mu.second);
+    }
+    std::string deep = std::string(kSession);
+    deep.replace(deep.find("\"macros\":{}"), 11, "\"macros\":" + std::string(19, '[') + std::string(19, ']'));
+    CHECK(!state::loadState(deep, d2, e), "depth > 20 accepted");
+    std::string huge = std::string(kSession);
+    huge.replace(huge.find("\"x-note\":\"kept\""), 15, "\"x-note\":\"" + std::string(70000, 'a') + "\"");
+    CHECK(!state::loadState(huge, d2, e), "metadata bound");
+    std::string bigScene = std::string(kSession);
+    bigScene.replace(bigScene.find("\"kind\":\"session\""), 16, "\"kind\":\"scene\"");
+    bigScene.replace(bigScene.find("\"x-note\":\"kept\""), 15, "\"x-pad\":\"" + std::string(1400000, ' ') + "\"");
+    CHECK(!state::loadState(bigScene, d2, e) && e.find("1.25") != std::string::npos, "scene size bound: %s", e.c_str());
+
+    // Publish: scene only; strips ui/checkpoint/metadata; result reloads.
+    std::string sceneTxt = kSession;
+    sceneTxt.replace(sceneTxt.find("\"kind\":\"session\""), 16, "\"kind\":\"scene\"");
+    sceneTxt.replace(sceneTxt.find("\"blueprints\":["), 14, "\"blueprint\":");
+    sceneTxt.replace(sceneTxt.find("}]}],"), 5, "}]},");
+    state::StateDocument sc; CHECK(state::loadState(sceneTxt, sc, e), "scene load: %s", e.c_str());
+    std::string pub; CHECK(state::publishScene(sc, pub, e), "publish: %s", e.c_str());
+    CHECK(pub.find("\"ui\"") == std::string::npos && pub.find("x-note") == std::string::npos, "publish strips private fields");
+    CHECK(!state::publishScene(d, pub, e), "session published");
+    state::StateDocument withCp = sc;
+    withCp.checkpoint = state::EngineCheckpoint{};
+    CHECK(state::publishScene(withCp, pub, e) && pub.find("checkpoint") == std::string::npos, "publish strips checkpoint");
+
+    // Migrations (synthetic test-only v0 chain; production chain is empty because v1 is first).
+    std::string v0 = kSession;
+    v0.replace(v0.find("\"schemaVersion\":1,\"product\""), 27, "\"schemaVersion\":0,\"product\"");
+    v0.replace(v0.find("\"baseParameters\""), 16, "\"params\"");
+    CHECK(!state::loadState(v0, d2, e), "v0 accepted without chain");
+    state::MigrationChain chain{0, {&migrateFixtureV0}};
+    CHECK(state::loadState(v0, d2, e, chain, &rep) && rep.sourceVersion == 0 && rep.migrationsApplied == 1, "migrate: %s", e.c_str());
+    CHECK(state::saveState(d2) == s1, "migrated result equals v1 document");
+    const std::uint64_t digest = fnv1a(state::saveState(d2));
+    CHECK(digest == 0x9b1c4df78b58de31ull, "migration digest %016llx", (unsigned long long)digest);  // frozen fixture digest
+    state::MigrationChain broken{0, {&migrateBroken}};
+    CHECK(!state::loadState(v0, d2, e, broken), "non-advancing migration accepted");
+    state::MigrationChain gap{0, {}};
+    CHECK(!state::loadState(v0, d2, e, gap), "missing step accepted");
+
+    // Checkpoint: exact continuation of the synthetic diode clipper through save/load (T24 part).
+    dsp::Netlist n; n.nodes = 2;
+    n.elements = {src(K::VoltageSource, 1, 0, 0.0), dev("fixture.resistor", 1, 2, {1000.0}), dev("fixture.diode", 2, 0, {kIs, kN, kVt}),
+                  dev("fixture.diode", 0, 2, {kIs, kN, kVt}), dev("fixture.capacitor", 2, 0, {1e-8})};
+    const double h = 1.0 / 192000;
+    auto drive = [&](dsp::MnaSolver& s, int i) { s.setSource(0, 2.0 * std::sin(2 * M_PI * 1000.0 * i * h)); s.step(); };
+    dsp::MnaSolver a; CHECK(a.prepare(n, h, {}, e), "cp prepare");
+    for (int i = 1; i <= 100; ++i) drive(a, i);
+    state::EngineCheckpoint cp{"0.0.1-dev", "fixture-v1", 48000, 4, 100, std::vector<double>(a.stateSize()), {}, {0x0123456789abcdefull, ~0ull}};
+    a.getState(cp.electrical.data());
+    state::StateDocument sess = d; sess.checkpoint = cp;
+    state::StateDocument back; CHECK(state::loadState(state::saveState(sess), back, e), "cp load: %s", e.c_str());
+    CHECK(back.checkpoint && back.checkpoint->electrical == cp.electrical && back.checkpoint->rng == cp.rng
+          && back.checkpoint->sampleIndex == 100, "checkpoint exact roundtrip");
+    state::RuntimeIdentity rt{"0.0.1-dev", "fixture-v1", 48000, 4, std::size_t(a.stateSize()), 0};
+    std::string why;
+    CHECK(state::decideRestore(back, rt, why) == state::RestoreDecision::Restore, "restore: %s", why.c_str());
+    dsp::MnaSolver b; b.prepare(n, h, {}, e); b.setState(back.checkpoint->electrical.data());
+    double worst = 0;
+    for (int i = 101; i <= 300; ++i) { drive(a, i); drive(b, i); worst = std::max(worst, std::fabs(a.voltage(2) - b.voltage(2))); }
+    CHECK(worst <= 1e-6, "continuation %g", worst);
+    std::printf("P04 checkpoint continuation peak error %.3g V (T24 limit 1e-6)\n", worst);
+    for (auto mutate : {+[](state::RuntimeIdentity& r) { r.sampleRate = 44100; }, +[](state::RuntimeIdentity& r) { r.oversampling = 16; },
+                        +[](state::RuntimeIdentity& r) { r.modelRevision = "fixture-v2"; }, +[](state::RuntimeIdentity& r) { r.electricalSize += 1; }}) {
+        state::RuntimeIdentity r2 = rt; mutate(r2);
+        CHECK(state::decideRestore(back, r2, why) == state::RestoreDecision::ResetWarm && !why.empty(), "incompatible restore");
+    }
+    CHECK(state::decideRestore(d, rt, why) == state::RestoreDecision::NoCheckpoint, "no checkpoint");
+    std::string cpBad = state::saveState(sess);
+    cpBad.replace(cpBad.find("0123456789abcdef"), 16, "0123456789ABCDEF");
+    CHECK(!state::loadState(cpBad, back, e), "bad rng hex accepted");
+
+    // Atomic save.
+    const auto path = (std::filesystem::temp_directory_path() / "cd_p04_atomic.circuitdrift.json").string();
+    CHECK(state::saveStateFileAtomic(path, s1, e), "atomic save: %s", e.c_str());
+    std::ifstream f(path, std::ios::binary); std::string got((std::istreambuf_iterator<char>(f)), {});
+    CHECK(got == s1 && !std::filesystem::exists(path + ".tmp"), "atomic content");
+    std::filesystem::remove(path);
+}
+
 static void t22_hpf() {
     for (double fs : {44100.0, 48000.0, 96000.0, 192000.0}) {
         dsp::ButterworthHpf f; CHECK(f.design(fs, 15.0), "design");
@@ -427,7 +570,7 @@ static void t23_clip_match() {
 }
 
 int main() {
-    registry(); t20_thermal(); t21_oversampling(); t22_hpf(); t23_clip_match(); p02_json(); p02_manifest(); p02_mna();
+    registry(); t20_thermal(); t21_oversampling(); t22_hpf(); t23_clip_match(); p02_json(); p02_manifest(); p02_mna(); p04_state();
     std::printf(g_fail ? "FAILED (%d)\n" : "ALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }
