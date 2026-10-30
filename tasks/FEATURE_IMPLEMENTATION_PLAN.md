@@ -1,6 +1,6 @@
 # Feature implementation plan
 
-Status: planned work, no implementation tasks completed by this documentation update. Read [spec index](../docs/planned-features/README.md), [acceptance](../docs/planned-features/ACCEPTANCE.md) and [gates](../docs/planned-features/OPEN_QUESTIONS.md).
+This is the full dependency plan. P01–P04 have partial primitives; consult [current traceability](../docs/TRACEABILITY.md) and the [continuation prompt](../docs/prompts/CONTINUE_DEVELOPMENT.md) for verified progress, validation repairs and the next bounded P03 integration slice. Read [spec index](../docs/planned-features/README.md), [acceptance](../docs/planned-features/ACCEPTANCE.md) and [gates](../docs/planned-features/OPEN_QUESTIONS.md).
 
 | Stage/task | Deliverable and proposed source area | Dependencies / gate | Verify before advancing |
 |---|---|---|---|
