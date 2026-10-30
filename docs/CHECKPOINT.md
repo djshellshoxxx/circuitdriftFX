@@ -1,10 +1,13 @@
 # Checkpoint
 
-- Repo: djshellshoxxx/circuitdriftfx, branch `claude/circuitdriftfx-implementation-dknarc`, base main a69c201. Session started in an unrelated checkout (CLASSifiedisRUPTed); circuitdriftfx was attached and cloned to /home/user/circuitdriftfx.
-- Toolchain found: cmake, g++, clang++, python3. Not checked/installed: JUCE 8, CLAP SDK, AAX SDK (G08/G09), Windows/macOS toolchains, plugin validators/hosts.
-- Done: P01 partial (CMake targets cd_core/cd_dsp, generated registry), P03 primitives (thermal network, HPF, soft clip, gain matcher), T21 partial (2x Kaiser halfband stage, 77 taps).
-- Commands/results: `cmake -S . -B build -DCD_SANITIZE=ON && cmake --build build -j4 && ctest --test-dir build` → 3/3 pass (acceptance_core, registry_codegen_fresh, docs_validation_only).
-- Failure found and fixed: thermal prepare lacked ambient-connectivity check per island (backward Euler alone does not reject it).
-- NOT done: everything else (see TRACEABILITY). No JUCE/UI/formats/binaries; no real-time instrumentation; no CI run evidence (workflow added but unexecuted on GitHub).
-- Next task: P02/P03 — device manifest schema + MNA/Newton solver with analytic Jacobians and independent reference (needs G01 device choice; use labelled synthetic RC/diode fixtures meanwhile), then T21 remaining stages (4/8/16x cascade, alias multitone test), then P04 state schema.
-- Blockers needing owner: G01 device/reference schematics, G06/G07/G08 external access, JUCE license choice (G09: JUCE 8 is AGPLv3/commercial).
+Read [HANDOFF.md](HANDOFF.md) for ownership and restart packets, [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) for source SHAs, reviewed defects and verification limits, and [TRACEABILITY.md](TRACEABILITY.md) for requirement status.
+
+- Integration branch: `codex/reconcile-core-safety-20261030`; coordinator Codex. Source inputs: main `c10addecb48849d64890864f65f6ae231869be53`, PR #4 `a9c633fd89585a61780f206e303fced1c79326d1`, handoff PR #2 `c3b73d95b117b979be0c761573c49046a3df6e9e`. Original branches are preserved.
+- Integrated: existing cd_core/cd_dsp registry/thermal/protection; main fixed 77-tap halfband and acceptance test; PR #4 configurable FIR/IIR cascade, synthetic manifests/MNA and cd_state documents. The configurable FIR class is named PolyphaseHalfband2x to coexist with main's Halfband2x.
+- Corrected: JSON locale/identity/duplicate-lookup handling, parameter NUL aliases, model/feature recognition, publication boundaries, local temporary-file safety, numerical preparation/finite-state checks, and linked-channel gain API. Original sample-based gain matching remains supported.
+- Executed locally: GCC 14.2 C++20 ASan/UBSan/float-cast-overflow direct build of 9 production sources and 5 executables; all 5 suites passed; registry freshness and docs validation passed. CMake unavailable locally; LeakSanitizer cannot run under this sandbox's ptrace configuration, so local leak detection was disabled. GitHub CMake/CTest for the integration commit must be read from its checks, not inferred from these local runs.
+- T21 remains Partial: hot synthetic 4x FIR alias −53.13 dB versus proposed −70 dB target. Nominal 4x −150.33 dB and 16x −150.19 dB; these are synthetic tanh fixtures, not calibrated hardware.
+- State remains Partial: supported configuration model version 0.0.1-dev; no audio transaction queue, snapshot publication/capture wiring, full A/B/history, or full blueprint validator. Scene publication rejects unsupported opaque payloads until semantic validators exist; no cloud upload occurs.
+- NOT qualified: Windows/macOS execution (including Windows file replacement), host wrappers/GUI, one-hour realtime traps, physical accuracy, measured CPU/memory targets or release readiness.
+- Next: establish provider contracts and canonical writer for P04 queue/snapshot and UX-09; integrate existing MNA/oversampler with emergency containment and latency handling. Do not recreate current modules.
+- Gates remain G01 physical references/calibration, G03/G04 resource/alias budgets, G06–G09 access/licensing/dependency choices, and G12 full checkpoint/model migration. No paid provider, credential/security changes, release or deployment was made.

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "modelId": "fixture.diode",
+  "revision": 1,
+  "equation": "shockley-diode",
+  "pins": [
+    "anode",
+    "cathode"
+  ],
+  "parameters": [
+    {
+      "name": "saturationCurrentA",
+      "unit": "A",
+      "min": 1e-18,
+      "max": 1e-06,
+      "default": 1e-14
+    },
+    {
+      "name": "emissionCoefficient",
+      "unit": "1",
+      "min": 0.5,
+      "max": 4,
+      "default": 1
+    },
+    {
+      "name": "thermalVoltageV",
+      "unit": "V",
+      "min": 0.02,
+      "max": 0.04,
+      "default": 0.025852
+    }
+  ],
+  "scales": {
+    "voltageV": 1,
+    "currentA": 0.001
+  },
+  "domain": {
+    "maxExpArg": 40
+  },
+  "provenance": {
+    "kind": "synthetic-fixture",
+    "note": "Textbook Shockley equation with arbitrary round parameters; not a named or measured device (G01 open)."
+  }
+}
