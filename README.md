@@ -2,7 +2,7 @@
 
 CircuitDrift is a planned audio effect plugin exploring dynamic circuits, component aging, temperature, power-supply sag and creative analog-inspired modulation.
 
-**Status: specification/planning stage. No plugin DSP, GUI or release binaries are implemented yet.**
+**Status: framework-independent core under development. Parameter, thermal/protection, oversampling, synthetic MNA and state-document primitives have tests. Plugin wrappers, GUI and release binaries are not implemented. Physical hardware validation remains blocked.**
 
 ## Product and UX
 
@@ -23,6 +23,8 @@ CircuitDrift is a planned audio effect plugin exploring dynamic circuits, compon
 - [Specification review](docs/planned-features/SPEC_REVIEW.md)
 
 ## Continue development
+
+Read [the handoff](docs/HANDOFF.md), [checkpoint](docs/CHECKPOINT.md), and [traceability](docs/TRACEABILITY.md) for current code and verification limits. The [integration review](docs/INTEGRATION_REVIEW.md) records branch reconciliation and safety findings.
 
 Use the [engine research/specification prompt](docs/prompts/ENGINE_SPECIFICATION_PROMPT.md), now expanded to include the feature and UX package. Close the physical-model evidence gaps before claiming validated hardware emulation.
 

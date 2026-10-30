@@ -2,7 +2,8 @@
 // Units: C [J/K], G [W/K], P [W], T [K] absolute. dt [s].
 // Threading: prepare() allocates nothing but is intended off-thread (O(N^3), N<=64);
 // step() is noexcept, bounded, allocation-free and audio-thread safe.
-// Error behavior: prepare() returns false (state untouched) on invalid C/G/connectivity.
+// Error behavior: prepare() returns false (state untouched) on invalid C/G/connectivity or
+// numerical overflow. State/step rejection retains all temperatures, never a partial update.
 #pragma once
 #include <array>
 #include <cstddef>
@@ -20,10 +21,14 @@ public:
         std::array<std::array<double, kMaxNodes>, kMaxNodes> coupling{};  // symmetric G_ij >= 0, zero diagonal
     };
 
-    // Every thermal island must contain a node with toAmbient > 0; otherwise A is singular.
+    // Every thermal island must contain a node with toAmbient > 0 (heat-sink contract).
     bool prepare(const Config& cfg, double dt, double ambientK) noexcept;
+    // Reads size() temperatures in finite positive kelvin. Null, non-finite, non-positive or
+    // numerically unrepresentable states are ignored atomically; no model upper bound is invented.
     void setState(const double* temperaturesK) noexcept;
-    // One implicit step with average dissipated power per node [W].
+    // One implicit step with finite average power per node [W]. Null input, any overflow or a
+    // non-positive candidate kelvin temperature leaves every temperature unchanged. Finite
+    // negative power can represent cooling; physical calibration belongs to the model manifest.
     void step(const double* powerW) noexcept;
     double temperature(std::size_t i) const noexcept { return t_[i]; }
     std::size_t size() const noexcept { return n_; }

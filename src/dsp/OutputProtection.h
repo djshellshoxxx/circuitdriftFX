@@ -11,7 +11,8 @@ namespace cd::dsp {
 struct ButterworthHpf {
     double b0 = 1, b1 = -2, b2 = 1, a1 = 0, a2 = 0;
     double z1 = 0, z2 = 0;
-    // fc must satisfy 0 < fc < fs/2; returns false (coeffs unchanged) otherwise.
+    // Finite fs/fc must satisfy 0 < fc < fs/2; invalid/unrepresentable settings return false
+    // without changing coefficients or delay state.
     bool design(double fs, double fc) noexcept;
     double process(double x) noexcept {
         const double y = b0 * x + z1;
@@ -22,7 +23,8 @@ struct ButterworthHpf {
     void reset() noexcept { z1 = z2 = 0.0; }
 };
 
-// Memoryless output ceiling: identity to |x|<=0.9, then 0.9+0.1*tanh((|x|-0.9)/0.1); C1-continuous, |y|<1.
+// Memoryless output ceiling: identity to |x|<=0.9, then 0.9+0.1*tanh((|x|-0.9)/0.1);
+// C1-continuous, |y|<=1 in floating point (tanh can round to exactly 1).
 inline double softClip(double x) noexcept {
     const double a = std::fabs(x);
     if (a <= 0.9) return x;
@@ -34,10 +36,14 @@ inline double softClip(double x) noexcept {
 // frozen below -60 dBFS RMS on either path).
 class GainMatcher {
 public:
+    // A non-finite/non-positive sample rate is ignored without changing coefficients or state.
     void prepare(double fs) noexcept;
     void reset() noexcept;
-    // Feed one aligned dry/wet frame (linked: pass mean-square across channels); returns wet multiplier.
+    // Feed one aligned dry/wet mono sample pair; returns the wet multiplier.
     double update(double dry, double wet) noexcept;
+    // Linked channels: feed the mean of their squared samples for each aligned dry/wet frame.
+    // Non-finite/negative powers or overflowing updates are ignored without changing state.
+    double updateMeanSquares(double dryPower, double wetPower) noexcept;
     double gain() const noexcept { return std::exp(logGain_); }
 private:
     double aEnv_ = 0, aGain_ = 0, ed_ = 0, ew_ = 0, logGain_ = 0;
