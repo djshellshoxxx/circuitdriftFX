@@ -43,6 +43,32 @@ std::string withSeed(const char* token) {
     return text;
 }
 
+void utf8WriterBoundary() {
+    using core::JsonValue;
+    const auto rejects = [](const JsonValue& value) {
+        try { (void)core::writeJson(value); return false; }
+        catch (const std::invalid_argument&) { return true; }
+    };
+    for (const std::string invalid : {
+        std::string("\x80", 1), std::string("\xC0\xAF", 2),
+        std::string("\xE0\x80\x80", 3), std::string("\xED\xA0\x80", 3),
+        std::string("\xF4\x90\x80\x80", 4), std::string("\xF0\x9F", 2)}) {
+        CHECK(rejects(JsonValue::makeString(invalid)));
+        auto obj = JsonValue::makeObject();
+        obj.set(invalid, JsonValue::makeNumber(1));
+        CHECK(rejects(obj));
+    }
+    const std::string valid = std::string("A\xC3\xA9\xF0\x9F\x98\x80", 7);
+    auto obj = JsonValue::makeObject();
+    obj.set(valid, JsonValue::makeString(valid));
+    std::string error;
+    JsonValue parsed;
+    CHECK(core::parseJson(core::writeJson(obj), parsed, error));
+    CHECK(parsed.get(valid) && parsed.get(valid)->string == valid);
+    CHECK(core::writeJson(JsonValue::makeString(std::string("nul\0byte", 8))) ==
+          "\"nul\\u0000byte\"");
+}
+
 void localeNumbers() {
     const std::string original = std::setlocale(LC_NUMERIC, nullptr);
     int commaLocales = 0;
@@ -273,6 +299,7 @@ void atomicFiles() {
 } // namespace
 
 int main() {
+    utf8WriterBoundary();
     localeNumbers(); exactIdentitiesAndFeatures(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
