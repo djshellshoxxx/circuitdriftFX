@@ -211,7 +211,32 @@ struct Parser {
     }
 };
 
+// Strings created in memory bypass Parser::str; validate before emitting them.
+// This applies to object keys as well as string values.
+bool validUtf8(std::string_view s) noexcept {
+    for (std::size_t i = 0; i < s.size();) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) { ++i; continue; }
+        const int len = c >= 0xC2 && c <= 0xDF ? 2 :
+                        c >= 0xE0 && c <= 0xEF ? 3 :
+                        c >= 0xF0 && c <= 0xF4 ? 4 : 0;
+        if (!len || s.size() - i < static_cast<std::size_t>(len)) return false;
+        unsigned cp = len == 2 ? (c & 0x1F) : len == 3 ? (c & 0x0F) : (c & 0x07);
+        for (int k = 1; k < len; ++k) {
+            const auto next = static_cast<unsigned char>(s[i + k]);
+            if ((next & 0xC0) != 0x80) return false;
+            cp = (cp << 6) | (next & 0x3F);
+        }
+        if ((len == 2 && cp < 0x80) ||
+            (len == 3 && (cp < 0x800 || (cp >= 0xD800 && cp <= 0xDFFF))) ||
+            (len == 4 && (cp < 0x10000 || cp > 0x10FFFF))) return false;
+        i += static_cast<std::size_t>(len);
+    }
+    return true;
+}
+
 void writeString(std::string& o, const std::string& s) {
+    if (!validUtf8(s)) throw std::invalid_argument("cannot write invalid UTF-8 JSON string");
     o += '"';
     for (unsigned char c : s) {
         if (c == '"') o += "\\\"";
