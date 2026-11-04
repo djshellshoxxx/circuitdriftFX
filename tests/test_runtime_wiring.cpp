@@ -553,8 +553,8 @@ void positiveControl() {
     long a = 0;
     {
         RtTrapScope s;
-        std::vector<double> v(8);
-        v[0] = 1;
+        void* volatile p = ::operator new(64);   // explicit call: not subject to new-expression elision
+        ::operator delete(p);
         a = s.counts().allocations;
     }
     CHECK(a >= 1, "RtTrap positive control failed");

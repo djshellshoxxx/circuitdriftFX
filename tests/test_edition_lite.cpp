@@ -356,6 +356,12 @@ void noLeakage() {
 }  // namespace
 
 int main() {
+    {   // RtTrap positive control in this harness (explicit operator new is not elidable)
+        cd::test::RtTrapScope s;
+        void* volatile p = ::operator new(32);
+        ::operator delete(p);
+        CHECK(s.counts().allocations == 1 && s.counts().deallocations == 1, "RtTrap positive control failed");
+    }
     manifestAndIdentity();
     mappingEndpoints();
     t05Render();
