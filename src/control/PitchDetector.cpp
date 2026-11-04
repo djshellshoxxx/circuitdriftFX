@@ -199,6 +199,11 @@ PitchEstimate PitchDetector::track(const HopAnalysis& a, std::uint64_t ts) noexc
                 f0_ = a.frequencyHz;
                 lastValidTs_ = ts;
                 jumpCount_ = 0;
+            } else if (ts - lastValidTs_ > holdSamples) {  // rejected jumps do not extend the hold
+                state_ = State::Idle;
+                pendCount_ = 0;
+                jumpCount_ = 0;
+                return e;
             }
         }
     } else {

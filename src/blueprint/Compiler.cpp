@@ -82,6 +82,10 @@ bool checkModels(const Blueprint& bp, const ModelRegistry& reg, const std::map<s
         if (!r.dev && !r.src) { d.add(DiagCode::UnsupportedModel, 2, c.id, "", "model '" + c.modelId + "' is not in the registry"); continue; }
         const std::vector<std::string> pins = r.dev ? r.dev->pins : std::vector<std::string>{"p", "n"};
         bool pinsOk = true;
+        if (pins.size() != 2) {  // the solver stamps two-terminal elements only (multi-pin elements: future work)
+            d.add(DiagCode::UnsupportedModel, 2, c.id, "", "model has " + std::to_string(pins.size()) + " pins; only two-terminal elements are supported");
+            continue;
+        }
         for (const auto& pn : pins)
             if (!c.pinNode(pn)) { d.add(DiagCode::PinMissing, 2, c.id, pn, "required pin is not connected"); pinsOk = false; }
         for (const auto& pr : c.pins)

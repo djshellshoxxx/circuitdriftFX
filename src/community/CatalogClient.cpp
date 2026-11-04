@@ -269,7 +269,7 @@ int CatalogClient::maxObservedConcurrency() const { std::lock_guard<std::mutex> 
 
 void CatalogClient::logLine(const std::string& s) const { if (cfg_.log) cfg_.log(s); }
 
-std::string CatalogClient::idempotencyKey(const std::string& opId) { return cfg_.journal->keyFor(opId, *cfg_.rng); }
+std::string CatalogClient::idempotencyKey(const std::string& opId) { std::lock_guard<std::mutex> rl(rngMutex_); return cfg_.journal->keyFor(opId, *cfg_.rng); }
 
 bool CatalogClient::acquire(const CancelToken& cancel) {
     std::unique_lock<std::mutex> l(m_);
@@ -282,10 +282,19 @@ bool CatalogClient::acquire(const CancelToken& cancel) {
     maxInFlight_ = std::max(maxInFlight_, inFlight_);
     return true;
 }
+std::size_t CatalogClient::cachedMetadataEntries() const {
+    std::lock_guard<std::mutex> l(m_);
+    return listCache_.size() + revisionCache_.size();
+}
 void CatalogClient::release() {
     { std::lock_guard<std::mutex> l(m_); --inFlight_; }
     cv_.notify_one();
 }
+
+namespace {
+// Presigned URLs carry credentials in the query/fragment: never log past '?' or '#'.
+std::string logTarget(const std::string& t) { return t.substr(0, t.find_first_of("?#")); }
+}  // namespace
 
 CatalogClient::Outcome CatalogClient::run(const Call& c, const CancelToken& cancel) {
     Outcome out;
@@ -316,8 +325,11 @@ CatalogClient::Outcome CatalogClient::run(const Call& c, const CancelToken& canc
         req.connectTimeoutMs = kConnectTimeoutMs;
         req.totalTimeoutMs = kTotalTimeoutMs;
         req.maxResponseBytes = c.maxBytes;
-        TransportResponse resp = cfg_.transport->send(req, cancel);
-        release();
+        TransportResponse resp;
+        {
+            struct Slot { CatalogClient* self; ~Slot() { self->release(); } } slot{this};  // released even if send() throws
+            resp = cfg_.transport->send(req, cancel);
+        }
         out.attempts = attempt + 1;
 
         bool retryable = false;
@@ -330,20 +342,20 @@ CatalogClient::Outcome CatalogClient::run(const Call& c, const CancelToken& canc
             case TransportOutcome::Completed:
                 if (resp.status >= 200 && resp.status < 300) {
                     if (resp.body.size() > c.maxBytes) err = makeError(ErrorKind::TooLarge, "response too large", resp.status);
-                    else { out.error = ApiError{}; out.response = std::move(resp); logLine(std::string(methodName(c.method)) + " " + c.target + " -> ok"); return out; }
+                    else { out.error = ApiError{}; out.response = std::move(resp); logLine(std::string(methodName(c.method)) + " " + logTarget(c.target) + " -> ok"); return out; }
                 } else {
                     err = errorFromResponse(resp);
                     retryable = err.kind == ErrorKind::RateLimited || err.kind == ErrorKind::Unavailable;
                 }
                 break;
         }
-        logLine(std::string(methodName(c.method)) + " " + c.target + " attempt " + std::to_string(attempt + 1) +
+        logLine(std::string(methodName(c.method)) + " " + logTarget(c.target) + " attempt " + std::to_string(attempt + 1) +
                 " -> " + errorKindName(err.kind));
         out.error = err;
         if (!retryable || !retriesAllowed || attempt >= kMaxReadRetries) return out;
         if (err.retryAfterMs > kMaxRetryAfterMs) return out;  // surfaced to the UI, not slept on
         std::int64_t delay = kBackoffMs[attempt];
-        if (cfg_.maxJitterMs > 0) delay += static_cast<std::int64_t>(cfg_.rng->next() % std::uint32_t(cfg_.maxJitterMs + 1));
+        if (cfg_.maxJitterMs > 0) { std::lock_guard<std::mutex> rl(rngMutex_); delay += static_cast<std::int64_t>(cfg_.rng->next() % std::uint32_t(cfg_.maxJitterMs + 1)); }
         delay = std::max(delay, err.retryAfterMs);
         if (!cfg_.clock->sleepMs(delay, cancel)) { out.error = makeError(ErrorKind::Cancelled, "cancelled"); return out; }
     }
@@ -382,9 +394,9 @@ Result<ListPage> CatalogClient::listPresets(const ListQuery& q, const CancelToke
 
     auto cached = [&]() -> std::optional<ListPage> {
         std::lock_guard<std::mutex> l(m_);
-        auto it = listCache_.find(cacheKey);
-        if (it == listCache_.end()) return std::nullopt;
-        ListPage p = it->second;
+        const ListPage* hit = listCache_.get(cacheKey);
+        if (!hit) return std::nullopt;
+        ListPage p = *hit;
         p.fromCache = true;
         return p;
     };
@@ -428,7 +440,7 @@ Result<ListPage> CatalogClient::listPresets(const ListQuery& q, const CancelToke
             return fail<ListPage>(makeError(ErrorKind::MalformedResponse, "bad nextCursor"), o.attempts);
         page.nextCursor = nc->string;
     }
-    { std::lock_guard<std::mutex> l(m_); listCache_[cacheKey] = page; }
+    { std::lock_guard<std::mutex> l(m_); listCache_.put(cacheKey, page); }
     Result<ListPage> r;
     r.value = std::move(page);
     r.attempts = o.attempts;
@@ -445,8 +457,7 @@ Result<RevisionInfo> CatalogClient::getRevision(const std::string& id, std::int6
         if (o.error.kind == ErrorKind::Offline || o.error.kind == ErrorKind::Timeout || o.error.kind == ErrorKind::Network ||
             o.error.kind == ErrorKind::Unavailable) {
             std::lock_guard<std::mutex> l(m_);
-            auto it = revisionCache_.find(key);
-            if (it != revisionCache_.end()) { Result<RevisionInfo> r; r.value = it->second; r.attempts = o.attempts; return r; }
+            if (const RevisionInfo* hit = revisionCache_.get(key)) { Result<RevisionInfo> r; r.value = *hit; r.attempts = o.attempts; return r; }
         }
         return fail<RevisionInfo>(o.error, o.attempts);
     }
@@ -463,7 +474,7 @@ Result<RevisionInfo> CatalogClient::getRevision(const std::string& id, std::int6
         !getString(v, "license", 64, info.license, true))
         return fail<RevisionInfo>(makeError(ErrorKind::MalformedResponse, "bad revision metadata"), o.attempts);
     info.revision = rev;
-    { std::lock_guard<std::mutex> l(m_); revisionCache_[key] = info; }
+    { std::lock_guard<std::mutex> l(m_); revisionCache_.put(key, info); }
     Result<RevisionInfo> r;
     r.value = std::move(info);
     r.attempts = o.attempts;

@@ -93,12 +93,40 @@ CommitResult History::commit(std::string label, TxOrigin origin, std::vector<std
     return CommitResult::Recorded;
 }
 
+// Host automation is authoritative (05-state): when the live document drifted from the
+// transaction's own endpoint (automation commits replace current_ without history), restoring
+// the stored blob verbatim would rewind automated parameters. Restore the stored document but
+// keep the live value of every base parameter outside the transaction's affected IDs.
+// Non-parsable (opaque) blobs fall back to the stored document.
+ConfigBlob History::restoreTarget(const HistoryTransaction& tx, const ConfigBlob& target, const ConfigBlob& expectedLive) const {
+    if (!current_ || current_ == expectedLive || *current_ == *expectedLive) return target;
+    StateDocument want, live;
+    std::string err;
+    if (!loadState(*target, want, err) || !loadState(*current_, live, err)) return target;
+    auto affected = [&](const std::string& id) {
+        return std::find(tx.affectedIds.begin(), tx.affectedIds.end(), id) != tx.affectedIds.end();
+    };
+    for (auto& kv : want.baseParameters) {
+        if (affected(kv.first)) continue;
+        for (const auto& lv : live.baseParameters) if (lv.first == kv.first) { kv.second = lv.second; break; }
+    }
+    for (const auto& lv : live.baseParameters) {
+        if (affected(lv.first)) continue;
+        const bool have = std::any_of(want.baseParameters.begin(), want.baseParameters.end(),
+                                      [&](const auto& kv) { return kv.first == lv.first; });
+        if (!have) want.baseParameters.push_back(lv);
+    }
+    std::string text;
+    if (!saveState(want, text, err)) return target;
+    return makeBlob(std::move(text));
+}
+
 ConfigBlob History::undo() {
     wheelGroupOpen_ = false;
     if (undo_.empty()) return nullptr;
     HistoryTransaction tx = std::move(undo_.back());
     undo_.pop_back();
-    current_ = tx.prev;
+    current_ = restoreTarget(tx, tx.prev, tx.next);
     redo_.push_back(std::move(tx));
     return current_;
 }
@@ -108,7 +136,7 @@ ConfigBlob History::redo() {
     if (redo_.empty()) return nullptr;
     HistoryTransaction tx = std::move(redo_.back());
     redo_.pop_back();
-    current_ = tx.next;
+    current_ = restoreTarget(tx, tx.next, tx.prev);
     undo_.push_back(std::move(tx));
     return current_;
 }

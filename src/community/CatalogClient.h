@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <list>
 #include <mutex>
 #include <condition_variable>
 #include <optional>
@@ -96,6 +97,32 @@ private:
     std::map<std::string, std::string> keys_;
 };
 
+// Small bounded LRU map (caller synchronises). Least recently used entry is evicted at capacity.
+template <class V>
+class LruMap {
+public:
+    explicit LruMap(std::size_t cap = 64) : cap_(cap ? cap : 1) {}
+    const V* get(const std::string& k) {
+        auto it = map_.find(k);
+        if (it == map_.end()) return nullptr;
+        order_.splice(order_.begin(), order_, it->second.second);
+        return &it->second.first;
+    }
+    void put(const std::string& k, V v) {
+        auto it = map_.find(k);
+        if (it != map_.end()) { it->second.first = std::move(v); order_.splice(order_.begin(), order_, it->second.second); return; }
+        order_.push_front(k);
+        map_.emplace(k, std::make_pair(std::move(v), order_.begin()));
+        while (map_.size() > cap_) { map_.erase(order_.back()); order_.pop_back(); }
+    }
+    std::size_t size() const noexcept { return map_.size(); }
+
+private:
+    std::size_t cap_;
+    std::list<std::string> order_;
+    std::map<std::string, std::pair<V, std::list<std::string>::iterator>> map_;
+};
+
 struct ClientConfig {
     Transport* transport = nullptr;  // required
     Clock* clock = nullptr;          // required
@@ -138,6 +165,7 @@ public:
                                const std::string& text, const std::string& opId, const CancelToken& cancel);
 
     int maxObservedConcurrency() const;
+    std::size_t cachedMetadataEntries() const;
 
 private:
     struct Call;
@@ -155,8 +183,10 @@ private:
     int inFlight_ = 0, maxInFlight_ = 0;
     AuthToken token_;
     bool offline_ = false;
-    std::map<std::string, ListPage> listCache_;
-    std::map<std::string, RevisionInfo> revisionCache_;
+    static constexpr std::size_t kMetadataCacheEntries = 64;
+    LruMap<ListPage> listCache_{kMetadataCacheEntries};
+    LruMap<RevisionInfo> revisionCache_{kMetadataCacheEntries};
+    std::mutex rngMutex_;  // cfg_.rng is not thread-safe: every use goes through this lock
 };
 
 }  // namespace cd::community

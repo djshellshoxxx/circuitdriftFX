@@ -146,7 +146,7 @@ void TransactionQueue::place(const TransactionEvent& e) noexcept {
         case EventKind::Param: {
             if (e.registryIndex >= core::kParamCount) { rejected_.fetch_add(1, std::memory_order_relaxed); return; }
             Coalesced& c = table_[e.registryIndex];
-            if (c.dirty || timed_ >= kTimedCapacity) {
+            if (c.dirty || timed_ >= kTimedCapacity || count_ >= kAppendCapacity) {
                 sliceCoalesced_.fetch_add(1, std::memory_order_relaxed);
                 coalesceParam(e.registryIndex, e.normalized, e.sampleOffset);
                 return;
@@ -157,7 +157,7 @@ void TransactionQueue::place(const TransactionEvent& e) noexcept {
             return;
         }
         case EventKind::ConfigPublish:
-            if (configPending_ || timed_ >= kTimedCapacity) {
+            if (configPending_ || timed_ >= kTimedCapacity || count_ >= kAppendCapacity) {
                 sliceCoalesced_.fetch_add(1, std::memory_order_relaxed);
                 coalesceConfig(e);
                 return;
