@@ -292,8 +292,8 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     cost.unknowns = int(nodeIdx.size()) - 1 + vs;
     if (nonlinear > kMaxNonlinear) { d.add(DiagCode::LimitExceeded, 4, "", "", "more than 8 nonlinear devices"); return fail(std::move(res), 4); }
     if (cost.unknowns > kMaxUnknowns) { d.add(DiagCode::UnknownCount, 4, "", "", "more than 96 electrical unknowns"); return fail(std::move(res), 4); }
-    if (int(rs.size()) + 1 > dsp::MnaSolver::kMaxComponents) {
-        d.add(DiagCode::LimitExceeded, 4, "", "", "solver element budget exceeded (components plus the injected drive source > 64)");
+    if (int(rs.size()) > dsp::MnaSolver::kMaxComponents || int(rs.size()) + 1 > dsp::MnaSolver::kMaxElements) {
+        d.add(DiagCode::LimitExceeded, 4, "", "", "solver element budget exceeded (components > 64 or components plus port sources > 68)");
         return fail(std::move(res), 4);
     }
     if (vScale <= 0) vScale = 1;

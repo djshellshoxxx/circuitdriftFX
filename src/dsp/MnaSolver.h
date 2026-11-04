@@ -30,6 +30,9 @@ struct Netlist {
 class MnaSolver {
 public:
     static constexpr int kMaxNodes = 32, kMaxUnknowns = 96, kMaxComponents = 64, kMaxNonlinear = 8;
+    // Port drive sources (input/supply ports) are injected by the graph compiler in addition to the
+    // 64 user components of the blueprint bound; the solver element bound covers both.
+    static constexpr int kMaxPortSources = 4, kMaxElements = kMaxComponents + kMaxPortSources;
     static constexpr int kDcIterations = 100;
     struct Options { int maxNewton = 8; double tol = 1e-7; }; // finite 0 < tol <= 1e-7
 

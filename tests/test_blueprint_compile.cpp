@@ -214,6 +214,11 @@ void t10ParseBounds() {
         for (int k = 0; k < 64; ++k) c += "," + R("R" + std::to_string(k), "in", "out");
         CHECK(rejectedWith(doc(kNodes, c + "]"), DiagCode::LimitExceeded));   // 65 components
     }
+    {   // exactly 64 user components compile: the injected drive source does not consume the component bound
+        std::string c = "[" + C("C0", "out", "0");
+        for (int k = 0; k < 63; ++k) c += "," + R("R" + std::to_string(k), "in", "out");
+        CHECK(run(doc(kNodes, c + "]")).ok);
+    }
     {
         std::string nodes = R"(["0","in","out")";
         for (int k = 0; k < 31; ++k) nodes += ",\"n" + std::to_string(k) + "\"";   // 34 nodes
@@ -236,12 +241,8 @@ void t10ParseBounds() {
         CHECK(rejectedWith(doc(kNodes, c + "]"), DiagCode::LimitExceeded));  // 512 pin connections
         CHECK(rejectedWith(doc(kNodes, "[" + std::string(R"({"id":"X","modelId":"fixture.resistor","pins":{"a":"in","b":"out","c":"in","d":"out","e":"in","f":"out","g":"in","h":"out","i":"0"},"parameters":{"resistanceOhm":1000}})") + "]"), DiagCode::LimitExceeded));
     }
-    // 64 components pass the parser but exceed the solver's 64-element budget once the drive source is added
+    // Spec bound is 64 user components; the injected drive source uses the separate port-source budget.
     {
-        std::string c = "[" + C("C0", "out", "0");
-        for (int k = 0; k < 63; ++k) c += "," + R("R" + std::to_string(k), "in", "out");
-        const CompileResult r = run(doc(kNodes, c + "]"));
-        CHECK(!r.ok && r.failedCheck == 4 && r.diagnostics.has(DiagCode::LimitExceeded));
         std::string c63 = "[" + C("C0", "out", "0");
         for (int k = 0; k < 62; ++k) c63 += "," + R("R" + std::to_string(k), "in", "out");
         CHECK(run(doc(kNodes, c63 + "]")).ok);   // 63 components compile
