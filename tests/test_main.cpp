@@ -499,7 +499,7 @@ static void p04_state() {
     state::StateDocument back; CHECK(state::loadState(state::saveState(sess), back, e), "cp load: %s", e.c_str());
     CHECK(back.checkpoint && back.checkpoint->electrical == cp.electrical && back.checkpoint->rng == cp.rng
           && back.checkpoint->sampleIndex == 100, "checkpoint exact roundtrip");
-    state::RuntimeIdentity rt{"0.0.1-dev", "fixture-v1", 48000, 4, std::size_t(a.stateSize()), 0};
+    state::RuntimeIdentity rt{"0.0.1-dev", "fixture-v1", 48000, 4, std::size_t(a.stateSize()), 0, cp.rng.size()};
     std::string why;
     CHECK(state::decideRestore(back, rt, why) == state::RestoreDecision::Restore, "restore: %s", why.c_str());
     dsp::MnaSolver b; b.prepare(n, h, {}, e); b.setState(back.checkpoint->electrical.data());
