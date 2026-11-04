@@ -23,21 +23,8 @@
 #include <thread>
 #include <vector>
 
-// Allocation probe: counts operator new calls made by the tracking thread (test-only).
-namespace probe {
-std::atomic<long> allocations{0};
-thread_local bool tracking = false;
-}  // namespace probe
-void* operator new(std::size_t n) {
-    if (probe::tracking) probe::allocations.fetch_add(1, std::memory_order_relaxed);
-    if (void* p = std::malloc(n ? n : 1)) return p;
-    throw std::bad_alloc();
-}
-void* operator new[](std::size_t n) { return ::operator new(n); }
-void operator delete(void* p) noexcept { std::free(p); }
-void operator delete[](void* p) noexcept { std::free(p); }
-void operator delete(void* p, std::size_t) noexcept { std::free(p); }
-void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+// Allocation probe: shared UX-09 trap (tests/support/RtTrap), counts this thread only.
+#include "support/RtTrap.h"
 
 namespace {
 using namespace cd;
@@ -520,14 +507,15 @@ void audioPathsDoNotAllocate() {
     q.push(TransactionEvent::config(1, s, 2));
     mixer.setPosition(.5); mixer.swap();
     std::vector<double> a(512, .25), b(512, -.5), out(512);
-    probe::allocations = 0;
-    probe::tracking = true;
-    { std::vector<int> selfTest(3); (void)selfTest; }  // probe must see this one
-    probe::tracking = false;
-    CHECK(probe::allocations.load() == 1);
-    probe::allocations = 0;
-    probe::tracking = true;
+    {   // positive control: the trap must see this allocation
+        cd::test::RtTrapScope ctl;
+        { std::vector<int> selfTest(3); (void)selfTest; }
+        CHECK(ctl.counts().allocations == 1);
+    }
     std::size_t n = 0;
+    cd::test::RtTrapCounts audioCounts;
+    {
+    cd::test::RtTrapScope trap;
     for (std::uint32_t frames : {512u, 0u, 1u, 8192u}) {
         for (const auto& e : q.drainSlice(frames)) {
             ++n;
@@ -540,8 +528,9 @@ void audioPathsDoNotAllocate() {
         mixer.beginBlock();
         mixer.mix(a.data(), b.data(), out.data(), std::min<std::uint32_t>(frames, 512));
     }
-    probe::tracking = false;
-    CHECK(probe::allocations.load() == 0);
+    audioCounts = trap.counts();
+    }
+    CHECK(audioCounts.allocations == 0 && audioCounts.deallocations == 0);
     CHECK(n > 0 && pool.current() != nullptr);
     std::printf("audio paths: %zu events drained under overflow, 0 heap allocations on the audio side\n", n);
 }
