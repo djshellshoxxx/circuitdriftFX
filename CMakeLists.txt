@@ -32,6 +32,12 @@ cd_module(cd_state state cd_dsp Threads::Threads)
 cd_module(cd_blueprint blueprint cd_state cd_control)
 # cd_runtime: integrated per-sample engine (P03 integration) and realtime bridge.
 cd_module(cd_runtime runtime cd_blueprint cd_control cd_state)
+# cd_analysis: telemetry frames and display math (P09; UI-independent, worker/UI threads).
+cd_module(cd_analysis analysis cd_dsp cd_state)
+# cd_media: recorder core (P13): capture queues, timestamps, PNG/GIF writers; G07 for MP4.
+cd_module(cd_media media cd_analysis)
+# cd_uimodel: framework-independent view-model (UX-01/02/07, T07/T08 data); no JUCE/graphics.
+cd_module(cd_uimodel uimodel cd_runtime cd_analysis)
 # cd_community: catalog client contract against a mock transport (P14, G06 open); never on audio.
 cd_module(cd_community community cd_state)
 # cd_edition: edition manifests / LITE two-knob mapping (P12).
@@ -50,7 +56,7 @@ foreach(f ${_suites})
   string(REGEX REPLACE "^test_" "" suite ${stem})
   add_executable(cd_${suite}_tests ${f} ${_support})
   target_include_directories(cd_${suite}_tests PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-  target_link_libraries(cd_${suite}_tests PRIVATE cd_runtime cd_community cd_edition Threads::Threads)
+  target_link_libraries(cd_${suite}_tests PRIVATE cd_runtime cd_community cd_edition cd_analysis cd_media cd_uimodel Threads::Threads)
   add_test(NAME ${suite} COMMAND cd_${suite}_tests)
 endforeach()
 add_test(NAME registry_codegen_fresh COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/gen_param_registry.py --check)
