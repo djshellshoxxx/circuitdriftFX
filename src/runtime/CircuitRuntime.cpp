@@ -86,7 +86,7 @@ struct CircuitRuntime::Core {
         dsp::ThermalNetwork thermal;
         std::vector<double> hi, low, dcState;
         std::array<double, kMaxThermal> powerSum{}, lastPower{}, energy{};
-        long consecutive = 0;
+        std::int64_t consecutive = 0;
     };
     // Owned immutable manifest copies; solver elements point here (stable heap addresses).
     std::vector<std::unique_ptr<const dsp::DeviceManifest>> manifests;
@@ -102,7 +102,7 @@ struct CircuitRuntime::Core {
     int channels = 0, factor = 0, maxBlock = 0, thermalNodes = 0;
     bool thermalOn = false, latched = false, resetRequested = false;
     int64_t samples = 0;
-    long failed = 0, ticks = 0;
+    std::int64_t failed = 0, ticks = 0;
     std::uint64_t hash = 0;
     mutable std::vector<double> scratch;   // snapshot staging (sized at prepare)
 };
@@ -249,8 +249,8 @@ void CircuitRuntime::process(const double* const* in, double* const* wet, double
                 if (ch.solver.step()) {
                     ch.consecutive = 0;
                 } else {
-                    if (k->failed < std::numeric_limits<long>::max()) ++k->failed;
-                    if (ch.consecutive < std::numeric_limits<long>::max()) ++ch.consecutive;
+                    if (k->failed < std::numeric_limits<std::int64_t>::max()) ++k->failed;
+                    if (ch.consecutive < std::numeric_limits<std::int64_t>::max()) ++ch.consecutive;
                     if (ch.consecutive >= kFallbackAfterConsecutive && !k->latched) { k->latched = true; k->resetRequested = true; }
                 }
                 hs[s] = ch.solver.voltage(k->io.outputNode) * k->io.unitsPerVolt;
@@ -349,7 +349,7 @@ bool CircuitRuntime::loadState(StateReader& r, bool apply) noexcept {
     if (!r.pod(g) || !r.pod(fadeW)) return false;
     if (g[0] < 0 || g[0] >= k->fsInt || g[1] < 0 || g[2] < 0 || g[3] < 0 || !(fadeW >= 0 && fadeW <= 1)) return false;
     if (apply) {
-        k->phaseAcc = g[0]; k->ticks = long(g[1]); k->samples = g[2]; k->failed = long(g[3]);
+        k->phaseAcc = g[0]; k->ticks = std::int64_t(g[1]); k->samples = g[2]; k->failed = std::int64_t(g[3]);
         k->latched = g[4] != 0; k->resetRequested = g[5] != 0; k->fadeW = fadeW;
     }
     const std::size_t T = std::size_t(k->thermalNodes);
@@ -371,7 +371,7 @@ bool CircuitRuntime::loadState(StateReader& r, bool apply) noexcept {
         if (apply && k->thermalOn) ch.thermal.setState(temps.data());
         std::int64_t cons = 0;
         if (!r.pod(cons) || cons < 0) return false;
-        if (apply) ch.consecutive = long(cons);
+        if (apply) ch.consecutive = std::int64_t(cons);
     }
     return true;
 }

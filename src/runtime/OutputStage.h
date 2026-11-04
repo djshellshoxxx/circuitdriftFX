@@ -57,7 +57,7 @@ public:
     static constexpr double kContainLimit = 8.0;
 
     struct Diagnostics {
-        long nonFiniteOutputs = 0, clampedOutputs = 0, stageResets = 0;
+        std::int64_t nonFiniteOutputs = 0, clampedOutputs = 0, stageResets = 0;
         bool fallbackLatched = false;
         double fallbackWeight = 0, bypassWeight = 0, hpfWeight = 0, clipWeight = 0, autoGainWeight = 0;
         double matchGain = 1, hpfCutoffHz = 0, mix = 0, trim = 0, inputGain = 0;

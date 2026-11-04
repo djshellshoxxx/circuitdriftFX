@@ -10,7 +10,7 @@
 namespace cd::runtime {
 namespace {
 
-void bump(long& c) noexcept { if (c < std::numeric_limits<long>::max()) ++c; }
+void bump(std::int64_t& c) noexcept { if (c < std::numeric_limits<std::int64_t>::max()) ++c; }
 
 void silence(const AudioBuses& b, uint32_t frames) noexcept {
     if (!b.out || b.channels < 1 || b.channels > 64) return;
@@ -50,9 +50,9 @@ void evaluateMacros(MacroRuntime& m, const control::ManifestBindings& mb, const 
     control::Hooks hooks;
     hooks.timeline = &tl;
     m.eff = control::evaluate(base, control::MacroValues{v[0], v[1], v[2], v[3]}, mb, hooks);
-    m.drive = mb.hasWarmth ? std::pow(10.0, m.eff.driveDb / 20.0) : 1.0;
+    m.drive = m.eff.supportsWarmth ? std::pow(10.0, m.eff.driveDb / 20.0) : 1.0;
     if (!(m.drive > 0 && std::isfinite(m.drive))) m.drive = 1.0;
-    m.shelf = mb.hasAge ? control::designHighShelf(fs, m.eff.shelfHz, m.eff.shelfGainDb, m.eff.shelfQ) : control::BiquadCoeffs{};
+    m.shelf = m.eff.supportsAge ? control::designHighShelf(fs, m.eff.shelfHz, m.eff.shelfGainDb, m.eff.shelfQ) : control::BiquadCoeffs{};
     for (int k = 0; k < 5; ++k) m.last[k] = v[k];
 }
 

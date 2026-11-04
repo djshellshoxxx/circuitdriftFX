@@ -17,7 +17,7 @@ double dbToGain(double db) noexcept { return std::pow(10.0, db / 20.0); }
 double clampDb(double db) noexcept { return std::clamp(db, -24.0, 24.0); }
 double clampFc(double hz) noexcept { return std::clamp(hz, 10.0, 250.0); }
 int rampSamples(double fs, double sec) noexcept { return int(std::max(1.0, std::round(fs * sec))); }
-void bump(long& c) noexcept { if (c < std::numeric_limits<long>::max()) ++c; }
+void bump(std::int64_t& c) noexcept { if (c < std::numeric_limits<std::int64_t>::max()) ++c; }
 
 }  // namespace
 
@@ -36,7 +36,7 @@ struct OutputStage::Core {
     double fs = 0, fcTarget = 15, fcNow = 15;
     int channels = 0, maxBlock = 0, factor = 1, upstream = 0;
     bool latched = false;
-    long nonFinite = 0, clamped = 0, stageResets = 0;
+    std::int64_t nonFinite = 0, clamped = 0, stageResets = 0;
     mutable std::vector<double> scratch;   // snapshot staging
 };
 
@@ -247,7 +247,7 @@ bool OutputStage::loadState(StateReader& r, bool apply) noexcept {
         k->inGain = sc.inGain; k->trim = sc.trim; k->mix = sc.mix; k->autoGain = sc.autoGain; k->hpfMix = sc.hpfMix;
         k->clipMix = sc.clipMix; k->bypass = sc.bypass; k->fallback = sc.fallback; k->logFc = sc.logFc; k->matcher = sc.matcher;
         pending_ = sc.pending; k->fcTarget = sc.fcTarget; k->fcNow = sc.fcNow; k->latched = sc.latched != 0;
-        k->nonFinite = long(sc.nonFinite); k->clamped = long(sc.clamped); k->stageResets = long(sc.stageResets);
+        k->nonFinite = std::int64_t(sc.nonFinite); k->clamped = std::int64_t(sc.clamped); k->stageResets = std::int64_t(sc.stageResets);
     }
     for (int c = 0; c < k->channels; ++c) {
         auto& ch = k->ch[c];

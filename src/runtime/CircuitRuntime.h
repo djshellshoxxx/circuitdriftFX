@@ -103,12 +103,12 @@ public:
 
     struct Diagnostics {
         int64_t samples = 0;            // host samples processed since prepare (not reset by reset())
-        long failedSubsteps = 0;
-        long consecutiveFailures = 0;   // current run (max over channels)
+        std::int64_t failedSubsteps = 0;
+        std::int64_t consecutiveFailures = 0;   // current run (max over channels)
         bool fallbackLatched = false;
         bool resetRequested = false;
         double fallbackWeight = 0;      // 0 = circuit, 1 = dry
-        long thermalTicks = 0;
+        std::int64_t thermalTicks = 0;
         double thermalPhase = 0;        // [0,1) ticks
     };
 

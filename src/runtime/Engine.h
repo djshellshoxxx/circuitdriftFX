@@ -164,16 +164,16 @@ struct ProcessResult {
 struct EngineDiagnostics {
     int64_t samples = 0;
     uint64_t epoch = 0, generation = 0;
-    long epochChanges = 0, inputNonFinite = 0, inputClamped = 0, eventsCoalesced = 0, staleInstalls = 0;
+    std::int64_t epochChanges = 0, inputNonFinite = 0, inputClamped = 0, eventsCoalesced = 0, staleInstalls = 0;
     // transaction wiring
-    long paramEvents = 0, unsupportedEvents = 0, unknownEvents = 0, otherSlotEvents = 0, configEvents = 0, noteEvents = 0;
+    std::int64_t paramEvents = 0, unsupportedEvents = 0, unknownEvents = 0, otherSlotEvents = 0, configEvents = 0, noteEvents = 0;
     // graph wiring
     uint64_t graphGeneration = 0;          // installed graph generation (0 = built-in circuit)
-    long graphInstalls = 0, graphRejected = 0;
+    std::int64_t graphInstalls = 0, graphRejected = 0;
     bool graphFading = false;
     int graphFadePos = 0, graphFadeLen = 0;
     // snapshots
-    long snapshotsPublished = 0, snapshotsDeferred = 0, snapshotsRefused = 0;
+    std::int64_t snapshotsPublished = 0, snapshotsDeferred = 0, snapshotsRefused = 0;
     // macros: smoothed values and the last evaluated effective values (base is never modified)
     control::MacroValues macros{};
     control::Effective effective{};
@@ -300,7 +300,7 @@ private:
     int64_t samples_ = 0;
     uint64_t epoch_ = 0;
     bool haveEpoch_ = false;
-    long epochChanges_ = 0, inputNonFinite_ = 0, inputClamped_ = 0, eventsCoalesced_ = 0, staleInstalls_ = 0;
+    std::int64_t epochChanges_ = 0, inputNonFinite_ = 0, inputClamped_ = 0, eventsCoalesced_ = 0, staleInstalls_ = 0;
     core::ParamScope role_ = core::ParamScope::SlotA;
     // graphs (audio-side pointers; ownership stays in the installer's pool)
     GraphInstaller* graphs_ = nullptr;
@@ -308,12 +308,12 @@ private:
     GraphProcessor* oldGraph_ = nullptr;   // fading-out graph path (null + fading_ = built-in fading out)
     bool fading_ = false;
     int fadePos_ = 0;
-    long graphInstalls_ = 0, graphRejected_ = 0;
+    std::int64_t graphInstalls_ = 0, graphRejected_ = 0;
     // snapshots
     state::SnapshotExchange* snap_ = nullptr;
-    long snapPublished_ = 0, snapDeferred_ = 0, snapRefused_ = 0;
+    std::int64_t snapPublished_ = 0, snapDeferred_ = 0, snapRefused_ = 0;
     // transaction counters
-    long paramEvents_ = 0, unsupported_ = 0, unknown_ = 0, otherSlot_ = 0, configEvents_ = 0, noteEvents_ = 0;
+    std::int64_t paramEvents_ = 0, unsupported_ = 0, unknown_ = 0, otherSlot_ = 0, configEvents_ = 0, noteEvents_ = 0;
 };
 
 }  // namespace cd::runtime
