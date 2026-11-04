@@ -81,6 +81,7 @@ public:
 
 private:
     std::int64_t now() const;
+    ConfigBlob restoreTarget(const HistoryTransaction& tx, const ConfigBlob& target, const ConfigBlob& expectedLive) const;
     static std::size_t metadataBytes(const HistoryTransaction& t) noexcept;
     Clock clock_;
     std::size_t budget_;

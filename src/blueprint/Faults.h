@@ -67,15 +67,15 @@ public:
     void reset() noexcept;
     // One electrical sample. excitation = main transient detector output (>= 0), clamped to [0,1].
     FaultOutputs tick(double excitation) noexcept;
-    long contactTransitions() const noexcept { return transitions_; }
+    std::int64_t contactTransitions() const noexcept { return transitions_; }
     bool cleared() const noexcept { return clearedDone_; }
     double resonatorGain() const noexcept { return g_; }            // normalised g (prepare)
     const FaultOverlay& overlay() const noexcept { return ov_; }
 private:
-    struct Ramp { double cur = 0, step = 0, target = 0, value = 0, exact = 0; long left = 0; };  // cur/target in the ramp's domain
-    static void retarget(Ramp& r, double targetValue, bool logDomain, long samples) noexcept;
+    struct Ramp { double cur = 0, step = 0, target = 0, value = 0, exact = 0; std::int64_t left = 0; };  // cur/target in the ramp's domain
+    static void retarget(Ramp& r, double targetValue, bool logDomain, std::int64_t samples) noexcept;
     static void advance(Ramp& r, bool logDomain) noexcept;
-    void recomputeTargets(long samples) noexcept;
+    void recomputeTargets(std::int64_t samples) noexcept;
     void scheduleNextContact(bool afterLast) noexcept;
     std::uint64_t nextRandom() noexcept;
 
@@ -83,10 +83,10 @@ private:
     FaultOverlay ov_;
     bool prepared_ = false, resetting_ = false, clearedDone_ = true;
     double rate_ = 48000, preparedF_ = 800, preparedQ_ = 8;
-    long valueRamp_ = 480, contactRamp_ = 96, resetRamp_ = 960, minDwell_ = 2400, resetLeft_ = 0;
+    std::int64_t valueRamp_ = 480, contactRamp_ = 96, resetRamp_ = 960, minDwell_ = 2400, resetLeft_ = 0;
     Ramp c_, esr_, leak_, r_, mic_;                                 // c/esr/leak/r: log domain; mic: linear scale 0..severity
     bool contactOpen_ = false;
-    long nextToggle_ = 0, lastToggle_ = -1000000000L, sample_ = 0, transitions_ = 0;
+    std::int64_t nextToggle_ = 0, lastToggle_ = -INT64_C(1000000000), sample_ = 0, transitions_ = 0;
     std::uint64_t rng_ = 0;
     double a1_ = 0, a2_ = 0, g_ = 1, z1_ = 0, z2_ = 0;              // resonator
 };

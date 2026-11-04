@@ -7,10 +7,29 @@ namespace cd::control {
 namespace {
 double clamp01(double x) noexcept { return std::isfinite(x) ? std::clamp(x, 0.0, 1.0) : 0.0; }
 double fin(double x, double d) noexcept { return std::isfinite(x) ? x : d; }
+constexpr double kGlobalTolSigma = 0.25;  // global +-25% envelope
+
+// Manifest-derived numbers are validated at the boundary: a macro whose bindings are not finite
+// or not ordered is unsupported (neutral) rather than propagating NaN/inverted ranges.
+struct Usable { bool age, sag, warmth, drift; double maxTol; };
+Usable usable(const ManifestBindings& mb) noexcept {
+    const bool tolOk = std::isfinite(mb.maxTolSigma) && mb.maxTolSigma >= 0.0;
+    Usable u{};
+    u.maxTol = tolOk ? std::min(mb.maxTolSigma, kGlobalTolSigma) : 0.0;
+    u.age = mb.hasAge && tolOk && std::isfinite(mb.leakRange) && mb.leakRange >= 0.0;
+    u.sag = mb.hasSag && std::isfinite(mb.cBase) && std::isfinite(mb.cMin) && mb.cMin > 0.0 && mb.cBase >= mb.cMin;
+    u.warmth = mb.hasWarmth && std::isfinite(mb.biasSpan) && mb.biasSpan >= 0.0 && std::isfinite(mb.fluxMin) &&
+               std::isfinite(mb.fluxMax) && mb.fluxMin <= mb.fluxMax;
+    u.drift = mb.hasDrift;
+    return u;
+}
 }
 
-Effective evaluate(const BaseValues& base, const MacroValues& mv, const ManifestBindings& mb, const Hooks& h) noexcept {
+Effective evaluate(const BaseValues& base, const MacroValues& mv, const ManifestBindings& mbIn, const Hooks& h) noexcept {
     Effective e;
+    const Usable us = usable(mbIn);
+    ManifestBindings mb = mbIn;
+    mb.hasAge = us.age; mb.hasSag = us.sag; mb.hasWarmth = us.warmth; mb.hasDrift = us.drift;
     // base -> timeline offsets
     const TimelineOffsets tl = h.timeline ? *h.timeline : TimelineOffsets{};
     e.serviceAgeYears = fin(base.serviceAgeYears, 0) + fin(tl.serviceAgeYears, 0);
@@ -21,7 +40,7 @@ Effective evaluate(const BaseValues& base, const MacroValues& mv, const Manifest
     e.fluxFactor = fin(base.fluxFactor, 1);
     e.driftSensitivity = fin(base.driftSensitivity, 1);
     e.loadMultiplier = fin(base.loadMultiplier, 1);
-    e.reservoirC = fin(mb.cBase, 0);
+    e.reservoirC = (us.sag || !mbIn.hasSag) ? fin(mbIn.cBase, 0) : 0.0;
     // macros (missing binding -> unsupported, neutral)
     const double a = clamp01(mv.age), s = clamp01(mv.sag), d = clamp01(mv.drift), w = clamp01(mv.warmth);
     const double q = h.mod ? std::clamp(fin(h.mod->q, 0), -1.0, 1.0) : 0.0;
@@ -56,9 +75,9 @@ Effective evaluate(const BaseValues& base, const MacroValues& mv, const Manifest
     }
     // domain clamp
     e.serviceAgeYears = std::max(0.0, e.serviceAgeYears);
-    e.tolSigma = std::clamp(e.tolSigma, 0.0, mb.maxTolSigma);
+    e.tolSigma = std::clamp(e.tolSigma, 0.0, us.maxTol);
     e.leakFrac = std::clamp(e.leakFrac, 0.0, 1.0);
-    if (mb.biasSpan > 0) e.biasOffset = std::clamp(e.biasOffset, -mb.biasSpan, mb.biasSpan);
+    if (std::isfinite(mb.biasSpan) && mb.biasSpan > 0) e.biasOffset = std::clamp(e.biasOffset, -mb.biasSpan, mb.biasSpan);
     if (mb.hasWarmth) e.fluxFactor = std::clamp(e.fluxFactor, mb.fluxMin, mb.fluxMax);
     e.loadMultiplier = std::max(0.0, e.loadMultiplier);
     return e;

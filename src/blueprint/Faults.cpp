@@ -7,7 +7,7 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kStateBound = 4.0;           // resonator state limit in impulse-peak units
-constexpr long kMaxImpulseSamples = 1L << 22;
+constexpr std::int64_t kMaxImpulseSamples = std::int64_t(1) << 22;
 
 bool posFinite(double v) noexcept { return std::isfinite(v) && v > 0; }
 
@@ -52,7 +52,7 @@ bool faultAvailable(FaultType type, bool isCap, bool isRes, bool isTube, const c
     return false;
 }
 
-void FaultChannel::retarget(Ramp& r, double targetValue, bool logDomain, long samples) noexcept {
+void FaultChannel::retarget(Ramp& r, double targetValue, bool logDomain, std::int64_t samples) noexcept {
     const double t = logDomain ? std::log(targetValue) : targetValue;
     if (r.target == t) return;   // already there, or already heading there
     r.target = t;
@@ -82,11 +82,11 @@ std::uint64_t FaultChannel::nextRandom() noexcept {  // splitmix64: deterministi
 }
 
 void FaultChannel::scheduleNextContact(bool afterLast) noexcept {
-    const long base = afterLast ? std::max(sample_, lastToggle_ + minDwell_) : sample_;
-    nextToggle_ = base + minDwell_ + long(nextRandom() % std::uint64_t(6 * minDwell_ + 1));
+    const std::int64_t base = afterLast ? std::max(sample_, lastToggle_ + minDwell_) : sample_;
+    nextToggle_ = base + minDwell_ + std::int64_t(nextRandom() % std::uint64_t(6 * minDwell_ + 1));
 }
 
-void FaultChannel::recomputeTargets(long samples) noexcept {
+void FaultChannel::recomputeTargets(std::int64_t samples) noexcept {
     const bool live = ov_.enabled && !resetting_;
     const double s = live ? ov_.severity : 0.0;
     double cT = b_.nominalC, eT = b_.nominalEsr, lT = b_.nominalLeakR, rT = b_.nominalR, mT = 0.0;
@@ -120,9 +120,9 @@ bool FaultChannel::prepare(double electricalRate, const FaultBounds& bounds, con
     const double a1 = 2.0 * r * std::cos(2.0 * kPi * overlay.frequencyHz / electricalRate), a2 = r * r;
     // Normalise g by the measured peak |impulse response| (g = 1) so a unit impulse peaks at 1.
     const double tau = overlay.q / (kPi * overlay.frequencyHz);
-    const long n = std::min(kMaxImpulseSamples, long(std::ceil(16.0 * tau * electricalRate)) + 16);
+    const std::int64_t n = std::min(kMaxImpulseSamples, std::int64_t(std::ceil(16.0 * tau * electricalRate)) + 16);
     double z1 = 0, z2 = 0, peak = 0;
-    for (long i = 0; i < n; ++i) {
+    for (std::int64_t i = 0; i < n; ++i) {
         const double z = a1 * z1 - a2 * z2 + (i == 0 ? 1.0 : 0.0);
         z2 = z1; z1 = z;
         peak = std::max(peak, std::fabs(z));
@@ -135,13 +135,13 @@ bool FaultChannel::prepare(double electricalRate, const FaultBounds& bounds, con
     preparedF_ = overlay.frequencyHz;
     preparedQ_ = overlay.q;
     a1_ = a1; a2_ = a2; g_ = 1.0 / peak; z1_ = z2_ = 0;
-    valueRamp_ = std::max(1L, long(std::llround(kValueRampSeconds * rate_)));
-    contactRamp_ = std::max(1L, long(std::llround(kContactRampSeconds * rate_)));
-    resetRamp_ = std::max(1L, long(std::llround(kResetRampSeconds * rate_)));
-    minDwell_ = std::max(1L, long(std::ceil(kMinContactDwellSeconds * rate_)));
+    valueRamp_ = std::max(std::int64_t(1), std::int64_t(std::llround(kValueRampSeconds * rate_)));
+    contactRamp_ = std::max(std::int64_t(1), std::int64_t(std::llround(kContactRampSeconds * rate_)));
+    resetRamp_ = std::max(std::int64_t(1), std::int64_t(std::llround(kResetRampSeconds * rate_)));
+    minDwell_ = std::max(std::int64_t(1), std::int64_t(std::ceil(kMinContactDwellSeconds * rate_)));
     resetting_ = false; resetLeft_ = 0;
     contactOpen_ = false;
-    sample_ = 0; transitions_ = 0; lastToggle_ = -1000000000L;
+    sample_ = 0; transitions_ = 0; lastToggle_ = -INT64_C(1000000000);
     rng_ = overlay.seed;
     c_ = esr_ = leak_ = r_ = mic_ = Ramp{};
     c_.cur = c_.target = std::log(b_.nominalC); c_.value = c_.exact = b_.nominalC;

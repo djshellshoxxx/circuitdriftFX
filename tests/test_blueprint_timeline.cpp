@@ -10,11 +10,20 @@
 
 namespace {
 using namespace cd::blueprint;
+void values(const ConditionAnchor& a, double* o);
 int failures = 0;
 #define CHECK(c) do { if (!(c)) { std::printf("FAIL line %d: %s\n", __LINE__, #c); ++failures; } } while (false)
 
 bool rel(double a, double b) { return std::fabs(a - b) <= 1e-6 * std::max(std::fabs(b), 1e-300) || a == b; }
-bool sameBits(const Condition& a, const Condition& b) { return std::memcmp(&a, &b, sizeof(Condition)) == 0; }
+bool bitsEq(double a, double b) { return std::memcmp(&a, &b, sizeof(double)) == 0; }
+// Field-wise bit equality (no memcmp over the whole struct: padding bytes are indeterminate).
+bool sameBits(const Condition& a, const Condition& b) {
+    double va[9], vb[9];
+    values(a.values, va); values(b.values, vb);
+    va[8] = a.displayYear; vb[8] = b.displayYear;
+    for (int i = 0; i < 9; ++i) if (!bitsEq(va[i], vb[i])) return false;
+    return a.intervalIndex == b.intervalIndex;
+}
 
 const double kTable[5][8] = {
     {0, 1, 1, 0, 0.0033, 0, 0, 1},         // Factory

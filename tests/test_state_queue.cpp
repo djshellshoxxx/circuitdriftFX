@@ -509,7 +509,13 @@ void audioPathsDoNotAllocate() {
     std::vector<double> a(512, .25), b(512, -.5), out(512);
     {   // positive control: the trap must see this allocation
         cd::test::RtTrapScope ctl;
-        { std::vector<int> selfTest(3); (void)selfTest; }
+        {
+            std::vector<int> selfTest(3);
+#if defined(__GNUC__)
+            asm volatile("" : : "r"(selfTest.data()) : "memory");  // keep clang from eliding the new/delete pair
+#endif
+            (void)selfTest;
+        }
         CHECK(ctl.counts().allocations == 1);
     }
     std::size_t n = 0;
