@@ -8,6 +8,7 @@
 #include <cstring>
 #include <set>
 #include <stdexcept>
+#include <unordered_set>
 #if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -46,7 +47,16 @@ bool strList(const JsonValue* v, std::size_t maxItems, std::size_t maxLen, std::
     }
     return true;
 }
+bool leapYear(int y) { return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0; }
+int decimal(const std::string& s, std::size_t at, std::size_t count) {
+    int value = 0;
+    for (std::size_t i = at; i < at + count; ++i) value = value * 10 + (s[i] - '0');
+    return value;
+}
 // RFC 3339 UTC subset: YYYY-MM-DDTHH:MM:SSZ (optionally with .fraction before Z).
+// Calendar: proleptic Gregorian, years 0000-9999, month/day validated incl. leap years.
+// Clock: 00:00:00-23:59:59. Leap-second policy: second 60 is REJECTED (no leap-second
+// table is carried; createdAt is informational and never used as an audio/control clock).
 bool rfc3339(const std::string& s) {
     if (s.size() < 20 || s.back() != 'Z') return false;
     const char* pat = "dddd-dd-ddTdd:dd:dd";
@@ -56,7 +66,12 @@ bool rfc3339(const std::string& s) {
         if (s[19] != '.' || s.size() < 22) return false;
         for (std::size_t i = 20; i + 1 < s.size(); ++i) if (!(s[i] >= '0' && s[i] <= '9')) return false;
     }
-    return true;
+    static constexpr std::array<int, 12> kMonthDays = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const int year = decimal(s, 0, 4), month = decimal(s, 5, 2), day = decimal(s, 8, 2);
+    if (month < 1 || month > 12) return false;
+    const int monthDays = kMonthDays[std::size_t(month - 1)] + (month == 2 && leapYear(year) ? 1 : 0);
+    if (day < 1 || day > monthDays) return false;
+    return decimal(s, 11, 2) <= 23 && decimal(s, 14, 2) <= 59 && decimal(s, 17, 2) <= 59;
 }
 
 bool validBlueprint(const JsonValue& b, std::string& why) {
@@ -229,6 +244,9 @@ bool validateV1(const JsonValue& v, StateDocument& d, std::string& why) {
     return true;
 }
 
+// Precondition for !forPublish: baseParameters ids and metadata keys are unique and metadata
+// keys are disjoint from knownKeys() (checked by checkSaveInvariants, or guaranteed by the
+// loader). That makes the linear emplace_back assembly below equivalent to set().
 JsonValue toJson(const StateDocument& d, bool forPublish) {
     if (d.seed > 9007199254740992ULL || (!forPublish && d.checkpoint && d.checkpoint->sampleIndex > 9007199254740992ULL))
         throw std::invalid_argument("schema v1 numeric identities must be in [0, 2^53]");
@@ -254,7 +272,8 @@ JsonValue toJson(const StateDocument& d, bool forPublish) {
         o.set("blueprints", std::move(a));
     }
     JsonValue bp = JsonValue::makeObject();
-    for (const auto& kv : d.baseParameters) bp.set(kv.first, JsonValue::makeNumber(kv.second));
+    bp.object.reserve(d.baseParameters.size());
+    for (const auto& kv : d.baseParameters) bp.object.emplace_back(kv.first, JsonValue::makeNumber(kv.second));
     o.set("baseParameters", std::move(bp));
     o.set("macros", d.macros.isObject() ? d.macros : JsonValue::makeObject());
     o.set("timeline", (d.timeline.isObject() || d.timeline.isArray()) ? d.timeline : JsonValue::makeObject());
@@ -263,7 +282,8 @@ JsonValue toJson(const StateDocument& d, bool forPublish) {
     if (!forPublish) {
         if (d.ui) o.set("ui", *d.ui);
         if (d.checkpoint) o.set("checkpoint", checkpointJson(*d.checkpoint));
-        for (const auto& kv : d.metadata) o.set(kv.first, kv.second);
+        o.object.reserve(o.object.size() + d.metadata.size());
+        for (const auto& kv : d.metadata) o.object.emplace_back(kv.first, kv.second);
     }
     return o;
 }
@@ -297,6 +317,55 @@ bool publishableContent(const StateDocument& d, std::string& error) {
             return false;
         }
     }
+    return true;
+}
+
+// In-memory invariants that serialization would otherwise hide (overwrite, drop or replace),
+// so a reload check alone cannot detect them. O(n) expected via hashing.
+bool checkSaveInvariants(const StateDocument& d, std::string& why) {
+    const std::size_t blueprints = d.blueprints.size();
+    if (d.kind == DocKind::Scene ? blueprints != 1 : (blueprints < 1 || blueprints > 2)) {
+        why = d.kind == DocKind::Scene ? "scene requires exactly one blueprint" : "session requires 1..2 blueprints";
+        return false;
+    }
+    // A default-constructed (null) payload is the documented empty default {}; any other
+    // non-container value would be silently replaced by toJson, so it is rejected instead.
+    if (!(d.macros.isNull() || d.macros.isObject())) { why = "macros must be an object"; return false; }
+    for (auto [name, value] : {std::pair<const char*, const JsonValue*>{"timeline", &d.timeline}, {"faults", &d.faults}}) {
+        if (!(value->isNull() || value->isObject() || value->isArray())) {
+            why = std::string(name) + " must be an object or array"; return false;
+        }
+    }
+    std::unordered_set<std::string_view> seen;
+    seen.reserve(d.baseParameters.size());
+    for (const auto& kv : d.baseParameters)
+        if (!seen.insert(kv.first).second) { why = "duplicate base parameter " + kv.first; return false; }
+    seen.clear();
+    seen.reserve(d.metadata.size());
+    for (const auto& kv : d.metadata) {
+        if (knownKeys().count(kv.first)) { why = "metadata key collides with reserved field " + kv.first; return false; }
+        if (!seen.insert(kv.first).second) { why = "duplicate metadata key " + kv.first; return false; }
+    }
+    return true;
+}
+
+// Serializes only a document that the loader accepts and that reloads to the same canonical
+// text. Never touches the filesystem. out is unchanged on failure.
+bool serializeValidated(const StateDocument& d, std::string& out, std::string& why) {
+    if (!checkSaveInvariants(d, why)) return false;
+    std::string text;
+    try {
+        const JsonValue tree = toJson(d, false);
+        if (core::jsonDepth(tree) > 20) { why = "document exceeds depth 20"; return false; }
+        text = core::writeJson(tree);
+    } catch (const std::invalid_argument& e) { why = e.what(); return false; }
+    const std::size_t limit = d.kind == DocKind::Scene ? kSceneMaxBytes : kSessionMaxBytes;
+    if (text.size() > limit) { why = d.kind == DocKind::Scene ? "scene exceeds 1.25 MiB" : "session exceeds 2.5 MiB"; return false; }
+    StateDocument reloaded;
+    std::string loadError;
+    if (!loadState(text, reloaded, loadError)) { why = loadError; return false; }
+    if (core::writeJson(toJson(reloaded, false)) != text) { why = "document does not round-trip canonically"; return false; }
+    out = std::move(text);
     return true;
 }
 }  // namespace
@@ -340,7 +409,24 @@ bool loadState(std::string_view text, StateDocument& out, std::string& error, co
     return true;
 }
 
-std::string saveState(const StateDocument& doc) { return core::writeJson(toJson(doc, false)); }
+bool saveState(const StateDocument& doc, std::string& out, std::string& error) {
+    std::string why;
+    if (!serializeValidated(doc, out, why)) { error = "save rejected: " + why; return false; }
+    error.clear();
+    return true;
+}
+
+std::string saveState(const StateDocument& doc) {
+    std::string text, error;
+    if (!saveState(doc, text, error)) throw std::invalid_argument(error);
+    return text;
+}
+
+bool saveStateFile(const std::string& path, const StateDocument& doc, std::string& error) {
+    std::string text;
+    if (!saveState(doc, text, error)) return false;  // destination never touched on rejection
+    return saveStateFileAtomic(path, text, error);
+}
 
 bool publishScene(const StateDocument& doc, std::string& out, std::string& error) {
     if (doc.kind != DocKind::Scene) { error = "only scenes are published"; return false; }
@@ -433,6 +519,8 @@ RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& r
     else if (c.sampleRate != rt.sampleRate) reason = "sample rate differs";
     else if (c.oversampling != rt.oversampling) reason = "oversampling differs";
     else if (c.electrical.size() != rt.electricalSize || c.thermal.size() != rt.thermalSize) reason = "state layout differs";
+    else if (!rt.rngStateCount) reason = "runtime RNG layout not declared";
+    else if (c.rng.size() != *rt.rngStateCount) reason = "RNG layout differs";
     else { reason.clear(); return RestoreDecision::Restore; }
     reason += "; dynamic state reset to prepared warm initialisation";
     return RestoreDecision::ResetWarm;
