@@ -16,8 +16,11 @@
 // Soft clip bounds the HIGH-rate signal by 1; decimated sample peaks may overshoot slightly and no
 // intersample true-peak ceiling is claimed. Every stage processes one host sample at a time, so the
 // result is independent of block partition.
+// saveState()/loadState() serialise every dynamic field (smoothers, ramps, matcher, HPF, soft-clip
+// oversampler/pad, bypass delay, latch, counters and the current parameter targets) for engine
+// snapshots and A/B copy; loadState(apply=false) only validates.
 // Threading: prepare() allocates off the audio thread and installs only on success; setters,
-// process(), reset() are noexcept and allocation-free.
+// process(), reset(), saveState()/loadState() are noexcept and allocation-free.
 #pragma once
 #include <cstdint>
 #include <memory>
@@ -87,6 +90,8 @@ public:
     void process(const double* const* rawDry, const double* const* dryAligned, const double* const* wetAligned,
                  double* const* out, int n) noexcept;
     void reset() noexcept;
+    void saveState(StateWriter& w) const noexcept;
+    bool loadState(StateReader& r, bool apply) noexcept;
 
     int latencySamples() const noexcept;           // own soft-clip stage declared latency
     int totalLatencySamples() const noexcept;      // upstream + own

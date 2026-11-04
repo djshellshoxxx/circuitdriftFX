@@ -39,6 +39,12 @@
 // netlist is never retained. prepare() builds a complete candidate and installs it only on success;
 // on failure the previously prepared state is untouched. The object is non-copyable/non-movable so
 // solver model pointers into the owned copies stay valid.
+// Wiring additions (Engine integration): an optional per-sample drive gain multiplies the circuit
+// input only (wet path; dry and the fallback target stay undriven), used for the Warmth macro's
+// pre-stage drive. saveState()/loadState() serialise every dynamic field (solver unknowns and
+// charges via MnaSolver::getState, oversampler histories, latency pads, dry delay, thermal
+// temperatures/energy, 1 kHz clock accumulator, fallback latch/fade, counters) for engine
+// snapshots; modelHash() identifies the prepared topology/quality for snapshot compatibility.
 // Threading: prepare() off the audio thread; process()/reset()/accessors noexcept, allocation-free.
 #pragma once
 #include <cstdint>
@@ -117,7 +123,14 @@ public:
     // n in [0, maxBlock]; in/wet/dry: channels() pointers. wet = circuit output aligned at
     // latencySamples(); dry = in delayed by latencySamples(). in may alias neither output.
     // Unprepared or out-of-range calls write nothing and advance nothing.
-    void process(const double* const* in, double* const* wet, double* const* dry, int n) noexcept;
+    // driveGain: null or n per-sample gains applied to the circuit input only.
+    void process(const double* const* in, double* const* wet, double* const* dry, int n,
+                 const double* driveGain = nullptr) noexcept;
+    // Snapshot support (audio-safe, allocation-free). loadState(apply=false) only validates.
+    void saveState(StateWriter& w) const noexcept;
+    bool loadState(StateReader& r, bool apply) noexcept;
+    std::size_t stateBytes() const noexcept;
+    std::uint64_t modelHash() const noexcept;
     // Restores the prepared DC state, filters, delays, thermal state/clock and clears the latch.
     void reset() noexcept;
 

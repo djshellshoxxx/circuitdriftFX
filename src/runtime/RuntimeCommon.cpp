@@ -16,6 +16,22 @@ void DelayLine::reset() noexcept {
     pos_ = 0;
 }
 
+void DelayLine::save(StateWriter& w) const noexcept {
+    const std::int64_t hdr[2] = {d_, pos_};
+    w.pod(hdr);
+    if (d_ > 0) w.doubles(buf_.data(), std::size_t(d_));
+}
+
+bool DelayLine::load(StateReader& r, bool apply) noexcept {
+    std::int64_t hdr[2] = {0, 0};
+    if (!r.pod(hdr) || hdr[0] != d_ || hdr[1] < 0 || (d_ > 0 && hdr[1] >= d_) || (d_ == 0 && hdr[1] != 0)) return false;
+    if (d_ == 0) return true;
+    if (!apply) return r.bytes(nullptr, std::size_t(d_) * sizeof(double));
+    if (!r.doubles(buf_.data(), std::size_t(d_))) return false;
+    pos_ = int(hdr[1]);
+    return true;
+}
+
 void OnePole::prepare(double fs, double tauSec) noexcept {
     a_ = (fs > 0 && tauSec > 0 && std::isfinite(fs) && std::isfinite(tauSec)) ? std::exp(-1.0 / (fs * tauSec)) : 0.0;
 }

@@ -2,14 +2,22 @@
 // Owner: cd_runtime (runtime agent). Contents: integer delay line, linear ramp, one-pole smoother
 // and the declared-latency plan (01-runtime "Oversampling and quality": pad within one phase
 // family to the maximum integer latency among 1-16x, compensate fractional delay explicitly).
+// Also: StateWriter/StateReader, the fixed-layout binary stream used by engine snapshots (provider
+// layouts, see Engine.h) and A/B copy. Every item occupies a multiple of 8 bytes.
 // Threading: prepare()/planLatency() allocate and run off the audio thread; every other member
 // is noexcept, bounded and allocation-free.
 #pragma once
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <type_traits>
 #include <vector>
 #include "dsp/Oversampling.h"
 
 namespace cd::runtime {
+
+class StateWriter;
+class StateReader;
 
 // Fixed integer delay (0 = pass-through). Ring storage is sized once in prepare().
 class DelayLine {
@@ -24,9 +32,76 @@ public:
     }
     void reset() noexcept;
     int delay() const noexcept { return d_; }
+    // Snapshot support (see StateWriter). load() validates delay length and position first; with
+    // apply=false it only validates.
+    void save(StateWriter& w) const noexcept;
+    bool load(StateReader& r, bool apply) noexcept;
 private:
     std::vector<double> buf_;
     int d_ = 0, pos_ = 0;
+};
+
+// Sequential writer over a caller buffer; a null buffer only counts bytes (layout sizing). A write
+// past capacity marks the stream failed and writes nothing further.
+class StateWriter {
+public:
+    StateWriter(void* buf, std::size_t capacity) noexcept : buf_(static_cast<unsigned char*>(buf)), cap_(capacity) {}
+    void bytes(const void* p, std::size_t n) noexcept {
+        const std::size_t padded = (n + 7) & ~std::size_t(7);
+        if (buf_) {
+            if (!ok_ || pos_ + padded > cap_) { ok_ = false; pos_ += padded; return; }
+            std::memcpy(buf_ + pos_, p, n);
+            if (padded > n) std::memset(buf_ + pos_ + n, 0, padded - n);
+        }
+        pos_ += padded;
+    }
+    template <class T> void pod(const T& v) noexcept {
+        static_assert(std::is_trivially_copyable_v<T>, "snapshot items must be trivially copyable");
+        bytes(&v, sizeof(T));
+    }
+    void doubles(const double* p, std::size_t n) noexcept { bytes(p, n * sizeof(double)); }
+    std::size_t size() const noexcept { return pos_; }
+    bool ok() const noexcept { return ok_; }
+private:
+    unsigned char* buf_;
+    std::size_t cap_, pos_ = 0;
+    bool ok_ = true;
+};
+
+class StateReader {
+public:
+    StateReader(const void* buf, std::size_t size) noexcept : buf_(static_cast<const unsigned char*>(buf)), size_(size) {}
+    bool bytes(void* p, std::size_t n) noexcept {
+        const std::size_t padded = (n + 7) & ~std::size_t(7);
+        if (!ok_ || !buf_ || pos_ + padded > size_) { ok_ = false; return false; }
+        if (p) std::memcpy(p, buf_ + pos_, n);
+        pos_ += padded;
+        return true;
+    }
+    template <class T> bool pod(T& v) noexcept {
+        static_assert(std::is_trivially_copyable_v<T>, "snapshot items must be trivially copyable");
+        return bytes(&v, sizeof(T));
+    }
+    bool doubles(double* p, std::size_t n) noexcept { return bytes(p, n * sizeof(double)); }
+    void rewind() noexcept { pos_ = 0; ok_ = true; }
+    std::size_t position() const noexcept { return pos_; }
+    bool ok() const noexcept { return ok_; }
+    bool atEnd() const noexcept { return ok_ && pos_ == size_; }
+private:
+    const unsigned char* buf_;
+    std::size_t size_, pos_ = 0;
+    bool ok_ = true;
+};
+
+// FNV-1a 64-bit accumulation used for snapshot model identities (not cryptographic).
+struct Fnv64 {
+    std::uint64_t h = 1469598103934665603ull;
+    void bytes(const void* p, std::size_t n) noexcept {
+        const unsigned char* c = static_cast<const unsigned char*>(p);
+        for (std::size_t i = 0; i < n; ++i) { h ^= c[i]; h *= 1099511628211ull; }
+    }
+    template <class T> void pod(const T& v) noexcept { bytes(&v, sizeof(T)); }
+    void str(const char* s) noexcept { bytes(s, std::strlen(s) + 1); }
 };
 
 // Linear ramp that lands exactly on its target after a fixed number of samples.

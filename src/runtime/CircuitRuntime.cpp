@@ -103,6 +103,8 @@ struct CircuitRuntime::Core {
     bool thermalOn = false, latched = false, resetRequested = false;
     int64_t samples = 0;
     long failed = 0, ticks = 0;
+    std::uint64_t hash = 0;
+    mutable std::vector<double> scratch;   // snapshot staging (sized at prepare)
 };
 
 CircuitRuntime::CircuitRuntime() = default;
@@ -193,18 +195,48 @@ bool CircuitRuntime::prepare(const CircuitConfig& cfg, std::string& err) {
         if (core->thermalOn && !ch.thermal.prepare(tcfg, 1.0 / kThermalRateHz, cfg.thermal.ambientK))
             return bad("thermal network rejected (C>0, G>=0, ambient path per island)");
     }
+    std::size_t scratch = 0;
+    for (int c = 0; c < cfg.channels; ++c)
+        scratch = std::max({scratch, std::size_t(core->ch[c].solver.stateSize()), std::size_t(core->ch[c].os.stateSize())});
+    core->scratch.assign(scratch + 1, 0.0);
+    Fnv64 fnv;
+    fnv.str("cd.runtime.CircuitRuntime/1");
+    fnv.pod(cfg.channels); fnv.pod(cfg.os.factor); fnv.pod(cfg.os.family); fnv.pod(cfg.os.passFraction); fnv.pod(cfg.os.stopbandDb);
+    fnv.pod(cfg.maxNewton); fnv.pod(cfg.padToFamilyMax); fnv.pod(core->plan.declared); fnv.pod(core->plan.padHigh);
+    fnv.pod(net.nodes); fnv.pod(net.voltageScaleV); fnv.pod(net.currentScaleA);
+    for (const auto& e : net.elements) {
+        fnv.pod(e.kind); fnv.pod(e.a); fnv.pod(e.b); fnv.pod(e.param); fnv.pod(e.value);
+        if (e.model) { fnv.str(e.model->modelId.c_str()); fnv.pod(e.model->revision); fnv.pod(e.model->equation); }
+    }
+    fnv.pod(cfg.io.sourceElement); fnv.pod(cfg.io.voltsPerUnit); fnv.pod(cfg.io.outputNode); fnv.pod(cfg.io.unitsPerVolt);
+    fnv.pod(core->thermalOn); fnv.pod(tcfg.n); fnv.pod(cfg.thermal.ambientK);
+    for (std::size_t i = 0; i < tcfg.n; ++i) {
+        fnv.pod(tcfg.capacity[i]); fnv.pod(tcfg.toAmbient[i]);
+        for (std::size_t j = 0; j < tcfg.n; ++j) fnv.pod(tcfg.coupling[i][j]);
+    }
+    for (const auto& m : core->mapped) { fnv.pod(m.a); fnv.pod(m.b); fnv.pod(m.node); }
+    core->hash = fnv.h;
     core_ = std::move(core);  // install only after every step succeeded
     err.clear();
     return true;
 }
 
-void CircuitRuntime::process(const double* const* in, double* const* wet, double* const* dry, int n) noexcept {
+void CircuitRuntime::process(const double* const* in, double* const* wet, double* const* dry, int n,
+                             const double* drive) noexcept {
     Core* k = core_.get();
     if (!k || n <= 0 || n > k->maxBlock || !in || !wet || !dry) return;
     for (int c = 0; c < k->channels; ++c)
         if (!in[c] || !wet[c] || !dry[c]) return;
     const int F = k->factor;
-    for (int c = 0; c < k->channels; ++c) k->ch[c].os.up(in[c], k->ch[c].hi.data(), n);
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        if (drive) {  // pre-stage drive on the circuit input only (ch.low is free until down())
+            for (int i = 0; i < n; ++i) ch.low[std::size_t(i)] = in[c][i] * drive[i];
+            ch.os.up(ch.low.data(), ch.hi.data(), n);
+        } else {
+            ch.os.up(in[c], ch.hi.data(), n);
+        }
+    }
 
     std::array<double, kMaxThermal> tickPower{};
     for (int i = 0; i < n; ++i) {
@@ -284,6 +316,73 @@ void CircuitRuntime::reset() noexcept {
     k->phaseAcc = 0; k->ticks = 0; k->fadeW = 0;
     k->latched = false; k->resetRequested = false;  // failure count kept as a diagnostic
 }
+
+void CircuitRuntime::saveState(StateWriter& w) const noexcept {
+    const Core* k = core_.get();
+    if (!k) return;
+    const std::int64_t g[6] = {k->phaseAcc, k->ticks, k->samples, k->failed, k->latched ? 1 : 0, k->resetRequested ? 1 : 0};
+    w.pod(g);
+    w.pod(k->fadeW);
+    const std::size_t T = std::size_t(k->thermalNodes);
+    for (int c = 0; c < k->channels; ++c) {
+        const auto& ch = k->ch[c];
+        ch.solver.getState(k->scratch.data());
+        w.doubles(k->scratch.data(), std::size_t(ch.solver.stateSize()));
+        ch.os.getState(k->scratch.data());
+        w.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()));
+        ch.pad.save(w);
+        ch.dry.save(w);
+        for (std::size_t q = 0; q < T; ++q) {
+            const double t[4] = {k->thermalOn ? ch.thermal.temperature(q) : 0.0, ch.powerSum[q], ch.lastPower[q], ch.energy[q]};
+            w.pod(t);
+        }
+        const std::int64_t cons = ch.consecutive;
+        w.pod(cons);
+    }
+}
+
+bool CircuitRuntime::loadState(StateReader& r, bool apply) noexcept {
+    Core* k = core_.get();
+    if (!k) return false;
+    std::int64_t g[6] = {};
+    double fadeW = 0;
+    if (!r.pod(g) || !r.pod(fadeW)) return false;
+    if (g[0] < 0 || g[0] >= k->fsInt || g[1] < 0 || g[2] < 0 || g[3] < 0 || !(fadeW >= 0 && fadeW <= 1)) return false;
+    if (apply) {
+        k->phaseAcc = g[0]; k->ticks = long(g[1]); k->samples = g[2]; k->failed = long(g[3]);
+        k->latched = g[4] != 0; k->resetRequested = g[5] != 0; k->fadeW = fadeW;
+    }
+    const std::size_t T = std::size_t(k->thermalNodes);
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        if (!r.doubles(k->scratch.data(), std::size_t(ch.solver.stateSize()))) return false;
+        if (apply) ch.solver.setState(k->scratch.data());
+        if (!r.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()))) return false;
+        if (!(apply ? ch.os.setState(k->scratch.data()) : ch.os.stateValid(k->scratch.data()))) return false;
+        if (!ch.pad.load(r, apply) || !ch.dry.load(r, apply)) return false;
+        std::array<double, kMaxThermal> temps{};
+        for (std::size_t q = 0; q < T; ++q) {
+            double t[4] = {};
+            if (!r.pod(t)) return false;
+            if (k->thermalOn && !(t[0] > 0 && std::isfinite(t[0]))) return false;
+            temps[q] = t[0];
+            if (apply) { ch.powerSum[q] = t[1]; ch.lastPower[q] = t[2]; ch.energy[q] = t[3]; }
+        }
+        if (apply && k->thermalOn) ch.thermal.setState(temps.data());
+        std::int64_t cons = 0;
+        if (!r.pod(cons) || cons < 0) return false;
+        if (apply) ch.consecutive = long(cons);
+    }
+    return true;
+}
+
+std::size_t CircuitRuntime::stateBytes() const noexcept {
+    StateWriter w(nullptr, 0);
+    saveState(w);
+    return w.size();
+}
+
+std::uint64_t CircuitRuntime::modelHash() const noexcept { return core_ ? core_->hash : 0; }
 
 int CircuitRuntime::latencySamples() const noexcept { return core_ ? core_->plan.declared : 0; }
 const LatencyPlan& CircuitRuntime::latencyPlan() const noexcept {

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 #include <vector>
 #include "dsp/OutputProtection.h"
 
@@ -36,6 +37,7 @@ struct OutputStage::Core {
     int channels = 0, maxBlock = 0, factor = 1, upstream = 0;
     bool latched = false;
     long nonFinite = 0, clamped = 0, stageResets = 0;
+    mutable std::vector<double> scratch;   // snapshot staging
 };
 
 OutputStage::OutputStage() = default;
@@ -71,6 +73,7 @@ bool OutputStage::prepare(const OutputConfig& cfg, std::string& err) {
     core->fallback.prepare(rampSamples(fs, kFallbackRamp));
     core->logFc.prepare(rampSamples(fs, kHpfRamp));
     core->matcher.prepare(fs);
+    core->scratch.assign(std::size_t(core->ch[0].os.stateSize()) + 1, 0.0);
     core_ = std::move(core);
     pending_ = OutputParams{};
     pending_.hpfCutoffHz = core_->fcTarget;
@@ -202,6 +205,60 @@ void OutputStage::reset() noexcept {
     for (int c = 0; c < k->channels; ++c) k->ch[c].hpf.design(k->fs, k->fcNow);
     k->matcher.reset();
     k->latched = false;
+}
+
+namespace {
+// Trivially copyable scalar state of the stage (copied as one item).
+struct ScalarState {
+    OnePole inGain, trim, mix;
+    LinearRamp autoGain, hpfMix, clipMix, bypass, fallback, logFc;
+    dsp::GainMatcher matcher;
+    OutputParams pending;
+    double fcTarget, fcNow;
+    std::int64_t latched, nonFinite, clamped, stageResets;
+};
+static_assert(std::is_trivially_copyable_v<ScalarState>);
+static_assert(std::is_trivially_copyable_v<dsp::ButterworthHpf>);
+}  // namespace
+
+void OutputStage::saveState(StateWriter& w) const noexcept {
+    const Core* k = core_.get();
+    if (!k) return;
+    const ScalarState sc{k->inGain, k->trim, k->mix, k->autoGain, k->hpfMix, k->clipMix, k->bypass, k->fallback, k->logFc,
+                         k->matcher, pending_, k->fcTarget, k->fcNow, k->latched ? 1 : 0, k->nonFinite, k->clamped, k->stageResets};
+    w.pod(sc);
+    for (int c = 0; c < k->channels; ++c) {
+        const auto& ch = k->ch[c];
+        w.pod(ch.hpf);
+        ch.os.getState(k->scratch.data());
+        w.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()));
+        ch.pad.save(w);
+        ch.raw.save(w);
+    }
+}
+
+bool OutputStage::loadState(StateReader& r, bool apply) noexcept {
+    Core* k = core_.get();
+    if (!k) return false;
+    ScalarState sc{};
+    if (!r.pod(sc)) return false;
+    if (!(sc.fcNow >= 10 && sc.fcNow <= 250 && sc.fcTarget >= 10 && sc.fcTarget <= 250)) return false;
+    if (apply) {
+        k->inGain = sc.inGain; k->trim = sc.trim; k->mix = sc.mix; k->autoGain = sc.autoGain; k->hpfMix = sc.hpfMix;
+        k->clipMix = sc.clipMix; k->bypass = sc.bypass; k->fallback = sc.fallback; k->logFc = sc.logFc; k->matcher = sc.matcher;
+        pending_ = sc.pending; k->fcTarget = sc.fcTarget; k->fcNow = sc.fcNow; k->latched = sc.latched != 0;
+        k->nonFinite = long(sc.nonFinite); k->clamped = long(sc.clamped); k->stageResets = long(sc.stageResets);
+    }
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        dsp::ButterworthHpf hpf;
+        if (!r.pod(hpf)) return false;
+        if (apply) ch.hpf = hpf;
+        if (!r.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()))) return false;
+        if (!(apply ? ch.os.setState(k->scratch.data()) : ch.os.stateValid(k->scratch.data()))) return false;
+        if (!ch.pad.load(r, apply) || !ch.raw.load(r, apply)) return false;
+    }
+    return true;
 }
 
 int OutputStage::latencySamples() const noexcept { return core_ ? core_->plan.declared : 0; }
