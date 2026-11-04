@@ -32,6 +32,10 @@ cd_module(cd_state state cd_dsp Threads::Threads)
 cd_module(cd_blueprint blueprint cd_state cd_control)
 # cd_runtime: integrated per-sample engine (P03 integration) and realtime bridge.
 cd_module(cd_runtime runtime cd_blueprint cd_control cd_state)
+# cd_community: catalog client contract against a mock transport (P14, G06 open); never on audio.
+cd_module(cd_community community cd_state)
+# cd_edition: edition manifests / LITE two-knob mapping (P12).
+cd_module(cd_edition edition cd_runtime)
 
 enable_testing()
 add_executable(cd_tests tests/test_main.cpp)
@@ -46,7 +50,7 @@ foreach(f ${_suites})
   string(REGEX REPLACE "^test_" "" suite ${stem})
   add_executable(cd_${suite}_tests ${f} ${_support})
   target_include_directories(cd_${suite}_tests PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-  target_link_libraries(cd_${suite}_tests PRIVATE cd_runtime Threads::Threads)
+  target_link_libraries(cd_${suite}_tests PRIVATE cd_runtime cd_community cd_edition Threads::Threads)
   add_test(NAME ${suite} COMMAND cd_${suite}_tests)
 endforeach()
 add_test(NAME registry_codegen_fresh COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/gen_param_registry.py --check)
