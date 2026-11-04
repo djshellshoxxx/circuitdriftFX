@@ -1,0 +1,42 @@
+# Nightly UX-09 qualification run: ONE HOUR OF AUDIO TIME (CD_STRESS_SECONDS=3600) of the integrated
+# realtime stress test under the allocation/lock/I-O trap, plus the engine benchmark. Release, no
+# sanitizer. The one-hour figure is audio time; wall time and realtime factor are printed in the log.
+# The benchmark runs on a shared GitHub runner: NOT reference hardware, no spec target is claimed.
+# Deliberately not part of the per-PR workflow (ci.yml).
+name: nightly
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+# Scheduled runs are never cancelled by a newer one; a manual dispatch queues behind them.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  rt-stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --target cd_rt_stress_tests cd_bench --parallel 4
+      - name: Stress (3600 s of audio)
+        env:
+          CD_STRESS_SECONDS: '3600'
+        run: |
+          mkdir -p logs
+          start=$(date +%s)
+          ./build/cd_rt_stress_tests 2>&1 | tee logs/rt_stress.log
+          echo "total wall seconds: $(( $(date +%s) - start ))" | tee -a logs/rt_stress.log
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Benchmark
+        run: ./build/cd_bench 2>&1 | tee logs/bench.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-logs
+          path: logs/
+          if-no-files-found: warn
