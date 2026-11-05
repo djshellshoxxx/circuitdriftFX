@@ -332,6 +332,10 @@ bool loadState(std::string_view text, StateDocument& out, std::string& error, co
         if (core::jsonDepth(v) > 20) { error = "migration exceeded depth bound"; return false; }
         ++ver;
     }
+    // Migrations may create invalid in-memory UTF-8 in values or metadata keys.
+    // Verify serializability before accepting the migrated tree as a loadable document.
+    try { (void)core::writeJson(v); }
+    catch (const std::invalid_argument& ex) { error = ex.what(); return false; }
     StateDocument d;
     if (!validateV1(v, d, error)) return false;
     out = std::move(d);
