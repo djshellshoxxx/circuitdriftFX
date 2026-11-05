@@ -43,6 +43,39 @@ std::string withSeed(const char* token) {
     return text;
 }
 
+// A custom migration can introduce malformed in-memory strings even when the
+// original document was valid UTF-8. Reject those trees without throwing.
+bool migrateInvalidMetadataKey(core::JsonValue& tree, std::string&) {
+    tree.set("schemaVersion", core::JsonValue::makeNumber(1));
+    tree.set(std::string("\x80", 1), core::JsonValue::makeString("synthetic"));
+    return true;
+}
+
+bool migrateInvalidMetadataValue(core::JsonValue& tree, std::string&) {
+    tree.set("schemaVersion", core::JsonValue::makeNumber(1));
+    tree.set("x-token", core::JsonValue::makeString(std::string("\x80", 1)));
+    return true;
+}
+
+void migratedUtf8Boundary() {
+    auto input = sceneTree();
+    input.set("schemaVersion", core::JsonValue::makeNumber(0));
+    const auto legacy = core::writeJson(input);
+    state::StateDocument doc;
+    std::string error;
+    CHECK(state::loadState(kScene, doc, error));
+    const auto before = state::saveState(doc);
+    for (const state::MigrationFn step : {migrateInvalidMetadataKey, migrateInvalidMetadataValue}) {
+        const state::MigrationChain migrations{0, {step}};
+        bool rejected = false, threw = false;
+        try { rejected = !state::loadState(legacy, doc, error, migrations); }
+        catch (const std::invalid_argument&) { threw = true; }
+        CHECK(!threw && rejected);
+        CHECK(!error.empty());
+        CHECK(state::saveState(doc) == before);
+    }
+}
+
 void utf8WriterBoundary() {
     using core::JsonValue;
     const auto rejects = [](const JsonValue& value) {
@@ -299,6 +332,7 @@ void atomicFiles() {
 } // namespace
 
 int main() {
+    migratedUtf8Boundary();
     utf8WriterBoundary();
     localeNumbers(); exactIdentitiesAndFeatures(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
