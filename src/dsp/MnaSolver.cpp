@@ -26,7 +26,7 @@ bool MnaSolver::prepareInternal(const Netlist& net, double h, const Options& opt
     if (opt.maxNewton < 1 || opt.maxNewton > 12 || !(opt.tol > 0 && opt.tol <= 1e-7 && std::isfinite(opt.tol)))
         return bad("Newton options out of range (finite 0 < tolerance <= 1e-7 required)");
     if (net.nodes < 1 || net.nodes > kMaxNodes) return bad("node count outside 1..32");
-    if (net.elements.empty() || net.elements.size() > kMaxComponents) return bad("component count outside 1..64");
+    if (net.elements.empty() || net.elements.size() > std::size_t(kMaxElements)) return bad("element count outside 1..68 (64 components + 4 port sources)");
     if (!(net.voltageScaleV > 0 && net.currentScaleA > 0 && std::isfinite(net.voltageScaleV) && std::isfinite(net.currentScaleA)))
         return bad("circuit scales must be strictly positive");
 
