@@ -24,9 +24,11 @@ CircuitDrift is a planned audio effect plugin exploring dynamic circuits, compon
 
 ## Continue development
 
+Use the [consolidated development prompt](docs/prompts/CONTINUE_DEVELOPMENT.md), based on the [post-merge branch and handoff review](docs/BRANCH_REVIEW_2026-10-30.md). It prioritizes confirmed validation repairs, then synthetic process integration before dependent state queues.
+
 Read [the handoff](docs/HANDOFF.md), [checkpoint](docs/CHECKPOINT.md), and [traceability](docs/TRACEABILITY.md) for current code and verification limits. The [integration review](docs/INTEGRATION_REVIEW.md) records branch reconciliation and safety findings.
 
-Use the [engine research/specification prompt](docs/prompts/ENGINE_SPECIFICATION_PROMPT.md), now expanded to include the feature and UX package. Close the physical-model evidence gaps before claiming validated hardware emulation.
+The [original engine research/specification prompt](docs/prompts/ENGINE_SPECIFICATION_PROMPT.md) records the specification assignment and remaining physical-model research. Close those evidence gaps before claiming validated hardware emulation.
 
 Requested builds are VST3, AU v2, AAX Native and CLAP on the applicable Windows/macOS architectures; adapter, licensing, signing and host validation remain planned work.
 

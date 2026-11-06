@@ -1,6 +1,6 @@
 # CircuitDrift planned feature specifications
 
-Status: **planned; no plugin implementation exists in this repository yet.** Revision 1, 2026-10-28.
+Specification baseline: revision 1, 2026-10-28. Framework-independent core primitives now exist; integrated plugin/host qualification remains open. Use [traceability](../TRACEABILITY.md) and the [current handoff](../HANDOFF.md) for implementation status; this package defines the required full scope.
 
 This package specifies all 23 additions/expansions in the author's numbered list (items 3–25; item 2 was blank). It supplements the original [product vision](../PRODUCT_VISION.md). The [feature register](FEATURE_REGISTER.md) preserves the requested scope and maps each feature to an engineering contract and acceptance test.
 
