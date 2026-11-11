@@ -89,8 +89,7 @@ control::SidechainLoadDetector::Config sidechainConfig(double hpfHz) noexcept {
     return c;
 }
 
-void seedCreative(MacroRuntime& m, const PreparedEngine& p, double fs, std::uint64_t cut, std::uint64_t del, std::uint64_t noise) noexcept {
-    (void)p;
+void seedCreative(MacroRuntime& m, double fs, std::uint64_t cut, std::uint64_t del, std::uint64_t noise) noexcept {
     m.cutMotion.prepare(fs, cut);
     m.delayMotion.prepare(fs, del);
     m.noiseRng.seed(noise);
@@ -245,7 +244,7 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
     p->cutSeed_ = control::deriveSeed(cfg.seed, slot, "creative.cutoff", control::StreamType::CutoffMotion);
     p->delaySeed_ = control::deriveSeed(cfg.seed, slot, "creative.pitchDelay", control::StreamType::DelayMotion);
     p->noiseSeed_ = control::deriveSeed(cfg.seed, slot, "analog.noise", control::StreamType::Other);
-    seedCreative(p->macro_, *p, cfg.sampleRate, p->cutSeed_, p->delaySeed_, p->noiseSeed_);
+    seedCreative(p->macro_, cfg.sampleRate, p->cutSeed_, p->delaySeed_, p->noiseSeed_);
     initMacros(p->macro_, cfg, p->bindings_, cfg.sampleRate);
     p->fadeLen_ = int(std::max(1.0, std::round(kGraphFadeSeconds * cfg.sampleRate)));
     Fnv64 h;
@@ -741,7 +740,7 @@ void Engine::reset() noexcept {
     m.timeline.restore(ts);
     for (auto& z : m.z) z[0] = z[1] = 0.0;
     for (auto& z : m.lz) z[0] = z[1] = 0.0;
-    seedCreative(m, p, p.fs_, p.cutSeed_, p.delaySeed_, p.noiseSeed_);
+    seedCreative(m, p.fs_, p.cutSeed_, p.delaySeed_, p.noiseSeed_);
     m.transient.reset();
     m.sidechain.reset();
     m.cutOct = m.lpfOct = 0.0;
@@ -778,7 +777,9 @@ QualityRequest Engine::requestQuality(std::unique_ptr<PreparedEngine>& h) noexce
     q.output_.setInputGainDb(op.inputGainDb); q.output_.setOutputTrimDb(op.outputTrimDb); q.output_.setMix(op.mix);
     q.output_.setAutoGain(op.autoGain); q.output_.setHpfEnabled(op.hpfEnabled); q.output_.setHpfCutoffHz(op.hpfCutoffHz);
     q.output_.setSoftClipEnabled(op.softClipEnabled); q.output_.setHostBypass(op.hostBypass);
-    qWarm_ = q.quality_.latencySamples;
+    // Pre-roll covers the full support of the linear-phase FIR chain (about twice its declared group
+    // delay) plus a short margin for the circuit's own memory, so the faded-in path is initialized.
+    qWarm_ = 2 * q.quality_.latencySamples + kQualityPrerollMargin;
     qPos_ = 0;
     qLen_ = int(std::max(1.0, std::round(kQualityFadeSeconds * q.fs_)));
     bump(qCrossfades_);

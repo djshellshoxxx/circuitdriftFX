@@ -22,9 +22,9 @@
 //  * Crossfades: same Fs/channels/slice size, same phase family (FIR/IIR), same Zero Latency mode
 //    and the same declared (padded) latency. The incoming path adopts the macro runtime, output
 //    parameter targets and slow physical state (temperatures, 1 kHz phase, rail volts, feedback
-//    parameters) of the active path, pre-rolls for latencySamples() samples (its delay lines fill,
-//    inaudible), then old/new outputs are crossfaded over 20 ms with linear equal-sum weights
-//    (1-x, x). Latency never changes. The finished old engine is handed back via takeRetired() for
+//    parameters) of the active path, pre-rolls for 2*latencySamples()+256 samples (FIR support and
+//    delay lines fill, inaudible), then old/new outputs are crossfaded over 20 ms (equal-sum weights
+//    1-x, x, linear). Latency never changes. The finished old engine is handed back via takeRetired() for
 //    off-audio reclamation.
 //  * Stages: a phase-family change (FIR<->IIR), a Zero Latency toggle, a pitch-delay toggle or any
 //    other declared-latency change is NEVER applied while processing: the candidate becomes the
@@ -342,6 +342,7 @@ public:
     static constexpr double kEntryLimit = 1e6;   // entry range guard (+120 dBFS), keeps state finite
     static constexpr double kGraphFadeSeconds = 0.020;
     static constexpr double kQualityFadeSeconds = 0.020;
+    static constexpr int kQualityPrerollMargin = 256;   // samples beyond 2x declared latency (inaudible pre-roll)
     static constexpr double kCutoffSlewSeconds = 0.010;
 
     // Non-audio. Returns nullptr with error on failure; active engine unaffected.
