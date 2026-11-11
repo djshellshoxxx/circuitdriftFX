@@ -16,7 +16,7 @@ constexpr std::size_t kMaxThermal = dsp::ThermalNetwork::kMaxNodes;
 
 // One dissipative element mapped to a thermal node (copied scalar data; no manifest pointer).
 struct MappedBranch {
-    int a = 0, b = 0, node = 0;
+    int a = 0, b = 0, node = 0, element = 0;
     bool diode = false;
     double g = 0;                       // resistor conductance
     double is = 0, nvt = 1, cap = 40, expCap = 0;  // diode (same C1 extension as MnaSolver)
@@ -100,6 +100,7 @@ struct CircuitRuntime::Core {
     // Exact 1 kHz clock: phase = phaseAcc / fs ticks; each host sample adds 1000 (integer Hz rates).
     int64_t phaseAcc = 0, fsInt = 0;
     int channels = 0, factor = 0, maxBlock = 0, thermalNodes = 0;
+    int srcA = 0, srcB = 0;                // input voltage-source element nodes (telemetry)
     bool thermalOn = false, latched = false, resetRequested = false;
     int64_t samples = 0;
     std::int64_t failed = 0, ticks = 0;
@@ -162,7 +163,7 @@ bool CircuitRuntime::prepare(const CircuitConfig& cfg, std::string& err) {
             if (!dissipative) return bad("thermal map may only reference dissipative (resistor/diode) elements");
             if (std::size_t(node) >= tcfg.n) return bad("thermal node out of range");
             MappedBranch m;
-            m.a = e.a; m.b = e.b; m.node = node;
+            m.a = e.a; m.b = e.b; m.node = node; m.element = int(k);
             if (e.model->equation == DeviceEquation::Resistor) {
                 m.g = 1.0 / e.param[0];
             } else {
@@ -179,6 +180,7 @@ bool CircuitRuntime::prepare(const CircuitConfig& cfg, std::string& err) {
     core->fadeStep = 1.0 / std::max(1.0, std::round(kFallbackFadeSec * cfg.sampleRate));
     core->channels = cfg.channels; core->factor = cfg.os.factor; core->maxBlock = cfg.maxBlock;
     core->io = cfg.io;
+    core->srcA = els[std::size_t(cfg.io.sourceElement)].a; core->srcB = els[std::size_t(cfg.io.sourceElement)].b;
     core->thermalNodes = int(tcfg.n);
     for (std::size_t i = 0; i < kMaxThermal; ++i) core->ambient[i] = cfg.thermal.ambientK;
     core->fade.assign(std::size_t(cfg.maxBlock), 0.0);
@@ -419,6 +421,44 @@ double CircuitRuntime::lastPowerW(int c, int node) const noexcept {
 double CircuitRuntime::voltage(int c, int node) const noexcept {
     if (!core_ || c < 0 || c >= core_->channels) return 0.0;
     return core_->ch[c].solver.voltage(node);
+}
+
+int CircuitRuntime::telemetryBranches() const noexcept { return core_ && core_->thermalOn ? int(core_->mapped.size()) : 0; }
+
+bool CircuitRuntime::branchTelemetry(int c, int k, BranchTelemetry& out) const noexcept {
+    if (!core_ || !core_->thermalOn || c < 0 || c >= core_->channels || k < 0 || k >= int(core_->mapped.size())) return false;
+    const MappedBranch& m = core_->mapped[std::size_t(k)];
+    const auto& s = core_->ch[c].solver;
+    const double v = s.voltage(m.a) - s.voltage(m.b);
+    const double i = branchCurrent(m, v);
+    out.element = m.element;
+    out.thermalNode = m.node;
+    out.voltageV = v;
+    out.currentA = std::isfinite(i) ? i : 0.0;
+    out.powerW = std::isfinite(v * i) ? v * i : 0.0;
+    out.temperatureK = core_->ch[c].thermal.temperature(std::size_t(m.node));
+    return true;
+}
+
+double CircuitRuntime::inputVolts(int c) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return 0.0;
+    const auto& s = core_->ch[c].solver;
+    return s.voltage(core_->srcA) - s.voltage(core_->srcB);
+}
+
+double CircuitRuntime::outputVolts(int c) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return 0.0;
+    return core_->ch[c].solver.voltage(core_->io.outputNode);
+}
+
+int CircuitRuntime::lastIterations(int c) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return 0;
+    return core_->ch[c].solver.lastIterations();
+}
+
+double CircuitRuntime::lastResidual(int c) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return 0.0;
+    return core_->ch[c].solver.lastScaledResidual();
 }
 
 }  // namespace cd::runtime

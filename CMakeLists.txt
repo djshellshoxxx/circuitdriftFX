@@ -31,7 +31,7 @@ cd_module(cd_state state cd_dsp Threads::Threads)
 # cd_blueprint: graph validator, lifecycle timeline, faults (P10/P11).
 cd_module(cd_blueprint blueprint cd_state cd_control)
 # cd_runtime: integrated per-sample engine (P03 integration) and realtime bridge.
-cd_module(cd_runtime runtime cd_blueprint cd_control cd_state)
+cd_module(cd_runtime runtime cd_blueprint cd_control cd_state cd_analysis)
 # cd_analysis: telemetry frames and display math (P09; UI-independent, worker/UI threads).
 cd_module(cd_analysis analysis cd_dsp cd_state)
 # cd_media: recorder core (P13): capture queues, timestamps, PNG/GIF writers; G07 for MP4.

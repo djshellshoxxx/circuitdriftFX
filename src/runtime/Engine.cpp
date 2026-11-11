@@ -22,7 +22,9 @@ void silence(const AudioBuses& b, uint32_t frames) noexcept {
 constexpr uint32_t kMacroAge = 1000, kMacroSag = 1001, kMacroDrift = 1002, kMacroWarmth = 1003, kAnalogNoise = 1004,
                    kInputGain = 1005, kOutputGain = 1006, kMix = 1007, kGainMatch = 1008, kSoftClip = 1009,
                    kHpfEnabled = 1010, kHpfFrequency = 1011, kSlotALifecycle = 1018, kSlotAScenario = 1019,
-                   kSlotBLifecycle = 1020, kSlotBScenario = 1021;
+                   kSlotBLifecycle = 1020, kSlotBScenario = 1021, kPitchDrift = 1016, kScSource = 1022, kScDepth = 1023,
+                   kScHpf = 1024, kTransient = 1025, kTempoEnabled = 1031, kTempoDivision = 1032, kTempoModifier = 1033,
+                   kTempoDepth = 1034;
 
 constexpr uint64_t kStateMagic = 0x3154535f454e4443ull;   // "CDNE_ST1"
 
@@ -39,7 +41,7 @@ double clamp01(double x) noexcept { return std::isfinite(x) ? std::clamp(x, 0.0,
 
 // Re-evaluates effective macro values from smoothed values v = {a,s,d,w,u}.
 void evaluateMacros(MacroRuntime& m, const control::ManifestBindings& mb, const control::BaseValues& base, double fs,
-                    const double* v) noexcept {
+                    const double* v, const control::ModulationInput* mod = nullptr, const control::FaultOverlay* fault = nullptr) noexcept {
     const blueprint::Condition cond = m.timeline.condition();
     control::TimelineOffsets tl;
     tl.serviceAgeYears = cond.values.ageYears;
@@ -49,6 +51,8 @@ void evaluateMacros(MacroRuntime& m, const control::ManifestBindings& mb, const 
     tl.biasOffset = cond.values.biasOffsetSpan * mb.biasSpan;
     control::Hooks hooks;
     hooks.timeline = &tl;
+    hooks.mod = mod;
+    hooks.fault = fault;
     m.eff = control::evaluate(base, control::MacroValues{v[0], v[1], v[2], v[3]}, mb, hooks);
     m.drive = m.eff.supportsWarmth ? std::pow(10.0, m.eff.driveDb / 20.0) : 1.0;
     if (!(m.drive > 0 && std::isfinite(m.drive))) m.drive = 1.0;
@@ -79,7 +83,51 @@ void hashBindings(Fnv64& h, const control::ManifestBindings& b) noexcept {
     h.bytes(d, sizeof d);
 }
 
+// Fault outputs -> control::FaultOverlay (Macros "faults" stage). Leakage: log-position of the
+// leakage resistance between its nominal and short-equivalent bounds, scaled by the manifest's
+// declared safe leakage range; bias: perturbation as a fraction of the fault's bias span, in the
+// manifest's bias-span units. No load-multiplier contribution is defined for these four faults.
+control::FaultOverlay faultHook(const blueprint::FaultOutputs& o, const blueprint::FaultBounds& b,
+                                const control::ManifestBindings& mb) noexcept {
+    control::FaultOverlay h;
+    if (o.leakageROhm > 0 && b.nominalLeakR > b.shortLeakR) {
+        const double x = std::log(b.nominalLeakR / o.leakageROhm) / std::log(b.nominalLeakR / b.shortLeakR);
+        if (std::isfinite(x)) h.leakFracAdd = std::clamp(x, 0.0, 1.0) * mb.leakRange;
+    }
+    if (b.biasSpanV > 0 && std::isfinite(o.biasPerturbationV)) h.biasOffsetAdd = o.biasPerturbationV / b.biasSpanV * mb.biasSpan;
+    return h;
+}
+
+bool sameHook(const control::FaultOverlay& a, const control::FaultOverlay& b) noexcept {
+    return a.leakFracAdd == b.leakFracAdd && a.loadMultiplierScale == b.loadMultiplierScale && a.biasOffsetAdd == b.biasOffsetAdd;
+}
+
+bool configureSidechain(OverlayRuntime& o, double fs) noexcept {
+    control::SidechainLoadDetector::Config c;
+    c.source = control::SidechainLoadDetector::Source::External;
+    c.hpfHz = o.prm.sidechainHpfHz; c.depth = 1.0; c.iBudgetAmps = 1.0;   // returns clamp(E/E_ref,0,4); depth*I_budget applied by the engine
+    return o.sidechain.prepare(fs, c);
+}
+
+double clampOr(double x, double lo, double hi, double dflt) noexcept { return std::isfinite(x) ? std::clamp(x, lo, hi) : dflt; }
+
+void configureTempo(OverlayRuntime& o) noexcept {
+    o.tempo.setDivision(control::Division(std::min<std::uint32_t>(o.prm.tempoDivision, 5)),
+                        control::Modifier(std::min<std::uint32_t>(o.prm.tempoModifier, 2)));
+}
+
 }  // namespace
+
+// Re-evaluates with the overlay hooks the prepared engine currently has: modulation only when Drift
+// is bound (q = creative motion + tempo drift), fault hook only while a fault channel is not cleared.
+// With no Drift binding and no active fault this is exactly the hook-less evaluation.
+void Engine::evaluateWithOverlays(PreparedEngine& p, const double* v) noexcept {
+    OverlayRuntime& o = p.overlay_;
+    control::ModulationInput mod;
+    mod.q = o.modQ;
+    o.evalQ = o.modQ;
+    evaluateMacros(p.macro_, p.bindings_, p.base_, p.fs_, v, p.bindings_.hasDrift ? &mod : nullptr, o.hookActive ? &o.hook : nullptr);
+}
 
 control::ManifestBindings syntheticMacroBindings() noexcept {
     control::ManifestBindings b;
@@ -123,14 +171,30 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
     cc.sampleRate = cfg.sampleRate; cc.maxBlock = cfg.maxBlock; cc.channels = cfg.channels;
     cc.os = spec; cc.maxNewton = p->quality_.maxNewton; cc.padToFamilyMax = !cfg.quality.zeroLatency;
     if (!p->circuit_.prepare(cc, err)) return nullptr;
+    // D09 pitch-drift delay: only with pitchDrift.enabled, a Drift binding and not Zero Latency. Its
+    // base delay (1.5 ms, rounded to whole samples; exact at 48/96/192 kHz, <= 0.5 sample residual
+    // otherwise) is added to the declared latency and the dry path is delayed to match.
+    const OverlayConfig& ocfg = cfg.overlays;
+    p->pitchDriftParam_ = ocfg.pitchDriftEnabled;
+    p->driftActive_ = ocfg.pitchDriftEnabled && cfg.macroBindings.hasDrift && !cfg.quality.zeroLatency;
+    int driftLat = 0;
+    if (p->driftActive_) {
+        driftLat = int(std::lround(control::PitchDriftDelay::kBaseMs * 1e-3 * cfg.sampleRate));
+        for (int c = 0; c < cfg.channels; ++c) {
+            if (!p->pitch_[c].prepare(cfg.sampleRate)) { err = "pitch-drift delay rejected sample rate"; return nullptr; }
+            p->pitch_[c].setEnabled(true);
+        }
+    }
+    for (auto& d : p->driftDry_) d.prepare(driftLat);
     OutputConfig oc;
     oc.sampleRate = cfg.sampleRate; oc.maxBlock = cfg.maxBlock; oc.channels = cfg.channels;
     oc.clipOs = spec; oc.padToFamilyMax = !cfg.quality.zeroLatency;
-    oc.upstreamLatency = p->circuit_.latencySamples(); oc.initial = cfg.initial;
+    oc.upstreamLatency = p->circuit_.latencySamples() + driftLat; oc.initial = cfg.initial;
     if (!p->output_.prepare(oc, err)) return nullptr;
     p->quality_.circuitLatency = p->circuit_.latencySamples();
     p->quality_.clipLatency = p->output_.latencySamples();
     p->quality_.latencySamples = p->output_.totalLatencySamples();
+    p->quality_.driftLatency = driftLat;
     p->os_ = spec; p->pad_ = !cfg.quality.zeroLatency;
     p->fs_ = cfg.sampleRate; p->channels_ = cfg.channels; p->maxBlock_ = cfg.maxBlock;
     const std::size_t sz = std::size_t(cfg.channels) * std::size_t(cfg.maxBlock);
@@ -138,9 +202,64 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
     p->wet2_.assign(sz, 0.0); p->dry2_.assign(sz, 0.0);
     p->drive_.assign(std::size_t(cfg.maxBlock), 1.0);
     p->shelf_.assign(std::size_t(cfg.maxBlock) * 5, 0.0);
+    p->driftD_.assign(std::size_t(cfg.maxBlock), 0.0);
+    p->driftQ_.assign(std::size_t(cfg.maxBlock), 0.0);
     p->bindings_ = cfg.macroBindings;
     p->base_ = cfg.base;
+    p->factor_ = spec.factor;
     initMacros(p->macro_, cfg, p->bindings_, cfg.sampleRate);
+    // ---- overlays: detectors, tempo, creative motion, faults ----
+    OverlayRuntime& o = p->overlay_;
+    o = OverlayRuntime{};
+    o.prm.transientAmount = clampOr(ocfg.transientAmount, 0, 1, 0);
+    o.prm.sidechainDepth = clampOr(ocfg.sidechainDepth, 0, 2, 0);
+    o.prm.sidechainHpfHz = clampOr(ocfg.sidechainHpfHz, 20, 300, 40);
+    if (!(std::isfinite(ocfg.sidechainBudgetAmps) && ocfg.sidechainBudgetAmps >= 0)) { err = "sidechain I_budget must be finite amperes >= 0"; return nullptr; }
+    o.prm.sidechainBudgetAmps = ocfg.sidechainBudgetAmps;
+    o.prm.sidechainSource = std::uint32_t(ocfg.sidechainSource) <= 2 ? std::uint32_t(ocfg.sidechainSource) : 0;
+    o.prm.tempoEnabled = ocfg.tempoEnabled ? 1 : 0;
+    o.prm.tempoDivision = std::min<std::uint32_t>(std::uint32_t(ocfg.tempoDivision), 5);
+    o.prm.tempoModifier = std::min<std::uint32_t>(std::uint32_t(ocfg.tempoModifier), 2);
+    o.prm.tempoDepth = clampOr(ocfg.tempoDepth, 0, 1, 0);
+    if (!o.transient.prepare(cfg.sampleRate) || !configureSidechain(o, cfg.sampleRate) || !o.tempo.prepare(cfg.sampleRate)) {
+        err = "detector/tempo preparation rejected sample rate";
+        return nullptr;
+    }
+    configureTempo(o);
+    const std::uint32_t slot = cfg.slotRole == core::ParamScope::SlotB ? 1u : 0u;
+    o.motion.prepare(cfg.sampleRate, control::deriveSeed(ocfg.motionSeed, slot, "cd.runtime.engine.drift", control::StreamType::DelayMotion));
+    if (p->bindings_.hasDrift) o.modQ = std::clamp(o.motion.q(), -1.0, 1.0);   // tempo drift is 0 at phase 0
+    const double rate = cfg.sampleRate * double(spec.factor);
+    for (int k = 0; k < kMaxFaultSlots; ++k) {
+        const FaultSlotConfig& f = ocfg.faults[std::size_t(k)];
+        p->faultAvail_[k] = false;
+        p->faultUsed_[k] = f.used;
+        p->faultReason_[k] = f.used ? "" : "slot unused";
+        if (!f.used) continue;
+        const auto& els = cfg.circuit.netlist.elements;
+        if (f.element < 0 || f.element >= int(els.size()) || els[std::size_t(f.element)].kind != dsp::NetElement::Kind::Device ||
+            !els[std::size_t(f.element)].model) {
+            err = "fault slot must name a device element of the circuit netlist";
+            return nullptr;
+        }
+        const auto eq = els[std::size_t(f.element)].model->equation;
+        const char* why = "";
+        if (!blueprint::faultAvailable(f.overlay.type, eq == dsp::DeviceEquation::Capacitor, eq == dsp::DeviceEquation::Resistor,
+                                       false /* no tube equation family exists */, why)) {
+            p->faultReason_[k] = why;   // unavailable with a reason; Apply events for it are rejected
+            continue;
+        }
+        std::string fe;
+        if (!o.faults[k].prepare(rate, f.bounds, f.overlay, fe)) { err = "fault slot: " + fe; return nullptr; }
+        p->faultAvail_[k] = true;
+        p->faultBounds_[k] = f.bounds;
+        o.prm.faults[k] = f.overlay;
+    }
+    {
+        const double v[5] = {p->macro_.last[0], p->macro_.last[1], p->macro_.last[2], p->macro_.last[3], p->macro_.last[4]};
+        evaluateWithOverlays(*p, v);
+    }
+    p->overlayInit_ = o;
     p->fadeLen_ = int(std::max(1.0, std::round(kGraphFadeSeconds * cfg.sampleRate)));
     Fnv64 h;
     h.str("cd.runtime.Engine/1");
@@ -148,6 +267,8 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
     h.pod(cfg.channels); h.pod(p->quality_.factor); h.pod(p->quality_.family); h.pod(p->quality_.maxNewton);
     h.pod(p->quality_.zeroLatency); h.pod(p->quality_.latencySamples);
     hashBindings(h, p->bindings_);
+    h.pod(p->driftActive_); h.pod(driftLat);
+    for (int k = 0; k < kMaxFaultSlots; ++k) { h.pod(p->faultAvail_[k]); h.pod(ocfg.faults[std::size_t(k)].overlay.type); }
     p->configHash_ = h.h;
     p->generation_ = ++nextGeneration_;
     err.clear();
@@ -184,7 +305,9 @@ bool Engine::prepare(const EngineConfig& cfg, std::string& err) {
 // Events
 
 void Engine::applyEvent(const ParamEvent& e) noexcept {
-    OutputStage& o = active_->output_;
+    PreparedEngine& p = *active_;
+    OutputStage& o = p.output_;
+    OverlayRuntime& ov = p.overlay_;
     const bool on = e.value >= 0.5;
     switch (e.target) {
         case ParamTarget::InputGainDb: o.setInputGainDb(e.value); break;
@@ -195,6 +318,27 @@ void Engine::applyEvent(const ParamEvent& e) noexcept {
         case ParamTarget::HpfCutoffHz: o.setHpfCutoffHz(e.value); break;
         case ParamTarget::SoftClipEnabled: o.setSoftClipEnabled(on); break;
         case ParamTarget::HostBypass: o.setHostBypass(on); break;
+        case ParamTarget::FaultEnabled:
+        case ParamTarget::FaultSeverity: {
+            if (e.index >= std::uint32_t(kMaxFaultSlots) || !p.faultAvail_[e.index] || !std::isfinite(e.value)) { bump(ov.faultRejected); break; }
+            blueprint::FaultChannel& ch = ov.faults[e.index];
+            blueprint::FaultOverlay f = ov.prm.faults[e.index];
+            if (e.target == ParamTarget::FaultEnabled) f.enabled = on;
+            else f.severity = std::clamp(e.value, 0.0, 1.0);
+            f.revision = std::max(f.revision, ch.overlay().revision) + 1;
+            if (ch.apply(f)) { ov.prm.faults[e.index] = f; bump(ov.faultApplied); }
+            else bump(ov.faultRejected);
+            break;
+        }
+        case ParamTarget::FaultResetAll:
+            for (int k = 0; k < kMaxFaultSlots; ++k) {
+                if (!p.faultAvail_[k]) continue;
+                ov.faults[k].reset();
+                blueprint::FaultOverlay& f = ov.prm.faults[k];
+                f.enabled = false; f.severity = 0; f.revision = std::max(f.revision, ov.faults[k].overlay().revision) + 1;
+            }
+            bump(ov.faultResets);
+            break;
         default: break;
     }
 }
@@ -208,6 +352,7 @@ void Engine::applyHostParam(PreparedEngine& p, uint32_t hostId, double normalize
     const bool on = v >= 0.5;
     OutputStage& o = p.output_;
     MacroRuntime& m = p.macro_;
+    OverlayRuntime& ov = p.overlay_;
     switch (hostId) {
         case kMacroAge: case kMacroSag: case kMacroDrift: case kMacroWarmth:
             m.targets[hostId - kMacroAge] = clamp01(v);
@@ -225,6 +370,20 @@ void Engine::applyHostParam(PreparedEngine& p, uint32_t hostId, double normalize
         case kHpfFrequency: o.setHpfCutoffHz(v); break;
         case kSlotALifecycle: case kSlotBLifecycle: m.timeline.setTarget(v); break;
         case kSlotAScenario: case kSlotBScenario: m.timeline.setScenario(blueprint::Scenario(int(v))); break;
+        // Enabling/disabling the pitch-drift delay changes latency: prepare-time only (latency handshake).
+        case kPitchDrift: if (on != p.pitchDriftParam_) bump(unsupported_); break;
+        case kScSource: ov.prm.sidechainSource = std::uint32_t(std::clamp(int(std::lround(v)), 0, 2)); break;
+        case kScDepth: ov.prm.sidechainDepth = clampOr(v, 0, 2, ov.prm.sidechainDepth); break;
+        case kScHpf: {   // re-designing the HPF restarts the sidechain detector's filter/envelope state
+            const double hz = clampOr(v, 20, 300, ov.prm.sidechainHpfHz);
+            if (hz != ov.prm.sidechainHpfHz) { ov.prm.sidechainHpfHz = hz; configureSidechain(ov, p.fs_); }
+            break;
+        }
+        case kTransient: ov.prm.transientAmount = clampOr(v, 0, 1, ov.prm.transientAmount); break;
+        case kTempoEnabled: ov.prm.tempoEnabled = on ? 1 : 0; break;
+        case kTempoDivision: ov.prm.tempoDivision = std::uint32_t(std::clamp(int(std::lround(v)), 0, 5)); configureTempo(ov); break;
+        case kTempoModifier: ov.prm.tempoModifier = std::uint32_t(std::clamp(int(std::lround(v)), 0, 2)); configureTempo(ov); break;
+        case kTempoDepth: ov.prm.tempoDepth = clampOr(v, 0, 1, ov.prm.tempoDepth); break;
         default: bump(unsupported_); break;
     }
 }
@@ -245,22 +404,83 @@ void Engine::applyTransaction(PreparedEngine& p, const state::TransactionEvent& 
 CircuitRuntime& Engine::currentCircuit(PreparedEngine& p) noexcept { return curGraph_ ? curGraph_->circuit() : p.circuit_; }
 const CircuitRuntime& Engine::currentCircuit() const noexcept { return curGraph_ ? curGraph_->circuit() : active_->circuit_; }
 
-void Engine::macroSlice(PreparedEngine& p, int n) noexcept {
+// Per host sample, in the spec order restricted to what exists: macro smoother / lifecycle /
+// creative-motion and tempo targets -> transient + sidechain detectors -> fault channels at the
+// electrical rate (excited by the main transient detector) -> effective-value evaluation (base ->
+// timeline -> macros -> modulation q -> fault hook -> clamp) whenever an input changed.
+void Engine::macroSlice(PreparedEngine& p, const double* const* gained, const AudioBuses& buses, int off, int n, uint32_t& st) noexcept {
     MacroRuntime& m = p.macro_;
+    OverlayRuntime& o = p.overlay_;
     const std::size_t M = std::size_t(p.maxBlock_);
     double* b0 = p.shelf_.data(); double* b1 = b0 + M; double* b2 = b1 + M; double* a1 = b2 + M; double* a2 = a1 + M;
+    const int C = p.channels_;
+    const bool drift = p.bindings_.hasDrift;
+    const bool tempoOn = o.prm.tempoEnabled != 0;
+    const auto src = control::SidechainSource(o.prm.sidechainSource);
+    const bool scActive = scConnected_ && src != control::SidechainSource::Main;
+    o.sidechain.setConnected(scActive);   // inactive: the detector returns 0 and holds no stale energy
+    const double* sc[2] = {nullptr, nullptr};
+    if (scActive) {
+        sc[0] = buses.sidechain[0] + off;
+        sc[1] = buses.sidechainChannels > 1 ? buses.sidechain[1] + off : sc[0];
+    }
+    const double scScale = o.prm.sidechainDepth * o.prm.sidechainBudgetAmps;
+    int slots[kMaxFaultSlots];
+    int nf = 0;
+    for (int k = 0; k < kMaxFaultSlots; ++k) if (p.faultAvail_[k]) slots[nf++] = k;
+    const int F = p.factor_;
     for (int i = 0; i < n; ++i) {
         m.smoother.step();
         const double u = m.timeline.tick();
+        o.tempo.step();
+        if (drift) {
+            o.motion.advanceSample();
+            o.tempoDrift = tempoOn ? o.tempo.drift(o.prm.tempoDepth) : 0.0;
+            o.modQ = std::clamp(o.motion.q() + o.tempoDrift, -1.0, 1.0);
+        }
+        // Detectors: control scalars only, never audio.
+        const double l = gained[0][i], r = C > 1 ? gained[1][i] : l;
+        o.b = o.transient.process(l, r);
+        o.P = control::TransientDetector::strength(o.prm.transientAmount, o.b);
+        const double ratio = scActive ? o.sidechain.process(sc[0][i], sc[1][i]) : o.sidechain.process(0.0, 0.0);
+        o.iExt = scScale * ratio;
+        // No supply port exists in the synthetic fixtures: I_phys = I_dyn = 0 (G01).
+        o.iLoad = control::composeLoadCurrent(src, 0.0, 0.0, m.smoother.value(1), o.iExt);
+        bool hookChanged = false;
+        if (nf > 0) {
+            control::FaultOverlay h;
+            std::int64_t act = 0;
+            for (int j = 0; j < nf; ++j) {
+                const int k = slots[j];
+                blueprint::FaultChannel& fc = o.faults[k];
+                for (int sub = 0; sub < F; ++sub) o.faultOut[k] = fc.tick(o.b);
+                const control::FaultOverlay hk = faultHook(o.faultOut[k], p.faultBounds_[k], p.bindings_);
+                if (!fc.cleared() || hk.leakFracAdd != 0.0 || hk.biasOffsetAdd != 0.0) {
+                    act = 1;
+                    h.leakFracAdd += hk.leakFracAdd;
+                    h.biasOffsetAdd += hk.biasOffsetAdd;
+                }
+            }
+            if (act != o.hookActive || (act && !sameHook(h, o.hook))) {
+                hookChanged = true;
+                o.hookActive = act;
+                o.hook = act ? h : control::FaultOverlay{};
+            }
+        }
         const double v[5] = {m.smoother.value(0), m.smoother.value(1), m.smoother.value(2), m.smoother.value(3), u};
-        if (v[0] != m.last[0] || v[1] != m.last[1] || v[2] != m.last[2] || v[3] != m.last[3] || v[4] != m.last[4])
-            evaluateMacros(m, p.bindings_, p.base_, p.fs_, v);
+        if (v[0] != m.last[0] || v[1] != m.last[1] || v[2] != m.last[2] || v[3] != m.last[3] || v[4] != m.last[4] || hookChanged ||
+            (drift && o.modQ != o.evalQ))
+            evaluateWithOverlays(p, v);
         p.drive_[std::size_t(i)] = m.drive;
         b0[i] = m.shelf.b0; b1[i] = m.shelf.b1; b2[i] = m.shelf.b2; a1[i] = m.shelf.a1; a2[i] = m.shelf.a2;
+        if (p.driftActive_) { p.driftD_[std::size_t(i)] = v[2]; p.driftQ_[std::size_t(i)] = o.modQ; }
     }
+    if (o.hookActive) st |= status::kFaultActive;
 }
 
-void Engine::runSlice(PreparedEngine& p, const double* const* in, double* const* out, int off, int n, uint32_t& st) noexcept {
+void Engine::runSlice(PreparedEngine& p, const AudioBuses& buses, int off, int n, uint32_t& st) noexcept {
+    const double* const* in = buses.in;
+    double* const* out = buses.out;
     const int C = p.channels_;
     const std::size_t M = std::size_t(p.maxBlock_);
     const double* rawC[2] = {};
@@ -283,7 +503,7 @@ void Engine::runSlice(PreparedEngine& p, const double* const* in, double* const*
         }
     }
     p.output_.applyInputGain(rawC, gained, n);
-    macroSlice(p, n);
+    macroSlice(p, gainedC, buses, off, n, st);
     const double* drive = p.drive_.data();
     CircuitRuntime& cur = currentCircuit(p);
     if (!fading_) {
@@ -323,6 +543,20 @@ void Engine::runSlice(PreparedEngine& p, const double* const* in, double* const*
             }
             if (!isFiniteSample(z0) || !isFiniteSample(z1)) { z0 = z1 = 0.0; }
             p.macro_.z[c][0] = z0; p.macro_.z[c][1] = z1;
+        }
+    }
+    // D09 creative pitch drift on the wet path (labelled creative effect, not a sag consequence);
+    // the dry path is delayed by the integer base delay so the blend stays aligned.
+    if (p.driftActive_) {
+        const double* d = p.driftD_.data();
+        const double* q = p.driftQ_.data();
+        for (int c = 0; c < C; ++c) {
+            double* w = wet[c];
+            double* y = dry[c];
+            for (int i = 0; i < n; ++i) {
+                w[i] = p.pitch_[c].process(w[i], d[i], q[i]);
+                y[i] = p.driftDry_[c].process(y[i]);
+            }
         }
     }
     p.output_.process(rawC, dryC, wetC, o, n);
@@ -375,9 +609,84 @@ bool Engine::validateCall(const ProcessContext& ctx, const AudioBuses& buses, Pr
         for (int c = 0; layoutOk && c < p->channels_; ++c) layoutOk = buses.in[c] && buses.out[c];
     }
     if (!layoutOk) { silence(buses, ctx.frames); r.status = status::kLayoutMismatch; return false; }
-    if (haveEpoch_ && ctx.epoch != epoch_) bump(epochChanges_);
+    if (haveEpoch_ && ctx.epoch != epoch_) { bump(epochChanges_); pendingSeek_ = true; }
     epoch_ = ctx.epoch; haveEpoch_ = true;
     return true;
+}
+
+// Per call: host transport -> TempoClock (a new epoch = transport seek clears the tempo phase lock
+// and coefficient history, never capacitor/thermal/detector state; no pitch-detector history is
+// wired yet) and the sidechain bus connection.
+void Engine::callBoundary(PreparedEngine& p, const ProcessContext& ctx, const AudioBuses& b, uint32_t& st) noexcept {
+    OverlayRuntime& o = p.overlay_;
+    const bool seek = pendingSeek_;
+    pendingSeek_ = false;
+    if (seek) {
+        o.tempo.prepare(p.fs_);
+        configureTempo(o);
+        bump(o.tempoResets);
+    }
+    control::HostTempo h;
+    h.bpm = ctx.bpm; h.bpmValid = ctx.hasTempo;
+    h.ppq = ctx.ppqPosition; h.ppqValid = ctx.hasPpq && ctx.playing;
+    h.transportJump = seek;
+    o.tempo.setHost(h);
+    bool conn = b.sidechain != nullptr && (b.sidechainChannels == 1 || b.sidechainChannels == 2);
+    for (int c = 0; conn && c < b.sidechainChannels; ++c) conn = b.sidechain[c] != nullptr;
+    scConnected_ = conn;
+    if (!conn && o.prm.sidechainSource != std::uint32_t(control::SidechainSource::Main)) st |= status::kSidechainDisconnected;
+    if (o.prm.tempoEnabled && (o.tempo.status().bpmFallback || o.tempo.status().ppqFreeRun)) st |= status::kTempoFallback;
+}
+
+uint32_t Engine::sliceLimit(uint32_t pos, uint32_t end) const noexcept {
+    if (!telemetry_) return end;
+    const auto toNext = uint32_t(kTelemetryQuantum - uint64_t(samples_) % kTelemetryQuantum);
+    return std::min(end, pos + toNext);
+}
+
+// Telemetry frame (CD-F17), built on the stack and handed to the wait-free writer (drop on full).
+// Components: the dissipative branches mapped to thermal nodes, per channel (id = ch<<16 | element):
+// thermal-node temperature [K], instantaneous branch power [W], current [A] and voltage [V] at the
+// last solved substep. xy: input-source volts vs output-node volts per channel. No supply rail exists
+// in the synthetic fixtures, so kValidRail stays clear. Values are synthetic-fixture volts/amps.
+void Engine::publishTelemetry(PreparedEngine& p) noexcept {
+    const CircuitRuntime& cr = currentCircuit(p);
+    analysis::TelemetryFrame f;
+    f.graphGeneration = std::uint32_t(curGraph_ ? curGraph_->generation() : 0);
+    f.epoch = std::uint32_t(epoch_);
+    f.sampleIndex = samples_;
+    f.validityFlags = analysis::kValidXy | analysis::kValidSolver;
+    const auto cd = cr.diagnostics();
+    const auto od = p.output_.diagnostics();
+    if (cd.fallbackLatched) f.fallbackFlags |= analysis::kFallbackSolverDiverged;
+    if (od.bypassWeight > 0) f.fallbackFlags |= analysis::kFallbackBypassed;
+    if (od.fallbackLatched) f.fallbackFlags |= analysis::kFallbackLimiterActive;
+    f.solverIterations = std::uint32_t(std::max(0, cr.lastIterations(0)));
+    f.solverResidual = float(cr.lastResidual(0));
+    std::uint32_t n = 0;
+    const int nb = cr.telemetryBranches();
+    for (int c = 0; c < p.channels_; ++c) {
+        for (int k = 0; k < nb && n < std::uint32_t(analysis::kMaxTelemetryComponents); ++k) {
+            CircuitRuntime::BranchTelemetry bt;
+            if (!cr.branchTelemetry(c, k, bt)) continue;
+            analysis::ComponentTelemetry& t = f.components[n++];
+            t.componentId = (std::uint32_t(c) << 16) | std::uint32_t(bt.element);
+            t.flags = 1;
+            t.temperatureK = float(bt.temperatureK);
+            t.dissipationW = float(bt.powerW);
+            t.currentA = float(bt.currentA);
+            t.voltageV = float(bt.voltageV);
+        }
+        if (c < analysis::kMaxTelemetryXy) {
+            f.xy[c].x = float(cr.inputVolts(c));
+            f.xy[c].y = float(cr.outputVolts(c));
+        }
+    }
+    f.componentCount = n;
+    f.xyCount = std::uint32_t(p.channels_);
+    f.xyKind = std::uint32_t(analysis::XyKind::InputOutputVolts);
+    bump(telemetryFrames_);
+    telemetry_->publish(f);
 }
 
 uint32_t Engine::finishStatus(PreparedEngine& p, uint32_t st) noexcept {
@@ -396,6 +705,7 @@ ProcessResult Engine::process(const ProcessBlock& b) noexcept {
     PreparedEngine* p = active_.get();
     uint32_t st = 0;
     graphBoundary(*p, st);
+    callBoundary(*p, b.ctx, b.buses, st);
     const uint32_t frames = b.ctx.frames;
     const uint32_t total = b.events ? b.eventCount : 0;
     const uint32_t count = std::min(total, kMaxEventsPerCall);
@@ -406,8 +716,9 @@ ProcessResult Engine::process(const ProcessBlock& b) noexcept {
         if (pos >= frames) break;
         uint32_t end = frames;
         if (ev < count) end = std::min(end, std::min(b.events[ev].offset, frames));
-        end = std::min(end, pos + uint32_t(p->maxBlock_));
-        runSlice(*p, b.buses.in, b.buses.out, int(pos), int(end - pos), st);
+        end = sliceLimit(pos, std::min(end, pos + uint32_t(p->maxBlock_)));
+        runSlice(*p, b.buses, int(pos), int(end - pos), st);
+        if (telemetry_ && uint64_t(samples_) % kTelemetryQuantum == 0) publishTelemetry(*p);
         pos = end;
     }
     if (total > count) {
@@ -435,6 +746,7 @@ ProcessResult Engine::process(const ProcessContext& ctx, const AudioBuses& buses
     PreparedEngine* p = active_.get();
     uint32_t st = 0;
     graphBoundary(*p, st);
+    callBoundary(*p, ctx, buses, st);
     const uint32_t frames = ctx.frames;
     const std::size_t count = events.size();
     std::size_t ev = 0;
@@ -444,8 +756,9 @@ ProcessResult Engine::process(const ProcessContext& ctx, const AudioBuses& buses
         if (pos >= frames) break;
         uint32_t end = frames;
         if (ev < count) end = std::min(end, std::min(events[ev].sampleOffset, frames));
-        end = std::min(end, pos + uint32_t(p->maxBlock_));
-        runSlice(*p, buses.in, buses.out, int(pos), int(end - pos), st);
+        end = sliceLimit(pos, std::min(end, pos + uint32_t(p->maxBlock_)));
+        runSlice(*p, buses, int(pos), int(end - pos), st);
+        if (telemetry_ && uint64_t(samples_) % kTelemetryQuantum == 0) publishTelemetry(*p);
         pos = end;
     }
     for (; ev < count; ++ev) applyTransaction(*p, events[ev]);
@@ -475,8 +788,23 @@ void Engine::reset() noexcept {
     ts.smoothed = ts.target; ts.rampLeft = 0; ts.rampStep = 0;
     m.timeline.restore(ts);
     for (auto& z : m.z) z[0] = z[1] = 0.0;
+    // Overlays: pristine prepared state (zero stochastic history, detectors idle, tempo unlocked,
+    // fault channels nominal), then the current parameter targets and applied fault overlays.
+    const OverlayParams prm = p.overlay_.prm;
+    p.overlay_ = p.overlayInit_;
+    p.overlay_.prm = prm;
+    configureSidechain(p.overlay_, p.fs_);
+    configureTempo(p.overlay_);
+    for (int k = 0; k < kMaxFaultSlots; ++k) {
+        if (!p.faultAvail_[k]) continue;
+        blueprint::FaultOverlay f = prm.faults[k];
+        f.revision = std::max(f.revision, p.overlay_.faults[k].overlay().revision);
+        p.overlay_.faults[k].apply(f);
+    }
+    for (auto& d : p.pitch_) d.reset();
+    for (auto& d : p.driftDry_) d.reset();
     const double v[5] = {m.targets[0], m.targets[1], m.targets[2], m.targets[3], m.timeline.smoothedU()};
-    evaluateMacros(m, p.bindings_, p.base_, p.fs_, v);
+    evaluateWithOverlays(p, v);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -527,8 +855,12 @@ void Engine::writeState(StateWriter& w) const noexcept {
     h.channels = p.channels_; h.maxBlock = p.maxBlock_;
     w.pod(h);
     w.pod(p.macro_);
+    w.pod(p.overlay_);
     currentCircuit().saveState(w);
     p.output_.saveState(w);
+    for (int c = 0; c < p.channels_; ++c) p.driftDry_[c].save(w);
+    // control::PitchDriftDelay exposes no state accessor: its 8 ms ring/slewed delay are NOT in the
+    // payload (a restore resets them; counted in diagnostics). copyStateFrom copies them directly.
 }
 
 bool Engine::readState(StateReader& r, bool apply) noexcept {
@@ -538,11 +870,27 @@ bool Engine::readState(StateReader& r, bool apply) noexcept {
     MacroRuntime m;
     if (!r.pod(m)) return false;
     if (!(m.drive > 0 && std::isfinite(m.drive)) || m.smoother.size() != 4) return false;
+    OverlayRuntime o;
+    if (!r.pod(o)) return false;
+    const double fin[] = {o.b, o.P, o.iExt, o.iLoad, o.tempoDrift, o.modQ, o.evalQ, o.prm.transientAmount, o.prm.sidechainDepth,
+                          o.prm.sidechainHpfHz, o.prm.sidechainBudgetAmps, o.prm.tempoDepth, o.tempo.ppq(), o.tempo.bpm(), o.motion.q()};
+    for (double x : fin) if (!std::isfinite(x)) return false;
+    if (o.prm.sidechainSource > 2 || o.prm.tempoDivision > 5 || o.prm.tempoModifier > 2 || o.prm.tempoEnabled > 1 || o.hookActive < 0 ||
+        o.hookActive > 1)
+        return false;
+    for (int k = 0; k < kMaxFaultSlots; ++k)
+        if (p.faultAvail_[k] && !blueprint::validOverlay(o.prm.faults[k])) return false;
     if (!currentCircuit(p).loadState(r, apply)) return false;
     if (!p.output_.loadState(r, apply)) return false;
+    for (int c = 0; c < p.channels_; ++c) if (!p.driftDry_[c].load(r, apply)) return false;
     if (apply) {
         samples_ = h.samples; epoch_ = h.epoch; haveEpoch_ = h.haveEpoch != 0;
         p.macro_ = m;
+        p.overlay_ = o;
+        if (p.driftActive_) {
+            for (auto& d : p.pitch_) d.reset();
+            bump(driftResets_);
+        }
     }
     return r.ok();
 }
@@ -617,7 +965,13 @@ bool Engine::copyStateFrom(const Engine& src, std::span<std::byte> scratch) noex
     const std::size_t n = snapshotBytes();
     if (scratch.size() < n || !(src.snapshotIdentity() == snapshotIdentity())) return false;
     if (src.captureState(scratch.first(n)) != n) return false;
-    return loadState(std::span<const std::byte>(scratch.data(), n));
+    const std::int64_t resets = driftResets_;
+    if (!loadState(std::span<const std::byte>(scratch.data(), n))) return false;
+    if (active_->driftActive_) {   // equal identities => equal ring sizes: assignment reuses storage (no allocation)
+        for (int c = 0; c < active_->channels_; ++c) active_->pitch_[c] = src.active_->pitch_[c];
+        driftResets_ = resets;     // the delay was copied exactly, not reset
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -645,6 +999,45 @@ EngineDiagnostics Engine::diagnostics() const noexcept {
         d.base = p.base_;
         d.driveGain = m.drive;
         d.lifecycle = m.timeline.smoothedU();
+        const OverlayRuntime& o = p.overlay_;
+        OverlayDiagnostics& x = d.overlay;
+        x.transientEvidence = o.b; x.transientStrength = o.P;
+        x.sidechainCurrentA = o.iExt; x.loadCurrentA = o.iLoad;
+        x.sidechainSource = int(o.prm.sidechainSource);
+        x.sidechainConnected = scConnected_;
+        x.sidechainDisconnected = !scConnected_ && o.prm.sidechainSource != std::uint32_t(control::SidechainSource::Main);
+        x.sidechainSanitized = o.sidechain.status().sanitized;
+        x.transientSanitized = o.transient.sawNonFinite();
+        x.tempoEnabled = o.prm.tempoEnabled != 0;
+        x.bpm = o.tempo.bpm(); x.ppq = o.tempo.ppq(); x.tempoPhase = o.tempo.phase();
+        x.recoveryCoefficient = o.tempo.recoveryCoefficient(); x.tempoDrift = o.tempoDrift;
+        x.tempoStatus = o.tempo.status();
+        x.tempoResets = o.tempoResets;
+        x.driftDelayActive = p.driftActive_;
+        x.driftLatency = p.quality_.driftLatency;
+        x.motionQ = o.motion.q(); x.modulationQ = o.modQ;
+        x.driftDelaySamples = p.driftActive_ ? p.pitch_[0].currentDelaySamples() : 0.0;
+        x.driftDelayStateResets = driftResets_;
+        for (int k = 0; k < kMaxFaultSlots; ++k) {
+            auto& f = x.faults[k];
+            f.used = p.faultUsed_[k];
+            f.available = p.faultAvail_[k];
+            f.reason = p.faultReason_[k] ? p.faultReason_[k] : "";
+            f.cleared = !p.faultAvail_[k] || o.faults[k].cleared();
+            f.overlay = o.prm.faults[k];
+            f.out = o.faultOut[k];
+            f.transitions = p.faultAvail_[k] ? o.faults[k].contactTransitions() : 0;
+        }
+        x.faultActive = o.hookActive != 0;
+        x.faultHook = o.hook;
+        x.faultApplied = o.faultApplied; x.faultRejected = o.faultRejected; x.faultResets = o.faultResets;
+    }
+    d.overlay.telemetryAttached = telemetry_ != nullptr;
+    d.overlay.telemetryFrames = telemetryFrames_;
+    if (telemetry_) {
+        d.overlay.telemetryPublished = telemetry_->published();
+        d.overlay.telemetryDropped = telemetry_->droppedFull();
+        d.overlay.telemetryDiscarded = telemetry_->discardedNoReader();
     }
     return d;
 }

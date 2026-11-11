@@ -48,7 +48,7 @@ ProcessResult SlotEngine::process(const ProcessContext& ctx, const AudioBuses& b
     for (int e = 0; e < 2; ++e) {
         double* o[2] = {};
         for (int c = 0; c < channels_; ++c) o[c] = out_[e].data() + std::size_t(c) * kMaxFrames;
-        const AudioBuses eb{channels_, buses.in, o};
+        const AudioBuses eb{channels_, buses.in, o, buses.sidechainChannels, buses.sidechain};   // sidechain: detector input only
         const ProcessResult re = eng_[e].process(ctx, eb, events);
         r.status |= re.status;
         r.frames = re.frames;
