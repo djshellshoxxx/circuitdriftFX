@@ -22,6 +22,30 @@ CircuitDrift is a planned audio effect plugin exploring dynamic circuits, compon
 - [Implementation plan](tasks/FEATURE_IMPLEMENTATION_PLAN.md)
 - [Specification review](docs/planned-features/SPEC_REVIEW.md)
 
+## Build and test
+
+Requires CMake and a C++20 compiler (no other dependencies; JUCE is not used yet).
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON
+cmake --build build -j4
+ctest --test-dir build --output-on-failure
+```
+
+On current `main` this builds and passes 7/7 CTest tests (acceptance and safety suites, registry freshness, docs validation).
+
+## Project layout
+
+- `src/core`: bounded JSON parser/writer and the generated 74-parameter registry
+- `src/dsp`: thermal network, output protection, oversampling (fixed and configurable halfband cascades), synthetic device manifests, MNA solver
+- `src/state`: scene/session documents, migration chain, compatibility checks, local save helper
+- `tests`: acceptance and safety executables; `tools`: registry generator and docs validator
+- `docs`, `tasks`: specifications, traceability, handoff and implementation plan
+
+## Screenshots
+
+None yet: there is no GUI or plugin wrapper to run. Screenshots will be added once the UI exists.
+
 ## Continue development
 
 Read [the handoff](docs/HANDOFF.md), [checkpoint](docs/CHECKPOINT.md), and [traceability](docs/TRACEABILITY.md) for current code and verification limits. The [integration review](docs/INTEGRATION_REVIEW.md) records branch reconciliation and safety findings.
