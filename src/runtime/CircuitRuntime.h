@@ -145,6 +145,18 @@ public:
     double lastPowerW(int ch, int node) const noexcept;   // host-sample average of the last sample
     double voltage(int ch, int node) const noexcept;
     int ownedManifestCount() const noexcept;
+    // Telemetry (audio-safe reads of the last solved substep). Branches = the dissipative elements
+    // mapped to thermal nodes (resistors/diodes); current from the same branch law used for power.
+    struct BranchTelemetry {
+        int element = 0, thermalNode = 0;
+        double voltageV = 0, currentA = 0, powerW = 0, temperatureK = 0;
+    };
+    int telemetryBranches() const noexcept;
+    bool branchTelemetry(int ch, int k, BranchTelemetry& out) const noexcept;
+    double inputVolts(int ch) const noexcept;    // source element voltage (synthetic volts)
+    double outputVolts(int ch) const noexcept;   // V(outputNode)
+    int lastIterations(int ch) const noexcept;
+    double lastResidual(int ch) const noexcept;
 
 private:
     struct Core;
