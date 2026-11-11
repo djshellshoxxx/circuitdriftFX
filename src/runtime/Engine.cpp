@@ -184,6 +184,7 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
             if (!p->pitch_[c].prepare(cfg.sampleRate)) { err = "pitch-drift delay rejected sample rate"; return nullptr; }
             p->pitch_[c].setEnabled(true);
         }
+        p->pitchState_.assign(p->pitch_[0].stateSize(), 0.0);
     }
     for (auto& d : p->driftDry_) d.prepare(driftLat);
     OutputConfig oc;
@@ -859,8 +860,17 @@ void Engine::writeState(StateWriter& w) const noexcept {
     currentCircuit().saveState(w);
     p.output_.saveState(w);
     for (int c = 0; c < p.channels_; ++c) p.driftDry_[c].save(w);
-    // control::PitchDriftDelay exposes no state accessor: its 8 ms ring/slewed delay are NOT in the
-    // payload (a restore resets them; counted in diagnostics). copyStateFrom copies them directly.
+    // v3: pitch-drift delay ring/slewed delay per channel (length-prefixed; scratch is preallocated).
+    if (p.driftActive_) {
+        for (int c = 0; c < p.channels_; ++c) {
+            const std::uint64_t n = p.pitch_[c].stateSize();
+            w.pod(n);
+            if (n <= p.pitchState_.size()) {
+                p.pitch_[c].getState(p.pitchState_.data());
+                w.doubles(p.pitchState_.data(), std::size_t(n));
+            }
+        }
+    }
 }
 
 bool Engine::readState(StateReader& r, bool apply) noexcept {
@@ -883,14 +893,19 @@ bool Engine::readState(StateReader& r, bool apply) noexcept {
     if (!currentCircuit(p).loadState(r, apply)) return false;
     if (!p.output_.loadState(r, apply)) return false;
     for (int c = 0; c < p.channels_; ++c) if (!p.driftDry_[c].load(r, apply)) return false;
+    if (p.driftActive_) {
+        for (int c = 0; c < p.channels_; ++c) {
+            std::uint64_t n = 0;
+            if (!r.pod(n) || n != p.pitch_[c].stateSize() || n > p.pitchState_.size()) return false;
+            if (!r.doubles(p.pitchState_.data(), std::size_t(n))) return false;
+            if (!p.pitch_[c].validState(p.pitchState_.data())) return false;
+            if (apply && !p.pitch_[c].setState(p.pitchState_.data())) return false;
+        }
+    }
     if (apply) {
         samples_ = h.samples; epoch_ = h.epoch; haveEpoch_ = h.haveEpoch != 0;
         p.macro_ = m;
         p.overlay_ = o;
-        if (p.driftActive_) {
-            for (auto& d : p.pitch_) d.reset();
-            bump(driftResets_);
-        }
     }
     return r.ok();
 }
@@ -965,13 +980,7 @@ bool Engine::copyStateFrom(const Engine& src, std::span<std::byte> scratch) noex
     const std::size_t n = snapshotBytes();
     if (scratch.size() < n || !(src.snapshotIdentity() == snapshotIdentity())) return false;
     if (src.captureState(scratch.first(n)) != n) return false;
-    const std::int64_t resets = driftResets_;
-    if (!loadState(std::span<const std::byte>(scratch.data(), n))) return false;
-    if (active_->driftActive_) {   // equal identities => equal ring sizes: assignment reuses storage (no allocation)
-        for (int c = 0; c < active_->channels_; ++c) active_->pitch_[c] = src.active_->pitch_[c];
-        driftResets_ = resets;     // the delay was copied exactly, not reset
-    }
-    return true;
+    return loadState(std::span<const std::byte>(scratch.data(), n));  // v3 payload carries the pitch delay
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1017,7 +1026,6 @@ EngineDiagnostics Engine::diagnostics() const noexcept {
         x.driftLatency = p.quality_.driftLatency;
         x.motionQ = o.motion.q(); x.modulationQ = o.modQ;
         x.driftDelaySamples = p.driftActive_ ? p.pitch_[0].currentDelaySamples() : 0.0;
-        x.driftDelayStateResets = driftResets_;
         for (int k = 0; k < kMaxFaultSlots; ++k) {
             auto& f = x.faults[k];
             f.used = p.faultUsed_[k];

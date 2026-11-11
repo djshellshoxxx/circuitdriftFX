@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <cstring>
 #include <span>
 #include <string>
@@ -663,7 +664,7 @@ void snapshotsAndCopy() {
     c.overlays.pitchDriftEnabled = false;
     Engine e1;
     CHECK(e1.prepare(c, e), "prepare");
-    CHECK(e1.snapshotIdentity().layout.version == 2, "layout version");
+    CHECK(e1.snapshotIdentity().layout.version == Engine::kSnapshotLayoutVersion && Engine::kSnapshotLayoutVersion == 3, "layout version");
     const Buf head(2, std::vector<double>(in[0].begin(), in[0].begin() + 3072));
     Buf headIn = {std::vector<double>(in[0].begin(), in[0].begin() + 3072), std::vector<double>(in[1].begin(), in[1].begin() + 3072)};
     Buf scHead = {std::vector<double>(sc[0].begin(), sc[0].begin() + 3072), std::vector<double>(sc[1].begin(), sc[1].begin() + 3072)};
@@ -690,10 +691,11 @@ void snapshotsAndCopy() {
     const Buf y2 = render(e2, tailIn, {512u}, {}, &scTail, tt);
     CHECK(peakDiff(y1, y2) == 0.0, "v2 snapshot continuation differs %.3e", peakDiff(y1, y2));
     CHECK(e1.diagnostics().overlay.faults[0].transitions == e2.diagnostics().overlay.faults[0].transitions, "fault state not restored");
-    std::printf("Snapshot v2 (detectors, tempo, motion, faults; no pitch delay): %zu bytes, continuation peak diff %.3e\n", got,
+    std::printf("Snapshot v3 (detectors, tempo, motion, faults; no pitch delay in this config): %zu bytes, continuation peak diff %.3e\n", got,
                 peakDiff(y1, y2));
-    // With the pitch delay: payload restore resets the delay history (no PitchDriftDelay state API),
-    // counted; A/B copy copies the delay directly and stays exact and allocation-free.
+    // With the pitch delay (layout v3): the payload carries each channel's delay ring and slewed delay,
+    // so both A/B copy and payload restore continue exactly and allocation-free. A corrupted delay
+    // state (position/delay out of range, non-finite ring sample) is rejected whole.
     {
         const EngineConfig cd = everythingConfig();
         Engine a, b, r;
@@ -702,14 +704,44 @@ void snapshotsAndCopy() {
         std::vector<std::byte> scratch(a.snapshotBytes());
         bool ok = false;
         { Trap t; ok = b.copyStateFrom(a, scratch); }
-        CHECK(ok && b.diagnostics().overlay.driftDelayStateResets == 0, "A/B copy with pitch delay");
-        const Buf ya = render(a, tailIn, {512u}, {}, &scTail, tt), yb = render(b, tailIn, {512u}, {}, &scTail, tt);
-        CHECK(peakDiff(ya, yb) == 0.0, "A/B copy continuation differs %.3e", peakDiff(ya, yb));
+        CHECK(ok, "A/B copy with pitch delay");
         std::vector<std::byte> s2(r.snapshotBytes());
-        CHECK(a.captureState(s2) == s2.size() && r.loadState(s2), "pitch-drift engine load");
-        CHECK(r.diagnostics().overlay.driftDelayStateResets == 1, "delay reset not counted");
-        std::printf("Pitch-drift engine: A/B copy exact (diff %.3e, no allocation); payload restore resets the delay ring (counted, "
-                    "limitation)\n", peakDiff(ya, yb));
+        bool loaded = false;
+        { Trap t; loaded = a.captureState(s2) == s2.size() && r.loadState(s2); }
+        CHECK(loaded, "pitch-drift engine load");
+        const Buf ya = render(a, tailIn, {512u}, {}, &scTail, tt), yb = render(b, tailIn, {512u}, {}, &scTail, tt),
+                  yr = render(r, tailIn, {512u}, {}, &scTail, tt);
+        CHECK(peakDiff(ya, yb) == 0.0, "A/B copy continuation differs %.3e", peakDiff(ya, yb));
+        CHECK(peakDiff(ya, yr) == 0.0, "payload restore continuation differs %.3e", peakDiff(ya, yr));
+        // Corruption: the last channel's pitch-delay block ends the payload: uint64 prefix (ring+2)
+        // followed by [position, current delay, ring...]. Ring length follows PitchDriftDelay::prepare.
+        {
+            std::size_t ring = 8;
+            const std::size_t need = std::size_t(std::ceil(0.008 * cd.sampleRate)) + 4;
+            while (ring < need) ring <<= 1;
+            const std::size_t stateDoubles = ring + 2;
+            const std::size_t blockStart = s2.size() - 8 - stateDoubles * 8;
+            std::uint64_t prefix = 0;
+            std::memcpy(&prefix, s2.data() + blockStart, sizeof(prefix));
+            CHECK(prefix == stateDoubles, "pitch-delay block prefix %llu != %zu", (unsigned long long)prefix, stateDoubles);
+            std::vector<std::byte> bad = s2;
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            std::memcpy(bad.data() + bad.size() - sizeof(double), &nan, sizeof(double));
+            CHECK(!r.loadState(bad), "non-finite ring sample accepted");
+            bad = s2;
+            const double tooFar = double(ring);   // current delay beyond the ring
+            std::memcpy(bad.data() + blockStart + 8 + sizeof(double), &tooFar, sizeof(double));
+            CHECK(!r.loadState(bad), "out-of-range delay accepted");
+            bad = s2;
+            const double negPos = -1.0;           // ring position must be an integer in [0, ring)
+            std::memcpy(bad.data() + blockStart + 8, &negPos, sizeof(double));
+            CHECK(!r.loadState(bad), "negative ring position accepted");
+        }
+        // The engine is unchanged by the rejected loads: it still continues exactly.
+        const Buf yr2 = render(r, tailIn, {512u}, {}, &scTail, tt), ya2 = render(a, tailIn, {512u}, {}, &scTail, tt);
+        CHECK(peakDiff(ya2, yr2) == 0.0, "rejected load changed the engine %.3e", peakDiff(ya2, yr2));
+        std::printf("Pitch-drift engine (snapshot v3): A/B copy diff %.3e, payload restore diff %.3e, corrupt delay state rejected, "
+                    "no allocation\n", peakDiff(ya, yb), peakDiff(ya, yr));
     }
     // SlotEngine forwards the sidechain to both engines (detector state equal in identical slots).
     {

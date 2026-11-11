@@ -483,7 +483,7 @@ void snapshots() {
     Engine e1;
     CHECK(e1.prepare(c, e), "prepare");
     const state::SnapshotIdentity id = e1.snapshotIdentity();
-    CHECK(id.layout.layoutId == Engine::kSnapshotLayoutId && id.layout.version == Engine::kSnapshotLayoutVersion && Engine::kSnapshotLayoutVersion == 2 && id.layout.byteSize == e1.snapshotBytes() &&
+    CHECK(id.layout.layoutId == Engine::kSnapshotLayoutId && id.layout.version == Engine::kSnapshotLayoutVersion && Engine::kSnapshotLayoutVersion == 3 && id.layout.byteSize == e1.snapshotBytes() &&
           id.layout.byteSize > 0 && id.oversampling == 4 && id.sampleRate == 48000, "layout descriptor");
     state::SnapshotExchange x(id);
     CHECK(e1.attachSnapshotExchange(&x), "attach exchange");

@@ -54,6 +54,13 @@ public:
     double latencySamples() const noexcept { return enabled_ ? kBaseMs * 1e-3 * fs_ : 0.0; }  // base delay
     double currentDelaySamples() const noexcept { return cur_; }
     bool enabled() const noexcept { return enabled_; }
+    // Snapshot support (audio-safe, allocation-free). stateSize() doubles: ring position, current
+    // delay, then the ring contents. validState() checks finiteness and bounds against this prepared
+    // size; setState() applies only a valid state (all-or-nothing). Sizes must match (same Fs).
+    std::size_t stateSize() const noexcept { return ring_.empty() ? 0 : ring_.size() + 2; }
+    void getState(double* out) const noexcept;
+    bool validState(const double* in) const noexcept;
+    bool setState(const double* in) noexcept;
 private:
     std::vector<double> ring_;
     std::size_t mask_ = 0, pos_ = 0;

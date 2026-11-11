@@ -82,12 +82,12 @@
 // equal-sum). The dry path is taken from the old path until the fade ends (the new path's delay
 // lines are full by then because latency <= fade length). Latency must be identical. After the
 // fade the engine raises the installer's releasedBelow so the worker retires the old processor.
-// Snapshots: provider layout kSnapshotLayoutId/kSnapshotLayoutVersion (v2); byteSize depends on the
+// Snapshots: provider layout kSnapshotLayoutId/kSnapshotLayoutVersion (v3); byteSize depends on the
 // active path. Contents: header (sample counter, epoch), macro runtime, overlay runtime (detectors,
 // tempo clock, creative motion, fault channels, parameter targets), circuit state (MnaSolver
 // getState unknowns+charges, oversampler histories, latency pads, dry delay, thermal temperatures/
 // energy, 1 kHz clock accumulator, fallback latch/fade, counters), output stage state, pitch-drift
-// dry alignment delay.
+// dry alignment delay and (v3) the pitch-drift delay ring/slewed delay per channel.
 // attachSnapshotExchange() publishes a capture at the end of the call that sees a request
 // (deferred while a graph fade runs). restoreSnapshot() restores only with an identical
 // SnapshotIdentity (layout, Fs, OS, model hash) and a validating payload; otherwise ResetWarm
@@ -236,7 +236,6 @@ struct OverlayDiagnostics {
     bool driftDelayActive = false;
     int driftLatency = 0;
     double motionQ = 0, modulationQ = 0, driftDelaySamples = 0;
-    std::int64_t driftDelayStateResets = 0;
     // faults (CD-F19)
     struct Fault {
         bool used = false, available = false, cleared = true;
@@ -313,6 +312,7 @@ private:
     MacroRuntime macro_{};
     OverlayRuntime overlay_{}, overlayInit_{};   // live / pristine prepared overlay state
     control::PitchDriftDelay pitch_[2];
+    mutable std::vector<double> pitchState_;  // snapshot scratch for one pitch_ state (sized at prepare)
     DelayLine driftDry_[2];                // dry alignment for the pitch-drift base delay
     bool driftActive_ = false;
     bool pitchDriftParam_ = false;         // prepared pitchDrift.enabled
@@ -370,7 +370,7 @@ public:
 
     // ---- snapshots ----
     static constexpr std::uint32_t kSnapshotLayoutId = 0x31454443u;  // 'CDE1', provider cd.runtime.Engine
-    static constexpr std::uint32_t kSnapshotLayoutVersion = 2;   // v2: + OverlayRuntime, drift dry delay
+    static constexpr std::uint32_t kSnapshotLayoutVersion = 3;   // v2: + OverlayRuntime, drift dry delay; v3: + pitch-drift delay state
     state::SnapshotIdentity snapshotIdentity() const noexcept;    // of the active prepared path
     std::size_t snapshotBytes() const noexcept;
     bool attachSnapshotExchange(state::SnapshotExchange* exchange) noexcept;  // non-audio; identity must match
@@ -431,7 +431,7 @@ private:
     std::int64_t paramEvents_ = 0, unsupported_ = 0, unknown_ = 0, otherSlot_ = 0, configEvents_ = 0, noteEvents_ = 0;
     // overlays / telemetry
     bool scConnected_ = false;
-    std::int64_t driftResets_ = 0, telemetryFrames_ = 0;
+    std::int64_t telemetryFrames_ = 0;
     analysis::TelemetryWriter* telemetry_ = nullptr;
 };
 

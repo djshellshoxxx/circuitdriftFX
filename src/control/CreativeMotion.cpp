@@ -79,6 +79,32 @@ void PitchDriftDelay::reset() noexcept {
     pos_ = 0; cur_ = kBaseMs * 1e-3 * fs_;
 }
 
+void PitchDriftDelay::getState(double* out) const noexcept {
+    if (!out || ring_.empty()) return;
+    out[0] = static_cast<double>(pos_ & mask_);
+    out[1] = cur_;
+    std::copy(ring_.begin(), ring_.end(), out + 2);
+}
+
+bool PitchDriftDelay::validState(const double* in) const noexcept {
+    if (!in || ring_.empty()) return false;
+    const double n = static_cast<double>(ring_.size());
+    if (!std::isfinite(in[0]) || in[0] < 0.0 || in[0] >= n || in[0] != std::floor(in[0])) return false;
+    // process() reads taps up to floor(cur)+2 behind the write position: keep cur within the ring.
+    if (!std::isfinite(in[1]) || in[1] < 1.0 || in[1] > n - 3.0) return false;
+    for (std::size_t i = 0; i < ring_.size(); ++i)
+        if (!std::isfinite(in[2 + i])) return false;
+    return true;
+}
+
+bool PitchDriftDelay::setState(const double* in) noexcept {
+    if (!validState(in)) return false;
+    pos_ = static_cast<std::size_t>(in[0]);
+    cur_ = in[1];
+    std::copy(in + 2, in + 2 + ring_.size(), ring_.begin());
+    return true;
+}
+
 double PitchDriftDelay::process(double x, double d, double q) noexcept {
     if (!enabled_ || ring_.empty()) return x;
     if (!std::isfinite(x)) x = 0.0;
