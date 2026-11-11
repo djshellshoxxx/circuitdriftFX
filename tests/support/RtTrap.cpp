@@ -10,6 +10,9 @@ namespace {
 thread_local int tDepth = 0;
 thread_local long tAllocs = 0;
 thread_local long tFrees = 0;
+thread_local long tLocks = 0;
+thread_local long tConds = 0;
+thread_local long tIo = 0;
 
 inline void noteAlloc() noexcept { if (tDepth > 0) ++tAllocs; }
 inline void noteFree(void* p) noexcept { if (p && tDepth > 0) ++tFrees; }
@@ -58,10 +61,16 @@ void release(void* p) noexcept {
 
 namespace cd::test {
 
-RtTrapScope::RtTrapScope() noexcept : start_{tAllocs, tFrees} { ++tDepth; }
+RtTrapScope::RtTrapScope() noexcept : start_{tAllocs, tFrees, tLocks, tConds, tIo} { ++tDepth; }
 RtTrapScope::~RtTrapScope() { --tDepth; }
-RtTrapCounts RtTrapScope::counts() const noexcept { return {tAllocs - start_.allocations, tFrees - start_.deallocations}; }
+RtTrapCounts RtTrapScope::counts() const noexcept { return {tAllocs - start_.allocations, tFrees - start_.deallocations, tLocks - start_.mutexLocks,
+            tConds - start_.condWaits, tIo - start_.ioCalls}; }
 bool rtTrapActive() noexcept { return tDepth > 0; }
+namespace detail {
+void noteLock() noexcept { if (tDepth > 0) ++tLocks; }
+void noteCondWait() noexcept { if (tDepth > 0) ++tConds; }
+void noteIo() noexcept { if (tDepth > 0) ++tIo; }
+}
 
 }  // namespace cd::test
 

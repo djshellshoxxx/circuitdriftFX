@@ -38,6 +38,8 @@ cd_module(cd_analysis analysis cd_dsp cd_state)
 cd_module(cd_media media cd_analysis)
 # cd_uimodel: framework-independent view-model (UX-01/02/07, T07/T08 data); no JUCE/graphics.
 cd_module(cd_uimodel uimodel cd_runtime cd_analysis)
+# cd_network: instance broker, prepared IPC rings, deterministic co-render (P15/P16; G05 open).
+cd_module(cd_network network cd_runtime)
 # cd_community: catalog client contract against a mock transport (P14, G06 open); never on audio.
 cd_module(cd_community community cd_state)
 # cd_edition: edition manifests / LITE two-knob mapping (P12).
@@ -56,8 +58,20 @@ foreach(f ${_suites})
   string(REGEX REPLACE "^test_" "" suite ${stem})
   add_executable(cd_${suite}_tests ${f} ${_support})
   target_include_directories(cd_${suite}_tests PRIVATE ${CMAKE_SOURCE_DIR}/tests)
-  target_link_libraries(cd_${suite}_tests PRIVATE cd_runtime cd_community cd_edition cd_analysis cd_media cd_uimodel Threads::Threads)
+  target_link_libraries(cd_${suite}_tests PRIVATE cd_runtime cd_community cd_edition cd_analysis cd_media cd_uimodel cd_network Threads::Threads)
   add_test(NAME ${suite} COMMAND cd_${suite}_tests)
+  # UX-09 RtTrap: lock/I-O counting via linker wrap, TEST EXECUTABLES ONLY (shims: tests/support/RtTrapWrap.cpp).
+  # Keep this list in sync with that file. Linux/glibc only; other platforms skip (not instrumented).
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    foreach(sym pthread_mutex_lock pthread_mutex_trylock pthread_mutex_timedlock pthread_rwlock_rdlock
+                pthread_rwlock_wrlock pthread_cond_wait pthread_cond_timedwait open open64 openat read write
+                fopen fopen64 fwrite fread fputs fputc puts printf fprintf __printf_chk __fprintf_chk)
+      target_link_options(cd_${suite}_tests PRIVATE "LINKER:--wrap=${sym}")
+    endforeach()
+  endif()
 endforeach()
+# Engine micro-benchmark (not a ctest test; built only on request: --target cd_bench).
+add_executable(cd_bench EXCLUDE_FROM_ALL benchmarks/bench_engine.cpp)
+target_link_libraries(cd_bench PRIVATE cd_runtime Threads::Threads)
 add_test(NAME registry_codegen_fresh COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/gen_param_registry.py --check)
 add_test(NAME docs_validation_only COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/validate_planned_features.py)
