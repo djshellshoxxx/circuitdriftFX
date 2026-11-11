@@ -61,6 +61,9 @@ public:
     const TempoStatus& status() const noexcept { return status_; }
     // Creative sinusoidal drift in [-depth, depth]; depth clamped to 0..1.
     double drift(double depth) const noexcept;
+    // Snapshot support: finite, in-range internals (enums, time signature, BPM 20..300 or fallback,
+    // coefficients in [0,1], bounded ramp). A restored copy that fails this must be rejected.
+    bool validState() const noexcept;
 
 private:
     void retarget() noexcept;

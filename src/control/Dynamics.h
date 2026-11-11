@@ -16,6 +16,7 @@ public:
     bool sawNonFinite() const noexcept { return sanitized_; }
     static double strength(double amount, double b) noexcept;       // P = clamp(amount,0,1)*b
     static double effectiveR(double r, double P) noexcept;          // r + P(1-r)
+    bool validState() const noexcept;                               // snapshot support: finite, bounded internals
 private:
     double aFA_ = 0, aFR_ = 0, aSA_ = 0, aSR_ = 0, aHR_ = 0;
     double fast_ = 0, slow_ = 0, held_ = 0;
@@ -38,6 +39,7 @@ public:
     // extL/extR: external bus sample. Returns I_ext in amperes (>= 0).
     double process(double extL, double extR) noexcept;
     SidechainStatus status() const noexcept { return {!connected_ && cfg_.source != Source::Main, sanitized_}; }
+    bool validState() const noexcept;                               // snapshot support: finite, bounded internals
 private:
     Config cfg_;
     dsp::ButterworthHpf hpfL_, hpfR_;

@@ -225,4 +225,30 @@ FaultOutputs FaultChannel::tick(double excitation) noexcept {
     return out;
 }
 
+bool FaultChannel::validState() const noexcept {
+    if (!prepared_) return true;   // an unprepared channel holds only defaults and is never ticked
+    if (!validBounds(b_) || !validOverlay(ov_)) return false;
+    if (!(std::isfinite(rate_) && rate_ > 0.0 && rate_ <= 1e8)) return false;
+    if (!(std::isfinite(preparedF_) && preparedF_ >= 100.0 && preparedF_ <= 4000.0 && std::isfinite(preparedQ_) && preparedQ_ >= 2.0 &&
+          preparedQ_ <= 30.0))
+        return false;
+    const std::int64_t maxRamp = static_cast<std::int64_t>(rate_ * 10.0);
+    for (std::int64_t v : {valueRamp_, contactRamp_, resetRamp_, minDwell_, resetLeft_})
+        if (v < 0 || v > maxRamp) return false;
+    for (const Ramp* r : {&c_, &esr_, &leak_, &r_, &mic_}) {
+        for (double v : {r->cur, r->step, r->target, r->value, r->exact}) if (!std::isfinite(v) || std::fabs(v) > 1e300) return false;
+        if (r->left < 0 || r->left > maxRamp) return false;
+    }
+    // Parameter ramps must stay inside the declared bounds (never ideal infinity/zero).
+    if (!(c_.value >= b_.minC * 0.999 && c_.value <= b_.nominalC * 1.001)) return false;
+    if (!(esr_.value >= b_.nominalEsr * 0.999 && esr_.value <= b_.openSeriesR * 1.001)) return false;
+    if (!(leak_.value >= b_.shortLeakR * 0.999 && leak_.value <= b_.nominalLeakR * 1.001)) return false;
+    if (!(r_.value >= b_.nominalR * 0.999 && r_.value <= b_.openR * 1.001)) return false;
+    if (!(mic_.value >= 0.0 && mic_.value <= 1.0)) return false;
+    if (sample_ < 0 || transitions_ < 0 || nextToggle_ < -1 || lastToggle_ > sample_) return false;
+    for (double v : {a1_, a2_, g_}) if (!std::isfinite(v) || std::fabs(v) > 1e6) return false;
+    const double span = kBiasPerturbationMax * b_.biasSpanV * 1.001;
+    return std::isfinite(z1_) && std::isfinite(z2_) && std::fabs(z1_) <= span + 1.0 && std::fabs(z2_) <= span + 1.0;
+}
+
 }  // namespace cd::blueprint

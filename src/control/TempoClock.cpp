@@ -114,4 +114,16 @@ double TempoClock::drift(double depth) const noexcept {
     return depth * std::sin(6.283185307179586 * phase());
 }
 
+bool TempoClock::validState() const noexcept {
+    if (!(std::isfinite(fs_) && fs_ > 0.0 && fs_ <= 1e7)) return false;
+    if (static_cast<unsigned>(div_) > static_cast<unsigned>(Division::Bar) ||
+        static_cast<unsigned>(mod_) > static_cast<unsigned>(Modifier::Triplet)) return false;
+    if (tsNum_ < 1 || tsNum_ > 64 || tsDen_ < 1 || tsDen_ > 64) return false;
+    if (!(std::isfinite(bpm_) && bpm_ >= 20.0 && bpm_ <= 300.0)) return false;
+    if (!(std::isfinite(q_) && q_ > 0.0 && std::isfinite(d_) && d_ > 0.0 && std::isfinite(tau_) && tau_ > 0.0)) return false;
+    if (!std::isfinite(ppq_) || std::fabs(ppq_) > 1e12) return false;
+    if (!(coef_ >= 0.0 && coef_ <= 1.0 && coefTarget_ >= 0.0 && coefTarget_ <= 1.0 && std::isfinite(coefInc_))) return false;
+    return rampLeft_ <= static_cast<std::size_t>(fs_ * 10.0);
+}
+
 }  // namespace cd::control

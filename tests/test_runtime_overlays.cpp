@@ -737,6 +737,34 @@ void snapshotsAndCopy() {
             std::memcpy(bad.data() + blockStart + 8, &negPos, sizeof(double));
             CHECK(!r.loadState(bad), "negative ring position accepted");
         }
+        // Review regression: the overlay runtime is raw bytes in the payload. A crafted CreativeMotion
+        // phase (1e300 / +inf) or increment (+inf) used to pass validation and then spin
+        // advanceSample() forever on the audio thread. Locate the motion block by its increment
+        // (100/fs, stored right after the phase) and corrupt each field; every variant must be
+        // rejected whole and the engine must stay unchanged.
+        {
+            const double inc = 100.0 / cd.sampleRate;
+            std::size_t hits = 0, incOff = 0;
+            for (std::size_t off = 0; off + sizeof(double) <= s2.size(); off += sizeof(double)) {
+                double v = 0; std::memcpy(&v, s2.data() + off, sizeof(double));
+                if (v == inc) { ++hits; incOff = off; }
+            }
+            CHECK(hits == 1, "motion increment pattern found %zu times (expected 1)", hits);
+            if (hits == 1) {
+                const double hostile[] = {1e300, std::numeric_limits<double>::infinity(), -1.0, std::numeric_limits<double>::quiet_NaN()};
+                for (double ph : hostile) {
+                    std::vector<std::byte> bad = s2;
+                    std::memcpy(bad.data() + incOff - sizeof(double), &ph, sizeof(double));
+                    CHECK(!r.loadState(bad), "hostile motion phase %g accepted", ph);
+                }
+                const double badInc[] = {std::numeric_limits<double>::infinity(), 0.0, 2.0, -inc};
+                for (double iv : badInc) {
+                    std::vector<std::byte> bad = s2;
+                    std::memcpy(bad.data() + incOff, &iv, sizeof(double));
+                    CHECK(!r.loadState(bad), "hostile motion increment %g accepted", iv);
+                }
+            }
+        }
         // The engine is unchanged by the rejected loads: it still continues exactly.
         const Buf yr2 = render(r, tailIn, {512u}, {}, &scTail, tt), ya2 = render(a, tailIn, {512u}, {}, &scTail, tt);
         CHECK(peakDiff(ya2, yr2) == 0.0, "rejected load changed the engine %.3e", peakDiff(ya2, yr2));

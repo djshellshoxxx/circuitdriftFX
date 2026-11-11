@@ -62,7 +62,22 @@ void CreativeMotion::tick() noexcept {
 }
 void CreativeMotion::advanceSample() noexcept {
     phase_ += inc_;
-    while (phase_ >= 1.0) { phase_ -= 1.0; tick(); }
+    // inc_ = 100/fs < 1 for every supported rate, so at most one tick per sample; the loop is bounded
+    // by construction and a non-finite or runaway phase recovers to 0 instead of spinning the
+    // audio thread (a restored snapshot is validated separately by validState()).
+    for (int n = 0; n < kMaxTicksPerSample && phase_ >= 1.0; ++n) { phase_ -= 1.0; tick(); }
+    if (!(phase_ >= 0.0 && phase_ < 1.0)) phase_ = 0.0;
+}
+
+bool Xoshiro256ss::validState() const noexcept { return (s_[0] | s_[1] | s_[2] | s_[3]) != 0 && std::isfinite(spare_); }
+
+bool CreativeMotion::validState() const noexcept {
+    if (!rng_.validState()) return false;
+    for (int j = 0; j < 3; ++j) {
+        if (!std::isfinite(u_[j]) || std::fabs(u_[j]) > 1e3) return false;
+        if (!(a_[j] > 0.0 && a_[j] < 1.0) || !(s_[j] > 0.0 && s_[j] <= 1.0)) return false;
+    }
+    return phase_ >= 0.0 && phase_ < 1.0 && inc_ > 0.0 && inc_ <= 1.0 && std::fabs(q_) <= 1.0;
 }
 
 bool PitchDriftDelay::prepare(double fs) noexcept {

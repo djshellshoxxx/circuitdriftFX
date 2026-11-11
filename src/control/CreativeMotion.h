@@ -24,6 +24,8 @@ public:
 private:
     uint64_t s_[4] = {1, 2, 3, 4};
     double spare_ = 0; bool hasSpare_ = false;
+public:
+    bool validState() const noexcept;   // non-degenerate (non-zero) state, finite cached spare
 };
 
 // Three OU processes on a 100 Hz control clock, tau {0.2,2,20} s; q = tanh(sum/sqrt3) in (-1,1).
@@ -35,7 +37,12 @@ public:
     void advanceSample() noexcept;
     void advance(std::size_t n) noexcept { while (n--) advanceSample(); }
     double q() const noexcept { return q_; }
+    // Snapshot support: true when every internal value is finite and within the invariants that
+    // prepare()/advanceSample() maintain (phase in [0,1), 0 < inc <= 1, |q| <= 1, coefficients in
+    // (0,1), non-degenerate RNG). A restored copy that fails this must be rejected.
+    bool validState() const noexcept;
 private:
+    static constexpr int kMaxTicksPerSample = 4;
     void tick() noexcept;
     Xoshiro256ss rng_;
     double u_[3] = {0, 0, 0}, a_[3] = {0, 0, 0}, s_[3] = {0, 0, 0};

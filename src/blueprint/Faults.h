@@ -71,6 +71,10 @@ public:
     bool cleared() const noexcept { return clearedDone_; }
     double resonatorGain() const noexcept { return g_; }            // normalised g (prepare)
     const FaultOverlay& overlay() const noexcept { return ov_; }
+    // Snapshot support: finite, bounded internals consistent with prepare() (rate, ramps, overlay,
+    // bounds, resonator coefficients/state within the bias span). A restored copy that fails this
+    // must be rejected.
+    bool validState() const noexcept;
 private:
     struct Ramp { double cur = 0, step = 0, target = 0, value = 0, exact = 0; std::int64_t left = 0; };  // cur/target in the ramp's domain
     static void retarget(Ramp& r, double targetValue, bool logDomain, std::int64_t samples) noexcept;

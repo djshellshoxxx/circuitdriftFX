@@ -890,6 +890,18 @@ bool Engine::readState(StateReader& r, bool apply) noexcept {
         return false;
     for (int k = 0; k < kMaxFaultSlots; ++k)
         if (p.faultAvail_[k] && !blueprint::validOverlay(o.prm.faults[k])) return false;
+    // The overlay runtime is copied as raw bytes: every stateful component validates its own
+    // invariants so a corrupted or crafted payload can neither hang nor poison the audio thread
+    // (review finding: an unbounded CreativeMotion phase looped forever in advanceSample()).
+    if (!o.transient.validState() || !o.sidechain.validState() || !o.tempo.validState() || !o.motion.validState()) return false;
+    for (int k = 0; k < kMaxFaultSlots; ++k) if (!o.faults[k].validState()) return false;
+    for (int k = 0; k < kMaxFaultSlots; ++k) {
+        const blueprint::FaultOutputs& f = o.faultOut[k];
+        for (double v : {f.capacitanceF, f.seriesROhm, f.leakageROhm, f.resistanceOhm, f.biasPerturbationV})
+            if (!std::isfinite(v)) return false;
+    }
+    for (double v : {o.hook.leakFracAdd, o.hook.loadMultiplierScale, o.hook.biasOffsetAdd}) if (!std::isfinite(v)) return false;
+    if (o.tempoResets < 0 || o.faultApplied < 0 || o.faultRejected < 0 || o.faultResets < 0) return false;
     if (!currentCircuit(p).loadState(r, apply)) return false;
     if (!p.output_.loadState(r, apply)) return false;
     for (int c = 0; c < p.channels_; ++c) if (!p.driftDry_[c].load(r, apply)) return false;

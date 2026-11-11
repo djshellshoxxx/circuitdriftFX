@@ -67,4 +67,21 @@ double SidechainLoadDetector::process(double l, double r) noexcept {
     return cfg_.depth * cfg_.iBudgetAmps * ratio;
 }
 
+bool TransientDetector::validState() const noexcept {
+    for (double a : {aFA_, aFR_, aSA_, aSR_, aHR_}) if (!(a >= 0.0 && a <= 1.0)) return false;
+    for (double v : {fast_, slow_, held_}) if (!(std::isfinite(v) && v >= 0.0 && v <= 1e6)) return false;
+    return holdSamples_ >= 0 && holdSamples_ <= 10000000 && holdLeft_ >= 0 && holdLeft_ <= holdSamples_;
+}
+
+bool SidechainLoadDetector::validState() const noexcept {
+    if (static_cast<unsigned>(cfg_.source) > static_cast<unsigned>(Source::Blend)) return false;
+    if (!(std::isfinite(cfg_.hpfHz) && cfg_.hpfHz >= 20.0 && cfg_.hpfHz <= 300.0)) return false;
+    if (!(std::isfinite(cfg_.depth) && cfg_.depth >= 0.0 && cfg_.depth <= 2.0)) return false;
+    if (!(std::isfinite(cfg_.iBudgetAmps) && cfg_.iBudgetAmps >= 0.0 && cfg_.iBudgetAmps <= 1e6)) return false;
+    for (const dsp::ButterworthHpf* f : {&hpfL_, &hpfR_})
+        for (double v : {f->b0, f->b1, f->b2, f->a1, f->a2, f->z1, f->z2}) if (!std::isfinite(v) || std::fabs(v) > 1e12) return false;
+    for (double a : {aMs_, aA_, aR_}) if (!(a >= 0.0 && a <= 1.0)) return false;
+    return std::isfinite(ms_) && ms_ >= 0.0 && ms_ <= 1e12 && std::isfinite(env_) && env_ >= 0.0 && env_ <= 1e6;
+}
+
 }  // namespace cd::control
