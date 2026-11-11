@@ -15,8 +15,8 @@
 //    instantaneous v*i [W] from the solved branch voltage is averaged over the OS substeps of each
 //    host sample. Capacitors (reactive storage) and sources (supplied power) are rejected. Audio
 //    amplitude is never used as watts.
-//  * Thermal feedback: none. MnaSolver has no parameter-update API and manifests define no
-//    temperature law, so temperatures are telemetry only. When feedback is added, a new T affects
+//  * Thermal feedback: none. Manifests define no temperature law, so temperatures are telemetry
+//    only (MnaSolver::updateParameter exists; only fault parameter tracks use it, see below). When feedback is added, a new T affects
 //    the sample after its tick (one-tick lag), which reference comparisons must document.
 //  * Thermal clock: 1000 Hz fractional phase accumulator advanced per host sample, independent of
 //    callback boundaries; the host sample straddling a tick boundary has its energy split exactly.
@@ -45,6 +45,15 @@
 // charges via MnaSolver::getState, oversampler histories, latency pads, dry delay, thermal
 // temperatures/energy, 1 kHz clock accumulator, fallback latch/fade, counters) for engine
 // snapshots; modelHash() identifies the prepared topology/quality for snapshot compatibility.
+// Parameter tracks (CD-F19 fault overlays): process() optionally takes up to kMaxParamTracks
+// per-substep schedules (n * factor values each) for (element, manifest parameter k) of THIS
+// netlist. Before every solver substep each value is clamped to the manifest [min, max] and pushed
+// through MnaSolver::updateParameter only when it differs bit-wise from the solver's current value
+// (so a constant schedule costs one compare per substep). A refused update (numeric domain) leaves
+// the solver untouched and is counted (parameterRefusals). Mapped thermal resistor branches follow
+// the new resistance for power/telemetry. Stored capacitor charges are kept (charge-conserving C
+// change); parameters are not part of saveState(): callers re-push their schedule after a load,
+// which the bit-compare makes exact. reset() restores the prepared (nominal) parameters too.
 // Threading: prepare() off the audio thread; process()/reset()/accessors noexcept, allocation-free.
 #pragma once
 #include <cstdint>
@@ -124,8 +133,21 @@ public:
     // latencySamples(); dry = in delayed by latencySamples(). in may alias neither output.
     // Unprepared or out-of-range calls write nothing and advance nothing.
     // driveGain: null or n per-sample gains applied to the circuit input only.
+    // tracks: null or trackCount (<= kMaxParamTracks) parameter schedules, values[i*factor()+s] for
+    // host sample i, substep s; applied to every channel's solver (see header comment).
+    struct ParamTrack {
+        int element = -1, k = 0;           // netlist Device element, manifest parameter index
+        const double* values = nullptr;    // n * factor() values
+    };
+    static constexpr int kMaxParamTracks = 4;
     void process(const double* const* in, double* const* wet, double* const* dry, int n,
-                 const double* driveGain = nullptr) noexcept;
+                 const double* driveGain = nullptr, const ParamTrack* tracks = nullptr, int trackCount = 0) noexcept;
+    // Prepared (nominal) value and manifest bounds of Device element parameter k; false if invalid.
+    bool parameterRange(int element, int k, double& nominal, double& min, double& max) const noexcept;
+    // Current solver value of parameter k of element on channel ch (NaN when invalid).
+    double parameter(int ch, int element, int k) const noexcept;
+    std::int64_t parameterUpdates() const noexcept;    // accepted updateParameter calls (all channels)
+    std::int64_t parameterRefusals() const noexcept;   // refused updates / invalid tracks
     // Snapshot support (audio-safe, allocation-free). loadState(apply=false) only validates.
     void saveState(StateWriter& w) const noexcept;
     bool loadState(StateReader& r, bool apply) noexcept;

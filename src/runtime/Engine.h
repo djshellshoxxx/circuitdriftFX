@@ -42,12 +42,34 @@
 //    added to the declared latency (prepare-time only; a runtime pitchDrift.enabled toggle is
 //    counted unsupported). Its ring has no state API: payload restores reset it (counted),
 //    copyStateFrom copies it directly.
-//  * Faults (CD-F19): up to kMaxFaultSlots FaultChannels on netlist elements, ticked factor times
-//    per host sample (electrical rate) with the transient evidence b as excitation; Apply/Reset
-//    via ParamTarget::Fault* events (the registry has no fault IDs). Outputs map to evaluate()'s
-//    fault hook (leakage fraction, bias offset) while a channel is not cleared; Reset Faults
-//    leaves no hook behind. MnaSolver has no parameter-update API, so C/R values cannot reach the
-//    netlist yet: faults are audibly neutral on the fixtures (resume packet 2 / G01).
+//  * Faults (CD-F19): up to kMaxFaultSlots FaultChannels on netlist elements of the BUILT-IN
+//    circuit, ticked factor times per host sample (electrical rate Fs*OS) with the transient
+//    evidence b as excitation; Apply/Reset via ParamTarget::Fault* events (the registry has no fault
+//    IDs). Artistic bounded failure simulations, not validated failure models (G01 open).
+//    Bounds (buildPrepared, from the faulted element's manifest; FaultSlotConfig::bounds R/C fields
+//    are ignored): nominal = the netlist parameter value; CrackedResistor openR = manifest
+//    resistanceOhm max and ElectrolyticOpen minC = manifest capacitanceF min. The fixture manifests
+//    declare no open/short equivalents, so these manifest-range limits are SYNTHETIC PLACEHOLDERS
+//    (never an ideal 0/inf; fixture.resistor max 1e9 ohm, fixture.capacitor min 1e-15 F).
+//    Parameter action, per electrical substep: each tick's value is pushed into the built-in
+//    circuit's solvers through CircuitRuntime parameter tracks -> MnaSolver::updateParameter
+//    (clamped to the manifest range first, called only when bit-wise different):
+//    CrackedResistor -> resistanceOhm (FaultOutputs::resistanceOhm, which already follows the
+//    seeded contact state with the 2 ms contact ramp: contact open -> openR), ElectrolyticOpen ->
+//    capacitanceF (10 ms log ramp; stored charge kept). Refused updates are counted
+//    (OverlayDiagnostics::faultParamRefused). Availability/limits: ElectrolyticOpen's series-
+//    resistance half is unavailable (fixture.capacitor has no ESR parameter or series node; reported
+//    in Fault::partial, never faked); ElectrolyticLeaky is unavailable (no leakage parameter or
+//    parallel-leakage topology); MicrophonicTube is unavailable (no tube). Graph paths
+//    (ProcessorGraph) compile blueprint graphs with injected port sources, so their element indices
+//    do not map to the built-in netlist: faults never touch graph solvers and diagnostics report
+//    faultPathReason while a graph path is active (the fault channels keep ticking; the built-in
+//    circuit re-applies the current values on its next substep). Outputs also feed evaluate()'s
+//    fault hook (leakage fraction, bias offset) while a channel is not cleared; Reset Faults ramps
+//    to nominal over 20 ms and the solver parameter follows, ending bit-exactly at nominal.
+//    Snapshots: solver parameters are not in the payload (layout unchanged); the restored fault
+//    channel state reproduces the same per-substep values and the bit-compare re-applies them on
+//    the next substep, so continuation is exact.
 //  * Telemetry (CD-F17): attachTelemetry(); frames carry branch temperatures K, power W, current A,
 //    voltage V, input/output node volts and solver iterations, at every 128 processed samples,
 //    drop-on-full through the wait-free writer; the reader's state never affects audio.
@@ -243,7 +265,13 @@ struct OverlayDiagnostics {
         blueprint::FaultOverlay overlay{};
         blueprint::FaultOutputs out{};
         std::int64_t transitions = 0;
+        const char* partial = "";       // part of the spec action that is unavailable (reason), "" if none
+        int element = -1, parameter = -1;   // solver target (parameter -1: none)
+        double nominal = 0;             // prepared netlist value
+        double applied = 0;             // built-in circuit solver value (channel 0) after the last substep
     } faults[kMaxFaultSlots]{};
+    std::int64_t faultParamUpdates = 0, faultParamRefused = 0;   // built-in circuit updateParameter counts
+    const char* faultPathReason = "";   // non-empty while the active path cannot take fault parameters
     bool faultActive = false;
     control::FaultOverlay faultHook{};
     std::int64_t faultApplied = 0, faultRejected = 0, faultResets = 0;
@@ -319,7 +347,14 @@ private:
     int factor_ = 1;                       // electrical rate = fs * factor (fault channels)
     bool faultUsed_[kMaxFaultSlots] = {}, faultAvail_[kMaxFaultSlots] = {};
     const char* faultReason_[kMaxFaultSlots] = {};
+    const char* faultPartial_[kMaxFaultSlots] = {};
+    int faultElement_[kMaxFaultSlots] = {}, faultParam_[kMaxFaultSlots] = {};   // parameter -1: no solver target
+    double faultNominal_[kMaxFaultSlots] = {};
     blueprint::FaultBounds faultBounds_[kMaxFaultSlots] = {};
+    std::vector<double> faultSched_;       // per applied slot: maxBlock * factor substep values
+    double* faultTrack_[kMaxFaultSlots] = {};   // into faultSched_ (null: slot has no solver target)
+    CircuitRuntime::ParamTrack tracks_[kMaxFaultSlots] = {};
+    int trackCount_ = 0;
     control::ManifestBindings bindings_{};
     control::BaseValues base_{};
     int fadeLen_ = 1;
