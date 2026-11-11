@@ -2,7 +2,7 @@
 // sidechain detectors (CD-F15/F16, T15/T16 identity), tempo clock (CD-F13), seeded creative motion
 // and pitch-drift delay (D09), fault overlays (CD-F19), telemetry frames (CD-F17), snapshots/A-B
 // with the new state, block-partition invariance with every new stage enabled, RtTrap.
-// Every circuit is a labelled SYNTHETIC fixture (fixture-v1) and every fault bound / I_budget is a
+// Every circuit is a labelled SYNTHETIC fixture (fixture-v1); fault bounds are the fixture manifest ranges and every I_budget is a
 // test value, not a manifest measurement; nothing here validates hardware (G01 stays open).
 #include <algorithm>
 #include <cmath>
@@ -450,11 +450,9 @@ void creativeMotion() {
 EngineConfig faultConfig() {
     EngineConfig c = baseConfig(1);
     auto& f = c.overlays.faults;
-    f[0].used = true; f[0].element = 1;   // fixture.resistor 1 kOhm
-    f[0].bounds.nominalR = 1e3; f[0].bounds.openR = 1e6;
+    f[0].used = true; f[0].element = 1;   // fixture.resistor 1 kOhm (bounds derived from netlist + manifest)
     f[0].overlay.type = blueprint::FaultType::CrackedResistor; f[0].overlay.severity = 1.0; f[0].overlay.seed = 42;
-    f[1].used = true; f[1].element = 4;   // fixture.capacitor 10 nF
-    f[1].bounds.nominalC = 1e-8; f[1].bounds.minC = 1e-10;
+    f[1].used = true; f[1].element = 4;   // fixture.capacitor 10 nF: no leakage parameter -> leaky unavailable
     f[1].overlay.type = blueprint::FaultType::ElectrolyticLeaky; f[1].overlay.severity = 1.0;
     f[2].used = true; f[2].element = 2;   // diode: microphonic tube fault has no validated topology
     f[2].overlay.type = blueprint::FaultType::MicrophonicTube;
@@ -474,18 +472,17 @@ void faults() {
     Engine a;
     CHECK(a.prepare(faultConfig(), e), "prepare %s", e.c_str());
     const auto d0 = a.diagnostics().overlay;
-    CHECK(d0.faults[0].available && d0.faults[1].available && !d0.faults[2].available && std::strstr(d0.faults[2].reason, "tube"),
-          "fault availability (%s)", d0.faults[2].reason);
+    CHECK(d0.faults[0].available && !d0.faults[1].available && std::strstr(d0.faults[1].reason, "leakage") && !d0.faults[2].available &&
+              std::strstr(d0.faults[2].reason, "tube"),
+          "fault availability (%s / %s)", d0.faults[1].reason, d0.faults[2].reason);
     std::vector<EngineDiagnostics> per;
     const Buf y = renderBlocks(a, in, {480u}, tl, &per);
-    // During the fault (before reset at 1.5 s): effective leakage raised, contact transitions bounded.
+    // During the fault (before reset at 1.5 s): contact transitions bounded, hook active.
     const EngineDiagnostics& mid = per[size_t(71520 / 480) - 1];
     const std::int64_t transitions = mid.overlay.faults[0].transitions;
-    CHECK(mid.overlay.faultActive && mid.effective.leakFrac > 0.99, "leaky fault not active: leak %.4f", mid.effective.leakFrac);
+    CHECK(mid.overlay.faultActive, "cracked-resistor fault not active");
     CHECK(transitions > 0 && transitions <= 20 * 2, "contact transitions %lld in 1.47 s (limit 20/s)", (long long)transitions);
-    CHECK(mid.overlay.faults[1].out.leakageROhm < 1e3 && mid.overlay.faults[1].out.leakageROhm >= 100, "leakage R %.3e",
-          mid.overlay.faults[1].out.leakageROhm);
-    CHECK(mid.overlay.faultApplied == 2 && mid.overlay.faultRejected == 1, "applied %lld rejected %lld",
+    CHECK(mid.overlay.faultApplied == 1 && mid.overlay.faultRejected == 2, "applied %lld rejected %lld",
           (long long)mid.overlay.faultApplied, (long long)mid.overlay.faultRejected);
     // Recovery: Reset Faults ramps 20 ms, then no stale overlay remains.
     const auto dEnd = a.diagnostics();
@@ -494,12 +491,12 @@ void faults() {
               dEnd.overlay.faults[0].cleared && dEnd.overlay.faults[1].cleared && !dEnd.overlay.faults[0].overlay.enabled,
           "stale overlay after Reset Faults");
     CHECK(dEnd.effective.leakFrac == dRef.effective.leakFrac && dEnd.effective.biasOffset == dRef.effective.biasOffset &&
-              dEnd.overlay.faults[0].out.resistanceOhm == 1e3 && dEnd.overlay.faults[1].out.leakageROhm == 1e9,
+              dEnd.overlay.faults[0].out.resistanceOhm == 1e3 && dEnd.overlay.faults[0].applied == 1e3,
           "effective values not back to nominal: leak %.17g vs %.17g, R %.17g", dEnd.effective.leakFrac, dRef.effective.leakFrac,
           dEnd.overlay.faults[0].out.resistanceOhm);
-    // The synthetic MnaSolver has no parameter-update API: fault values cannot reach the netlist,
-    // so the overlays are audibly neutral here (blocked on packet 2 / G01) -- asserted, not hidden.
-    CHECK(peakDiff(y, y0) == 0.0, "faults changed audio %.3e (unexpected: no consumer)", peakDiff(y, y0));
+    // The fault reaches the netlist through MnaSolver::updateParameter (details: test_runtime_faults.cpp).
+    CHECK(peakDiff(y, y0) > 1e-3 && dEnd.overlay.faultParamRefused == 0, "cracked resistor did not change audio (%.3e) / refused %lld",
+          peakDiff(y, y0), (long long)dEnd.overlay.faultParamRefused);
     // Seeded repeatability + partition invariance of the fault state.
     {
         Engine b;
@@ -527,10 +524,10 @@ void faults() {
             differs = perS[k].overlay.faults[0].out.contactOpen != per[k].overlay.faults[0].out.contactOpen;
         CHECK(differs, "seed 43 reproduced seed 42's contact pattern");
     }
-    std::printf("CD-F19 faults: cracked-resistor seed 42 %lld transitions in 1.47 s (<=20/s), leaky leak R %.3e ohm -> effective leakFrac "
-                "%.3f; tube fault unavailable ('%s'); Reset Faults -> no stale overlay, effective == fault-free engine; audio neutral "
-                "(no MnaSolver parameter API); seeded + partition-invariant\n",
-                (long long)transitions, mid.overlay.faults[1].out.leakageROhm, mid.effective.leakFrac, d0.faults[2].reason);
+    std::printf("CD-F19 faults: cracked-resistor seed 42 %lld transitions in 1.47 s (<=20/s), audio peak diff %.3e vs fault-free; leaky "
+                "unavailable ('%s'); tube unavailable ('%s'); Reset Faults -> no stale overlay, solver R nominal, effective == fault-free "
+                "engine; seeded + partition-invariant\n",
+                (long long)transitions, peakDiff(y, y0), d0.faults[1].reason, d0.faults[2].reason);
 }
 
 // CD-F17: telemetry frames at every 128-sample quantum; reader state never changes audio.
@@ -621,7 +618,6 @@ EngineConfig everythingConfig() {
     c.overlays.tempoEnabled = true;
     c.overlays.tempoDepth = 0.5;
     c.overlays.faults[0].used = true; c.overlays.faults[0].element = 1;
-    c.overlays.faults[0].bounds.nominalR = 1e3; c.overlays.faults[0].bounds.openR = 1e6;
     c.overlays.faults[0].overlay.type = blueprint::FaultType::CrackedResistor;
     c.overlays.faults[0].overlay.enabled = true; c.overlays.faults[0].overlay.severity = 0.8; c.overlays.faults[0].overlay.seed = 7;
     c.initialMacros.age = 0.3; c.initialMacros.warmth = 0.4;

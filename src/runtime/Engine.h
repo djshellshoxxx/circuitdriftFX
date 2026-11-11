@@ -50,7 +50,8 @@
 //    are ignored): nominal = the netlist parameter value; CrackedResistor openR = manifest
 //    resistanceOhm max and ElectrolyticOpen minC = manifest capacitanceF min. The fixture manifests
 //    declare no open/short equivalents, so these manifest-range limits are SYNTHETIC PLACEHOLDERS
-//    (never an ideal 0/inf; fixture.resistor max 1e9 ohm, fixture.capacitor min 1e-15 F).
+//    (never an ideal 0/inf; fixture.resistor max 1e9 ohm, fixture.capacitor min 1e-15 F). A
+//    nominal already at that limit leaves no headroom: the slot is unavailable with a reason.
 //    Parameter action, per electrical substep: each tick's value is pushed into the built-in
 //    circuit's solvers through CircuitRuntime parameter tracks -> MnaSolver::updateParameter
 //    (clamped to the manifest range first, called only when bit-wise different):

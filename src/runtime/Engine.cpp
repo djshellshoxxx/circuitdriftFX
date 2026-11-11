@@ -269,6 +269,11 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
                     pk = -1;
                     break;
                 }
+                if (!(nom < hi)) {
+                    p->faultReason_[k] = "resistor nominal is at the manifest maximum: no open-equivalent headroom";
+                    pk = -1;
+                    break;
+                }
                 b.nominalR = nom;
                 b.openR = hi;           // placeholder open equivalent: manifest max (never ideal infinity)
                 break;
@@ -276,6 +281,11 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
                 pk = man.paramIndex("capacitanceF");
                 if (pk < 0 || !p->circuit_.parameterRange(f.element, pk, nom, lo, hi)) {
                     p->faultReason_[k] = "capacitor manifest exposes no capacitanceF parameter";
+                    pk = -1;
+                    break;
+                }
+                if (!(nom > lo)) {
+                    p->faultReason_[k] = "capacitor nominal is at the manifest minimum: no open-equivalent headroom";
                     pk = -1;
                     break;
                 }

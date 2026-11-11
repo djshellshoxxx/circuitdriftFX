@@ -16,8 +16,9 @@
 //    host sample. Capacitors (reactive storage) and sources (supplied power) are rejected. Audio
 //    amplitude is never used as watts.
 //  * Thermal feedback: none. Manifests define no temperature law, so temperatures are telemetry
-//    only (MnaSolver::updateParameter exists; only fault parameter tracks use it, see below). When feedback is added, a new T affects
-//    the sample after its tick (one-tick lag), which reference comparisons must document.
+//    only (MnaSolver::updateParameter is used by fault parameter tracks only, see below). When
+//    feedback is added, a new T affects the sample after its tick (one-tick lag), which reference
+//    comparisons must document.
 //  * Thermal clock: 1000 Hz fractional phase accumulator advanced per host sample, independent of
 //    callback boundaries; the host sample straddling a tick boundary has its energy split exactly.
 //    The accumulator is an exact integer (phase = acc/fs, +1000 per sample), so integer-Hz rates
