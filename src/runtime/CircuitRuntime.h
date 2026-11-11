@@ -98,8 +98,8 @@ struct SyntheticSupply {
     bool enabled = false;
     double sourceV = 1.1;           // rectified DC source V_src [V]
     double sourceOhm = 100;         // rectifier/source impedance R_src [Ohm]
-    double cBaseF = 200e-6;         // reservoir C_base [F] (Sag binding)
-    double cMinF = 20e-6;           // reservoir C_min [F] (Sag binding)
+    double cBaseF = 150e-6;         // reservoir C_base [F] (Sag binding)
+    double cMinF = 15e-6;           // reservoir C_min [F] (Sag binding)
     double idleA = 1e-3;            // idle draw I_idle [A]
     double loadOhm = 270;           // signal draw I_dyn = |x| / R_load [A]
     double headroomV = 0.5;         // stage headroom at r_eff = 1 [V]

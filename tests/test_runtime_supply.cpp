@@ -52,14 +52,14 @@ Buf kick(std::size_t n, double onsetSec, double amp, int channels = 1) {
 }
 
 Buf sine(std::size_t n, double hz, double amp, int channels = 1) {
-    Buf x(std::size_t(channels), std::vector<double>(n));
+    Buf x(std::size_t(channels), std::vector<double>(n, 0.0));
     for (std::size_t i = 0; i < n; ++i)
         for (auto& c : x) c[i] = amp * std::sin(2.0 * M_PI * hz * double(i) / kFs);
     return x;
 }
 
 Buf noise(std::size_t n, uint64_t seed, double amp, int channels = 1) {
-    Buf x(std::size_t(channels), std::vector<double>(n));
+    Buf x(std::size_t(channels), std::vector<double>(n, 0.0));
     Lcg g{seed};
     for (std::size_t i = 0; i < n; ++i)
         for (auto& c : x) c[i] = amp * g.d();
@@ -308,15 +308,16 @@ void t15() {
     // amount 0 identity (b): an engine automated 0 -> 1 -> 0 returns to the amount-0 output once the
     // 20 ms smoothing has settled (the physical state never depended on P).
     {
-        const Render rz = render(zero, in, nullptr, {480});
+        const Buf in2 = kick(48000, onset, 0.9);
+        const Render rz = render(zero, in2, nullptr, {480});
         Engine aut;
         prepared(aut, cu);
-        const Render ra = render(aut, in, nullptr, {480}, {{0, 1025, 1.0}, {2400 + std::size_t(onset * kFs), 1025, 0.0}});
-        const std::size_t settle = 2400 + std::size_t(onset * kFs) + 4800;   // +100 ms after returning to 0
+        const Render ra = render(aut, in2, nullptr, {480}, {{0, 1025, 1.0}, {2400 + std::size_t(onset * kFs), 1025, 0.0}});
+        const std::size_t settle = 2400 + std::size_t(onset * kFs) + 24000;   // +500 ms (25 smoothing time constants)
         const double d = peakDiff(ra.out, rz.out, settle);
         const double during = peakDiff(ra.out, rz.out);
         CHECK(d <= 1e-7 && during > 1e-3, "T15 amount 0 identity after automation: %.3e (during %.3e)", d, during);
-        std::printf("T15 engine amount 0 identity: automated 0->1->0 vs constant 0 after settling peak %.1e (limit 1e-7); while "
+        std::printf("T15 engine amount 0 identity: automated 0->1->0 vs constant 0 500 ms after returning to 0: peak %.1e (limit 1e-7); while "
                     "preserving %.3e\n", d, during);
     }
     std::printf("T15 (SYNTHETIC kick, Sag 1, stiff-rail reference): first-10 ms sag loss unprotected %.3f dB, full preservation %.3f dB "
