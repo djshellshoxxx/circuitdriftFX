@@ -30,6 +30,12 @@ public:
     // Up: one base sample -> two high-rate samples (gain 2 applied). Down: two -> one.
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
+    // Block forms, bit-identical to n successive up()/down() calls (additive, P17): up writes 2n
+    // samples, down reads 2n and writes n. Four outputs are computed with interleaved but
+    // individually ordered accumulators (same summation order as the scalar path) for ILP.
+    // upBlock: in/out must not overlap; downBlock reads each group of inputs before writing.
+    void upBlock(const double* in, double* out, int n) noexcept;
+    void downBlock(const double* in, double* out, int n) noexcept;
     void reset() noexcept;
     int stateSize() const noexcept { return int(upLine_.size() + dnEven_.size() + dnOdd_.size()) + 3; }
     void getState(double* out) const noexcept;
@@ -38,6 +44,8 @@ public:
 private:
     void clear() noexcept;
     double dotEven(const std::vector<double>& line, int pos) const noexcept;
+    // Four dot products of even_ with line windows starting at base, base-1, base-2, base-3.
+    void dotEven4(const double* line, int base, double* acc4) const noexcept;
     std::vector<double> h_, even_;                          // even_ = h[0], h[2], ..., h[2c]
     std::vector<double> upLine_, dnEven_, dnOdd_;          // doubled ring buffers (len 2*E)
     int c_ = 0, E_ = 0, upPos_ = 0, dnPos_ = 0, oddPos_ = 0, oddLen_ = 0;
