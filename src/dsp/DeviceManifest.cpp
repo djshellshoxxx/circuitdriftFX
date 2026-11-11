@@ -41,9 +41,59 @@ const char* const kFixtures[kSyntheticFixtureCount] = {
         "provenance":{"kind":"synthetic-fixture","note":"Textbook Shockley equation with arbitrary round parameters; not a named or measured device (G01 open)."}})",
 };
 
+// SYNTHETIC THERMAL FIXTURES (additive): arbitrary round tempco, not a measured component.
+const char* const kThermalFixtures[kSyntheticThermalFixtureCount] = {
+    R"({"schemaVersion":1,"modelId":"fixture.resistor.tempco","revision":1,"equation":"resistor","pins":["p","n"],
+        "parameters":[{"name":"resistanceOhm","unit":"Ohm","min":1e-3,"max":1e9,"default":1000}],
+        "scales":{"voltageV":1,"currentA":1e-3},
+        "temperature":{"parameter":"resistanceOhm","tempcoPerK":3.9e-3,"referenceK":298.15,"minK":233.15,"maxK":473.15},
+        "provenance":{"kind":"synthetic-fixture","note":"Ideal resistor with an arbitrary linear tempco for thermal-feedback validation; not a measured component (G01 open)."}})",
+};
+
 bool positive(const core::JsonValue* v) { return v && v->isNumber() && std::isfinite(v->number) && v->number > 0; }
 
+bool parseTemperatureLaw(const core::JsonValue& t, DeviceManifest& m, std::string& why) {
+    if (!t.isObject()) { why = "temperature must be an object"; return false; }
+    for (const auto& kv : t.object)
+        if (kv.first != "parameter" && kv.first != "tempcoPerK" && kv.first != "referenceK" && kv.first != "minK" && kv.first != "maxK") {
+            why = "unknown temperature key " + kv.first;
+            return false;
+        }
+    const auto *p = t.get("parameter"), *a = t.get("tempcoPerK"), *r = t.get("referenceK"), *lo = t.get("minK"), *hi = t.get("maxK");
+    if (!p || !p->isString()) { why = "temperature.parameter required"; return false; }
+    const int idx = m.paramIndex(p->string);
+    if (idx < 0) { why = "temperature.parameter names no parameter"; return false; }
+    if (!a || !a->isNumber() || !std::isfinite(a->number) || std::fabs(a->number) > 0.1) {
+        why = "tempcoPerK must be finite with |alpha| <= 0.1";
+        return false;
+    }
+    if (!positive(r) || !positive(lo) || !positive(hi) || !(lo->number <= r->number && r->number <= hi->number) || hi->number > 2000) {
+        why = "temperature domain must satisfy 0 < minK <= referenceK <= maxK <= 2000";
+        return false;
+    }
+    m.temperature.present = true;
+    m.temperature.paramIndex = idx;
+    m.temperature.tempcoPerK = a->number;
+    m.temperature.referenceK = r->number;
+    m.temperature.minK = lo->number;
+    m.temperature.maxK = hi->number;
+    return true;
+}
+
 }  // namespace
+
+double TemperatureLaw::evaluate(double nominal, double t, double k, double pmin, double pmax, bool& clamped) const noexcept {
+    clamped = false;
+    if (!present) return nominal;
+    if (!std::isfinite(t)) { t = referenceK; clamped = true; }
+    if (t < minK) { t = minK; clamped = true; }
+    if (t > maxK) { t = maxK; clamped = true; }
+    if (!std::isfinite(k)) { k = 1.0; clamped = true; }
+    double v = nominal * (1.0 + k * tempcoPerK * (t - referenceK));
+    if (!std::isfinite(v) || v < pmin) { v = pmin; clamped = true; }
+    if (v > pmax) { v = pmax; clamped = true; }
+    return v;
+}
 
 int DeviceManifest::paramIndex(const std::string& n) const noexcept {
     for (std::size_t k = 0; k < params.size(); ++k) if (params[k].name == n) return int(k);
@@ -54,7 +104,7 @@ bool parseDeviceManifest(const core::JsonValue& v, DeviceManifest& m, std::strin
     auto bad = [&](std::string why) { err = "manifest: " + why; return false; };
     if (!v.isObject()) return bad("not an object");
     static const std::set<std::string> allowed = {"schemaVersion", "modelId", "revision", "equation", "pins",
-                                                  "parameters", "scales", "domain", "provenance"};
+                                                  "parameters", "scales", "domain", "provenance", "temperature"};
     for (const auto& kv : v.object) if (!allowed.count(kv.first)) return bad("unknown key " + kv.first);
     const auto* sv = v.get("schemaVersion");
     if (!sv || !sv->isNumber() || !sv->numberIsExactInteger || sv->number != 1) return bad("schemaVersion must be 1");
@@ -111,6 +161,11 @@ bool parseDeviceManifest(const core::JsonValue& v, DeviceManifest& m, std::strin
         return bad("domain not applicable");
     }
 
+    if (const auto* tl = v.get("temperature")) {
+        std::string why;
+        if (!parseTemperatureLaw(*tl, m, why)) return bad(why);
+    }
+
     const auto* pv = v.get("provenance");
     if (!pv || !pv->isObject()) return bad("provenance required");
     const auto *kind = pv->get("kind"), *note = pv->get("note"), *src = pv->get("source");
@@ -149,8 +204,27 @@ const std::vector<DeviceManifest>& syntheticFixtureCatalogue() {
     return cat;
 }
 
+const char* syntheticThermalFixtureJson(int index) noexcept {
+    return (index >= 0 && index < kSyntheticThermalFixtureCount) ? kThermalFixtures[index] : nullptr;
+}
+
+const std::vector<DeviceManifest>& syntheticThermalFixtures() {
+    static const std::vector<DeviceManifest> cat = [] {
+        std::vector<DeviceManifest> c;
+        for (int k = 0; k < kSyntheticThermalFixtureCount; ++k) {
+            core::JsonValue j;
+            std::string e;
+            DeviceManifest m;
+            if (core::parseJson(kThermalFixtures[k], j, e) && parseDeviceManifest(j, m, e)) c.push_back(std::move(m));
+        }
+        return c;
+    }();
+    return cat;
+}
+
 const DeviceManifest* findSyntheticFixture(const std::string& id) {
     for (const auto& m : syntheticFixtureCatalogue()) if (m.modelId == id) return &m;
+    for (const auto& m : syntheticThermalFixtures()) if (m.modelId == id) return &m;
     return nullptr;
 }
 

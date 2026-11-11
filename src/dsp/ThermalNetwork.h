@@ -4,15 +4,29 @@
 // step() is noexcept, bounded, allocation-free and audio-thread safe.
 // Error behavior: prepare() returns false (state untouched) on invalid C/G/connectivity or
 // numerical overflow. State/step rejection retains all temperatures, never a partial update.
+// Diagnostics: every step() records a bounded StepStatus and saturating accepted/rejected
+// counters (audio-thread safe, noexcept, no allocation). A successful prepare() resets them.
 #pragma once
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
 namespace cd::dsp {
 
 class ThermalNetwork {
 public:
     static constexpr std::size_t kMaxNodes = 64;
+
+    // Outcome of the most recent step(). Every value except Accepted means no temperature changed.
+    enum class StepStatus : unsigned char {
+        None,                    // no step since construction/prepare/clearStepDiagnostics
+        Accepted,                // candidate committed
+        NotPrepared,             // no successful prepare(); nothing to integrate
+        NullInput,               // powerW == nullptr
+        NonFinitePower,          // some powerW[i] is NaN/Inf
+        Overflow,                // right-hand side, solve or next-step input became non-finite
+        NonPositiveTemperature,  // some candidate kelvin temperature <= 0
+    };
 
     struct Config {
         std::size_t n = 0;
@@ -33,7 +47,17 @@ public:
     double temperature(std::size_t i) const noexcept { return t_[i]; }
     std::size_t size() const noexcept { return n_; }
 
+    // Step diagnostics (noexcept, audio-thread safe). Counters saturate at UINT64_MAX.
+    StepStatus lastStepStatus() const noexcept { return lastStatus_; }
+    std::uint64_t acceptedSteps() const noexcept { return accepted_; }
+    std::uint64_t rejectedSteps() const noexcept { return rejected_; }
+    std::uint64_t consecutiveRejectedSteps() const noexcept { return consecutiveRejected_; }
+    void clearStepDiagnostics() noexcept;
+
 private:
+    StepStatus integrate(const double* powerW) noexcept;
+    StepStatus lastStatus_ = StepStatus::None;
+    std::uint64_t accepted_ = 0, rejected_ = 0, consecutiveRejected_ = 0;
     std::size_t n_ = 0;
     double ambient_ = 298.15;
     std::array<double, kMaxNodes> cOverDt_{}, gAmb_{}, t_{};

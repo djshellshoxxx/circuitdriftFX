@@ -11,22 +11,30 @@ Codex is integration owner for the user-approved reconciliation and safety fixes
 ## What exists
 
 - `cd_core`: stable 74-parameter registry and bounded JSON parsing/writing.
-- `cd_dsp`: thermal/protection primitives, original fixed 77-tap `Halfband2x`, configurable `PolyphaseHalfband2x` FIR/IIR cascade, synthetic device manifests and MNA solver.
-- `cd_state`: scene/session documents, migration mechanism, compatibility decisions and local save helper. These are worker-side primitives; there is no integrated audio state transaction queue.
-- Acceptance and safety regression executables, with verification limits recorded in the integration review.
+- `cd_dsp`: thermal network (with step status), protection primitives, fixed and configurable halfband/oversampling, synthetic manifests, MNA solver.
+- `cd_control`: macros, transient/sidechain detectors, seeded creative motion and pitch-drift delay, tempo clock, scale quantizer/MIDI tracker, worker-side pitch detector, harmonic calibration map.
+- `cd_state`: scene/session documents with save pre-validation, SPSC transaction queue, generation pool, snapshot exchange, A/B mixer, 20-step history.
+- `cd_blueprint`: blueprint parser/compiler to immutable `PreparedGraph`, lifecycle timeline, fault overlays.
+- `cd_runtime`: `Engine` = oversampled MNA circuit + aligned dry + output stage + containment, latency planning.
+- `cd_community`: SHA-256, catalog client, LRU cache against an abstract transport (mock only).
+- Tests: one ctest suite per `tests/test_*.cpp`; RtTrap allocation trap in `tests/support`.
 
-The product is incomplete. No JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model, cross-platform runtime qualification or measured CPU/memory compliance is claimed. The T21 hot 4x synthetic stimulus misses its proposed target; see traceability.
+The product is incomplete: modules are not yet composed into one processing graph; no JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model or measured CPU/memory compliance. See traceability for findings.
 
-## Resume packets
+## Resume packets (PR #9, updated)
 
-1. **P04 queue/snapshot interface**: resolve provider-owned runtime layout and generations with the solver owner. Define producer/consumer ownership, coherent configuration revision, bounded preallocated request/publish slots, sample index/clock remainder, off-audio reclamation and stopped-audio save fallback before implementation. Acceptance: partitioned blocks including zero frames, queue pressure, concurrent save/restore, old-generation rejection and no audio allocation/lock/I/O. Configuration persistence must work when a dynamic checkpoint is unavailable. Do not replace the existing registry or JSON implementation.
-2. **UX-09 instrumentation**: agree the process-entry contract and platform trap scope. A test-only thread-local callback scope may instrument allocation/deallocation, mutex/OS I/O and count violations without callback logging. Prove traps with positive controls and prove worker activity is excluded. Primitive smoke tests alone cannot pass the required one-hour integrated audio stress test.
-3. **P03 integration**: place the current MNA solver inside the current oversampler; preserve thermal and electrical timebases across block partitions. Implement finite-output containment and the specified delayed-dry fallback. Re-measure aliasing on the circuit before claiming T21, then add latency padding/compensation and transitions. Keep the hot-case miss visible; do not lower its threshold or silently change quality.
-4. **Publication**: current export validation supports only the explicitly bounded synthetic scene subset. Nonempty opaque macros/timeline/faults or unsupported blueprint payloads are rejected until P05/P10/P11 provide safe typed schemas. No cloud service is provisioned and no scene is uploaded by these helpers.
+Writers this checkpoint used disjoint files per module; the coordinator owns CMake, docs and integration. Agree a writer before editing another module.
+
+1. **P17 performance**: first pass merged (bit-identical, ~21% faster); Eco and 1x still miss. Next: profile solver Newton/LU and per-sample smoothers with callgrind; measure on reference hardware (G04).
+1a. **Unfixed review findings** (docs/REVIEW_FINDINGS_2026-11-04.md round 2): R2-M2 shm header double fetch, R2-M3 RtTrap missing clockwait/clocklock/pwrite/fsync/sleep wraps, R2-L2 snapshot restore validation, R2-L5 pin actions to SHAs.
+2. **Engine taps**: post-input-trim tap and rail input for `cd_network`; Engine publishes `cd_analysis` TelemetryFrames; PitchDriftDelay state capture so snapshots work with pitch delay on.
+3. **View-model wiring**: merged (gestures/undo → TransactionQueue bit-identical to direct host events; UX-08 labels). Remaining: Mod Slot routing in Engine, real Engine telemetry publication.
+4. **Owner decisions needed**: G09 JUCE 8 pin + licence (GPLv3 vs commercial) and CLAP adapter revision to start P01/P08/P18 wrappers; G11 renderer; G07 encoder SDKs; G06 provider; G08 AAX access.
+5. **Calibration (G01)**: real device manifests, reference schematics and independent curves replace every synthetic fixture before any physical claim.
 
 ## Verification and gates
 
-Preferred build:
+Preferred build (add `-G Ninja` if available; set `ASAN_OPTIONS=detect_leaks=0` only where LSan cannot run):
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON

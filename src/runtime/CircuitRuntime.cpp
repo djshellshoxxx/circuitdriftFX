@@ -1,0 +1,665 @@
+// CircuitDrift runtime: oversampled MNA circuit, thermal clock, latched solver fallback.
+// See CircuitRuntime.h for the contracts. Owner: cd_runtime.
+#include "runtime/CircuitRuntime.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+#include "control/Dynamics.h"
+#include "control/Macros.h"
+
+namespace cd::runtime {
+namespace {
+
+using dsp::DeviceEquation;
+using dsp::NetElement;
+
+constexpr std::size_t kMaxThermal = dsp::ThermalNetwork::kMaxNodes;
+
+// One dissipative element mapped to a thermal node (copied scalar data; no manifest pointer).
+struct MappedBranch {
+    int a = 0, b = 0, node = 0, element = -1;
+    bool diode = false;
+    double g = 0;                       // resistor conductance
+    double is = 0, nvt = 1, cap = 40, expCap = 0;  // diode (same C1 extension as MnaSolver)
+};
+
+// One temperature-feedback element (manifest TemperatureLaw + thermal node mapping).
+struct Feedback {
+    int element = 0, param = 0, node = 0, mapped = -1;
+    double nominal = 0, initial = 0, pmin = 0, pmax = 0;
+    dsp::TemperatureLaw law{};
+};
+
+// Re-reads a mapped branch's parameters from the solver (after a feedback update) so that power
+// accounting uses the same values as the electrical solve.
+void refreshBranch(MappedBranch& m, const dsp::MnaSolver& s) noexcept {
+    if (!m.diode) { m.g = 1.0 / s.elementParameter(m.element, 0); return; }
+    m.is = s.elementParameter(m.element, 0);
+    m.nvt = s.elementParameter(m.element, 1) * s.elementParameter(m.element, 2);
+}
+
+inline void bumpSat(std::int64_t& c) noexcept { if (c < std::numeric_limits<std::int64_t>::max()) ++c; }
+
+double clampFinite(double x, double lo, double hi, double def) noexcept {
+    if (!std::isfinite(x)) return def;
+    return std::clamp(x, lo, hi);
+}
+
+double branchCurrent(const MappedBranch& m, double v) noexcept {
+    if (!m.diode) return m.g * v;
+    const double arg = v / m.nvt;
+    if (arg > m.cap) return m.is * (m.expCap * (1.0 + arg - m.cap) - 1.0);
+    return m.is * (std::exp(arg) - 1.0);
+}
+
+NetElement fixtureDevice(const char* id, int a, int b, std::initializer_list<double> p) {
+    NetElement e;
+    e.model = dsp::findSyntheticFixture(id);
+    e.a = a; e.b = b;
+    int k = 0;
+    for (double v : p) e.param[k++] = v;
+    return e;
+}
+
+NetElement voltageSource(int a, int b) {
+    NetElement e;
+    e.kind = NetElement::Kind::VoltageSource;
+    e.a = a; e.b = b;
+    return e;
+}
+
+constexpr double kIs = 1e-14, kN = 1.0, kVt = 0.025852;  // fixture.diode defaults (synthetic)
+
+}  // namespace
+
+CircuitConfig syntheticDiodeClipper() {
+    CircuitConfig c;
+    c.netlist.nodes = 2;
+    c.netlist.elements = {voltageSource(1, 0), fixtureDevice("fixture.resistor", 1, 2, {1000.0}),
+                          fixtureDevice("fixture.diode", 2, 0, {kIs, kN, kVt}),
+                          fixtureDevice("fixture.diode", 0, 2, {kIs, kN, kVt}),
+                          fixtureDevice("fixture.capacitor", 2, 0, {1e-8})};
+    c.io = {0, 1.0, 2, 1.0};
+    return c;
+}
+
+CircuitConfig syntheticRcLowpass(double r, double cap) {
+    CircuitConfig c;
+    c.netlist.nodes = 2;
+    c.netlist.elements = {voltageSource(1, 0), fixtureDevice("fixture.resistor", 1, 2, {r}),
+                          fixtureDevice("fixture.capacitor", 2, 0, {cap})};
+    c.io = {0, 1.0, 2, 1.0};
+    return c;
+}
+
+CircuitConfig syntheticDivider(double unitsPerVolt) {
+    CircuitConfig c;
+    c.netlist.nodes = 2;
+    c.netlist.elements = {voltageSource(1, 0), fixtureDevice("fixture.resistor", 1, 2, {1000.0}),
+                          fixtureDevice("fixture.resistor", 2, 0, {1000.0})};
+    c.io = {0, 1.0, 2, unitsPerVolt};
+    return c;
+}
+
+SyntheticSupply syntheticFactorySupply() noexcept {
+    SyntheticSupply s;   // the struct defaults ARE the synthetic factory numbers
+    s.enabled = true;
+    return s;
+}
+
+struct CircuitRuntime::Core {
+    struct Channel {
+        dsp::MnaSolver solver;
+        dsp::Oversampler os;
+        DelayLine pad, dry;
+        dsp::ThermalNetwork thermal;
+        std::vector<double> hi, low, dcState;
+        std::array<double, kMaxThermal> powerSum{}, lastPower{}, energy{};
+        std::int64_t consecutive = 0;
+        std::vector<MappedBranch> mapped;   // per-channel copy (feedback changes parameters)
+        std::vector<double> fbValue;        // current applied feedback parameter values
+        std::vector<double> railTrace;      // r per host sample of the last call (maxBlock)
+        double railV = 0, rEff = 1, load = 0;
+    };
+    // Owned immutable manifest copies; solver elements point here (stable heap addresses).
+    std::vector<std::unique_ptr<const dsp::DeviceManifest>> manifests;
+    Channel ch[kMaxChannels];
+    std::vector<MappedBranch> mapped;
+    std::vector<Feedback> feedback;
+    SyntheticSupply supply{};
+    bool supplyOn = false;
+    double vNom = 1, h = 0, lastC = 0;
+    std::int64_t railClamps = 0, fbUpdates = 0, fbClamps = 0, fbRejected = 0;
+    std::vector<double> fade;
+    std::array<double, kMaxThermal> ambient{};
+    LatencyPlan plan;
+    SyntheticIo io;
+    double fs = 0, ts = 0, fadeStep = 0, fadeW = 0;
+    // Exact 1 kHz clock: phase = phaseAcc / fs ticks; each host sample adds 1000 (integer Hz rates).
+    int64_t phaseAcc = 0, fsInt = 0;
+    int channels = 0, factor = 0, maxBlock = 0, thermalNodes = 0;
+    bool thermalOn = false, latched = false, resetRequested = false;
+    int64_t samples = 0;
+    std::int64_t failed = 0, ticks = 0;
+    std::uint64_t hash = 0;
+    mutable std::vector<double> scratch;   // snapshot staging (sized at prepare)
+};
+
+CircuitRuntime::CircuitRuntime() = default;
+CircuitRuntime::~CircuitRuntime() = default;
+
+bool CircuitRuntime::prepare(const CircuitConfig& cfg, std::string& err) {
+    auto bad = [&](const char* why) { err = why; return false; };
+    if (!(cfg.sampleRate >= 44100.0 && cfg.sampleRate <= 192000.0)) return bad("sample rate outside 44.1-192 kHz");
+    if (cfg.sampleRate != std::floor(cfg.sampleRate)) return bad("non-integer sample rate unsupported (exact thermal clock)");
+    if (cfg.maxBlock < 1 || cfg.maxBlock > dsp::Oversampler::kMaxBlockSize) return bad("maxBlock outside 1..8192");
+    if (cfg.channels < 1 || cfg.channels > kMaxChannels) return bad("channels must be 1 or 2");
+    const auto& els = cfg.netlist.elements;
+    if (cfg.io.sourceElement < 0 || cfg.io.sourceElement >= int(els.size()) ||
+        els[std::size_t(cfg.io.sourceElement)].kind != NetElement::Kind::VoltageSource)
+        return bad("input mapping must name a voltage-source element");
+    if (cfg.io.outputNode < 1 || cfg.io.outputNode > cfg.netlist.nodes) return bad("output node out of range");
+    if (!(cfg.io.voltsPerUnit > 0 && std::isfinite(cfg.io.voltsPerUnit) && cfg.io.unitsPerVolt > 0 &&
+          std::isfinite(cfg.io.unitsPerVolt)))
+        return bad("I/O scales must be finite and positive");
+
+    auto core = std::make_unique<Core>();
+    // Deep-copy every referenced manifest; never retain the caller's pointers.
+    dsp::Netlist net = cfg.netlist;
+    std::vector<const dsp::DeviceManifest*> originals;
+    for (auto& e : net.elements) {
+        if (e.kind != NetElement::Kind::Device || !e.model) continue;
+        std::size_t k = 0;
+        while (k < originals.size() && originals[k] != e.model) ++k;
+        if (k == originals.size()) {
+            originals.push_back(e.model);
+            core->manifests.push_back(std::make_unique<const dsp::DeviceManifest>(*e.model));
+        }
+        e.model = core->manifests[k].get();
+    }
+    net.elements[std::size_t(cfg.io.sourceElement)].value = 0.0;  // DC point at zero input
+
+    if (!planLatency(cfg.os, cfg.padToFamilyMax, core->plan)) return bad("oversampler design or latency plan failed");
+    const double h = 1.0 / (cfg.sampleRate * double(cfg.os.factor));
+
+    // Thermal contract (SYNTHETIC): dissipative-element map and temperature-feedback elements.
+    dsp::ThermalNetwork::Config tcfg = cfg.thermal.network;
+    if (tcfg.n == 0) { tcfg.n = 1; tcfg.capacity[0] = 2.0; tcfg.toAmbient[0] = 0.2; }
+    core->thermalOn = cfg.thermal.enabled;
+    if (core->thermalOn) {
+        if (!(cfg.thermal.ambientK > 0 && std::isfinite(cfg.thermal.ambientK))) return bad("ambient must be positive kelvin");
+        const auto& map = cfg.thermal.elementToNode;
+        if (!map.empty() && map.size() != els.size()) return bad("thermal map size must equal element count");
+        for (std::size_t k = 0; k < els.size(); ++k) {
+            auto& e = net.elements[k];
+            const bool dissipative = e.kind == NetElement::Kind::Device &&
+                                     (e.model->equation == DeviceEquation::Resistor || e.model->equation == DeviceEquation::ShockleyDiode);
+            const int node = map.empty() ? (dissipative ? 0 : -1) : map[k];
+            if (node < 0) continue;
+            if (!dissipative) return bad("thermal map may only reference dissipative (resistor/diode) elements");
+            if (std::size_t(node) >= tcfg.n) return bad("thermal node out of range");
+            if (e.model->temperature.present) {
+                Feedback f;
+                f.element = int(k); f.param = e.model->temperature.paramIndex; f.node = node;
+                f.mapped = int(core->mapped.size());
+                f.law = e.model->temperature;
+                const auto& mp = e.model->params[std::size_t(f.param)];
+                f.pmin = mp.min; f.pmax = mp.max; f.nominal = e.param[f.param];
+                bool clamped = false;
+                // Prepared state: the law evaluated at ambient with unit sensitivity (the DC point uses it).
+                f.initial = f.law.evaluate(f.nominal, cfg.thermal.ambientK, 1.0, f.pmin, f.pmax, clamped);
+                e.param[f.param] = f.initial;
+                core->feedback.push_back(f);
+            }
+            MappedBranch m;
+            m.a = e.a; m.b = e.b; m.node = node; m.element = int(k);
+            if (e.model->equation == DeviceEquation::Resistor) {
+                m.g = 1.0 / e.param[0];
+            } else {
+                m.diode = true; m.is = e.param[0]; m.nvt = e.param[1] * e.param[2];
+                m.cap = e.model->maxExpArg; m.expCap = std::exp(m.cap);
+            }
+            core->mapped.push_back(m);
+        }
+    }
+    dsp::MnaSolver solver;
+    if (!solver.prepare(net, h, {cfg.maxNewton, 1e-7}, err)) return false;
+
+    // Reduced supply model (SYNTHETIC).
+    const SyntheticSupply& sp = cfg.supply;
+    core->supplyOn = sp.enabled;
+    if (sp.enabled) {
+        auto pos = [](double x) { return x > 0 && std::isfinite(x); };
+        if (!(pos(sp.sourceV) && pos(sp.sourceOhm) && pos(sp.cBaseF) && pos(sp.cMinF) && pos(sp.loadOhm) && pos(sp.headroomV)))
+            return bad("supply values must be finite and positive");
+        if (!(sp.cMinF <= sp.cBaseF)) return bad("supply C_min must not exceed C_base");
+        if (!(std::isfinite(sp.idleA) && sp.idleA >= 0 && std::isfinite(sp.iBudgetA) && sp.iBudgetA >= 0))
+            return bad("supply idle/budget currents must be finite and non-negative");
+        if (!(sp.minRailFraction > 0 && sp.minRailFraction <= 1)) return bad("supply minimum rail fraction must be in (0,1]");
+        if (!pos(sp.nominalV())) return bad("supply idle draw leaves no positive nominal rail");
+        if (!std::isfinite(sp.cBaseF / h)) return bad("supply reservoir step conductance exceeds numeric range");
+    }
+    core->supply = sp;
+    core->vNom = sp.enabled ? sp.nominalV() : 1.0;
+    core->h = h;
+    core->lastC = sp.cBaseF;
+
+    core->fs = cfg.sampleRate; core->ts = 1.0 / cfg.sampleRate;
+    core->fsInt = int64_t(cfg.sampleRate);
+    core->fadeStep = 1.0 / std::max(1.0, std::round(kFallbackFadeSec * cfg.sampleRate));
+    core->channels = cfg.channels; core->factor = cfg.os.factor; core->maxBlock = cfg.maxBlock;
+    core->io = cfg.io;
+    core->thermalNodes = int(tcfg.n);
+    for (std::size_t i = 0; i < kMaxThermal; ++i) core->ambient[i] = cfg.thermal.ambientK;
+    core->fade.assign(std::size_t(cfg.maxBlock), 0.0);
+    for (int c = 0; c < cfg.channels; ++c) {
+        auto& ch = core->ch[c];
+        ch.solver = solver;  // copies point at core-owned manifests
+        ch.dcState.assign(std::size_t(solver.stateSize()), 0.0);
+        ch.solver.getState(ch.dcState.data());
+        if (!ch.os.prepare(cfg.os, cfg.maxBlock)) return bad("oversampler prepare failed");
+        ch.pad.prepare(core->plan.padHigh);
+        ch.dry.prepare(core->plan.declared);
+        ch.hi.assign(std::size_t(cfg.maxBlock) * std::size_t(cfg.os.factor), 0.0);
+        ch.low.assign(std::size_t(cfg.maxBlock), 0.0);
+        if (core->thermalOn && !ch.thermal.prepare(tcfg, 1.0 / kThermalRateHz, cfg.thermal.ambientK))
+            return bad("thermal network rejected (C>0, G>=0, ambient path per island)");
+        ch.mapped = core->mapped;
+        ch.fbValue.assign(core->feedback.size(), 0.0);
+        for (std::size_t f = 0; f < core->feedback.size(); ++f) ch.fbValue[f] = core->feedback[f].initial;
+        ch.railTrace.assign(std::size_t(cfg.maxBlock), 1.0);
+        ch.railV = core->vNom; ch.rEff = 1.0; ch.load = sp.enabled ? sp.idleA : 0.0;
+    }
+    std::size_t scratch = 0;
+    for (int c = 0; c < cfg.channels; ++c)
+        scratch = std::max({scratch, std::size_t(core->ch[c].solver.stateSize()), std::size_t(core->ch[c].os.stateSize())});
+    core->scratch.assign(scratch + 1, 0.0);
+    Fnv64 fnv;
+    fnv.str("cd.runtime.CircuitRuntime/1");
+    fnv.pod(cfg.channels); fnv.pod(cfg.os.factor); fnv.pod(cfg.os.family); fnv.pod(cfg.os.passFraction); fnv.pod(cfg.os.stopbandDb);
+    fnv.pod(cfg.maxNewton); fnv.pod(cfg.padToFamilyMax); fnv.pod(core->plan.declared); fnv.pod(core->plan.padHigh);
+    fnv.pod(net.nodes); fnv.pod(net.voltageScaleV); fnv.pod(net.currentScaleA);
+    for (const auto& e : net.elements) {
+        fnv.pod(e.kind); fnv.pod(e.a); fnv.pod(e.b); fnv.pod(e.param); fnv.pod(e.value);
+        if (e.model) { fnv.str(e.model->modelId.c_str()); fnv.pod(e.model->revision); fnv.pod(e.model->equation); }
+    }
+    fnv.pod(cfg.io.sourceElement); fnv.pod(cfg.io.voltsPerUnit); fnv.pod(cfg.io.outputNode); fnv.pod(cfg.io.unitsPerVolt);
+    fnv.pod(core->thermalOn); fnv.pod(tcfg.n); fnv.pod(cfg.thermal.ambientK);
+    for (std::size_t i = 0; i < tcfg.n; ++i) {
+        fnv.pod(tcfg.capacity[i]); fnv.pod(tcfg.toAmbient[i]);
+        for (std::size_t j = 0; j < tcfg.n; ++j) fnv.pod(tcfg.coupling[i][j]);
+    }
+    for (const auto& m : core->mapped) { fnv.pod(m.a); fnv.pod(m.b); fnv.pod(m.node); }
+    if (sp.enabled) {   // only hashed when present, so supply-free identities are unchanged
+        const double sv[10] = {sp.sourceV, sp.sourceOhm, sp.cBaseF, sp.cMinF, sp.idleA, sp.loadOhm, sp.headroomV,
+                               sp.minRailFraction, sp.iBudgetA, core->vNom};
+        fnv.str("supply/1"); fnv.pod(sv);
+    }
+    for (const auto& f : core->feedback) {
+        fnv.str("feedback/1");
+        fnv.pod(f.element); fnv.pod(f.param); fnv.pod(f.node); fnv.pod(f.nominal); fnv.pod(f.law.tempcoPerK);
+        fnv.pod(f.law.referenceK); fnv.pod(f.law.minK); fnv.pod(f.law.maxK);
+    }
+    core->hash = fnv.h;
+    core_ = std::move(core);  // install only after every step succeeded
+    err.clear();
+    return true;
+}
+
+void CircuitRuntime::process(const double* const* in, double* const* wet, double* const* dry, int n,
+                             const double* drive) noexcept {
+    CircuitControls c;
+    c.drive = drive;
+    process(in, wet, dry, n, c);
+}
+
+void CircuitRuntime::process(const double* const* in, double* const* wet, double* const* dry, int n,
+                             const CircuitControls& ctl) noexcept {
+    Core* k = core_.get();
+    if (!k || n <= 0 || n > k->maxBlock || !in || !wet || !dry) return;
+    for (int c = 0; c < k->channels; ++c)
+        if (!in[c] || !wet[c] || !dry[c]) return;
+    const int F = k->factor;
+    const double* drive = ctl.drive;
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        if (drive) {  // pre-stage drive on the circuit input only (ch.low is free until down())
+            for (int i = 0; i < n; ++i) ch.low[std::size_t(i)] = in[c][i] * drive[i];
+            ch.os.up(ch.low.data(), ch.hi.data(), n);
+        } else {
+            ch.os.up(in[c], ch.hi.data(), n);
+        }
+    }
+
+    const SyntheticSupply& sp = k->supply;
+    const control::SidechainSource src = ctl.source == LoadSource::External ? control::SidechainSource::External
+                                         : ctl.source == LoadSource::Blend  ? control::SidechainSource::Blend
+                                                                            : control::SidechainSource::Main;
+    const double vMin = sp.minRailFraction * k->vNom, gSrc = k->supplyOn ? 1.0 / sp.sourceOhm : 0.0;
+    std::array<double, kMaxThermal> tickPower{};
+    for (int i = 0; i < n; ++i) {
+        // Per-sample supply controls (validated; neutral when absent).
+        double cEff = sp.cBaseF, sag = 0, pres = 0, iExt = 0;
+        if (k->supplyOn) {
+            if (ctl.reservoirC) cEff = clampFinite(ctl.reservoirC[i], sp.cMinF, sp.cBaseF, sp.cBaseF);
+            if (ctl.sag) sag = clampFinite(ctl.sag[i], 0.0, 1.0, 0.0);
+            if (ctl.preserve) pres = clampFinite(ctl.preserve[i], 0.0, 1.0, 0.0);
+            if (ctl.extCurrent) iExt = clampFinite(ctl.extCurrent[i], 0.0, 1e3, 0.0);
+            k->lastC = cEff;
+        }
+        const double aC = cEff / k->h;
+        for (int c = 0; c < k->channels; ++c) {
+            auto& ch = k->ch[c];
+            double* hs = ch.hi.data() + std::size_t(i) * std::size_t(F);
+            std::fill(ch.powerSum.begin(), ch.powerSum.begin() + k->thermalNodes, 0.0);
+            for (int s = 0; s < F; ++s) {
+                ch.solver.setSource(k->io.sourceElement, ch.pad.process(hs[s]) * k->io.voltsPerUnit);
+                if (ch.solver.step()) {
+                    ch.consecutive = 0;
+                } else {
+                    if (k->failed < std::numeric_limits<std::int64_t>::max()) ++k->failed;
+                    if (ch.consecutive < std::numeric_limits<std::int64_t>::max()) ++ch.consecutive;
+                    if (ch.consecutive >= kFallbackAfterConsecutive && !k->latched) { k->latched = true; k->resetRequested = true; }
+                }
+                const double x = ch.solver.voltage(k->io.outputNode);
+                if (!k->supplyOn) {
+                    hs[s] = x * k->io.unitsPerVolt;
+                } else {
+                    // Reservoir: C*(V - V_old)/h = I_rect(V) - I_load, ideal rectifier + R_src.
+                    double iDyn = std::fabs(x) / sp.loadOhm;
+                    if (!std::isfinite(iDyn)) iDyn = 0.0;
+                    const double iLoad = control::composeLoadCurrent(src, sp.idleA + iDyn, iDyn, sag, iExt);
+                    double v = (aC * ch.railV + gSrc * sp.sourceV - iLoad) / (aC + gSrc);
+                    if (v > sp.sourceV) v = ch.railV - iLoad / aC;   // rectifier reverse-biased: no charging
+                    if (!(v >= vMin)) { v = vMin; bumpSat(k->railClamps); }        // also catches NaN
+                    else if (v > sp.sourceV) { v = sp.sourceV; bumpSat(k->railClamps); }
+                    ch.railV = v;
+                    ch.load = iLoad;
+                    const double r = v / k->vNom;
+                    ch.rEff = control::TransientDetector::effectiveR(r, pres);   // headroom only
+                    const double hv = sp.headroomV * ch.rEff;
+                    hs[s] = hv * std::tanh(x / hv) * k->io.unitsPerVolt;
+                }
+                if (k->thermalOn)
+                    for (const auto& m : ch.mapped) {
+                        const double v = ch.solver.voltage(m.a) - ch.solver.voltage(m.b);
+                        const double p = v * branchCurrent(m, v);
+                        if (isFiniteSample(p)) ch.powerSum[std::size_t(m.node)] += p;
+                    }
+            }
+            for (int q = 0; q < k->thermalNodes; ++q) ch.lastPower[std::size_t(q)] = ch.powerSum[std::size_t(q)] / double(F);
+            ch.railTrace[std::size_t(i)] = k->supplyOn ? ch.railV / k->vNom : 1.0;
+        }
+        // 1 kHz thermal clock (exact fractional phase; boundary sample energy split exactly).
+        const int64_t next = k->phaseAcc + int64_t(kThermalRateHz);
+        if (next >= k->fsInt) {
+            const double a = double(k->fsInt - k->phaseAcc) / kThermalRateHz;  // part of this sample before the tick
+            const double sens = ctl.tempSensitivity ? ctl.tempSensitivity[i] : 1.0;
+            for (int c = 0; c < k->channels && k->thermalOn; ++c) {
+                auto& ch = k->ch[c];
+                for (int q = 0; q < k->thermalNodes; ++q) {
+                    const std::size_t u = std::size_t(q);
+                    tickPower[u] = (ch.energy[u] + ch.lastPower[u] * a * k->ts) * kThermalRateHz;
+                    ch.energy[u] = ch.lastPower[u] * (1.0 - a) * k->ts;
+                }
+                ch.thermal.step(tickPower.data());
+                // Temperature feedback: the new T sets the parameter used from the NEXT host sample.
+                for (std::size_t f = 0; f < k->feedback.size(); ++f) {
+                    const Feedback& fb = k->feedback[f];
+                    bool clamped = false;
+                    const double val = fb.law.evaluate(fb.nominal, ch.thermal.temperature(std::size_t(fb.node)), sens, fb.pmin,
+                                                       fb.pmax, clamped);
+                    if (clamped) bumpSat(k->fbClamps);
+                    if (val == ch.fbValue[f]) continue;
+                    if (!ch.solver.setElementParameter(fb.element, fb.param, val)) { bumpSat(k->fbRejected); continue; }
+                    ch.fbValue[f] = val;
+                    refreshBranch(ch.mapped[std::size_t(fb.mapped)], ch.solver);
+                    bumpSat(k->fbUpdates);
+                }
+            }
+            k->phaseAcc = next - k->fsInt;
+            ++k->ticks;
+        } else {
+            for (int c = 0; c < k->channels && k->thermalOn; ++c)
+                for (int q = 0; q < k->thermalNodes; ++q)
+                    k->ch[c].energy[std::size_t(q)] += k->ch[c].lastPower[std::size_t(q)] * k->ts;
+            k->phaseAcc = next;
+        }
+        if (k->latched) k->fadeW = std::min(1.0, k->fadeW + k->fadeStep);
+        k->fade[std::size_t(i)] = k->fadeW;
+        ++k->samples;
+    }
+
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        ch.os.down(ch.hi.data(), ch.low.data(), n);
+        for (int i = 0; i < n; ++i) {
+            const double d = ch.dry.process(in[c][i]);
+            const double f = k->fade[std::size_t(i)];
+            const double w = ch.low[std::size_t(i)];
+            dry[c][i] = d;
+            wet[c][i] = f == 0.0 ? w : (f == 1.0 ? d : (1.0 - f) * w + f * d);
+        }
+    }
+}
+
+bool CircuitRuntime::adoptSlowState(const CircuitRuntime& other) noexcept {
+    Core* k = core_.get();
+    const Core* o = other.core_.get();
+    if (!k || !o || k == o || k->channels != o->channels || k->thermalOn != o->thermalOn || k->thermalNodes != o->thermalNodes ||
+        k->feedback.size() != o->feedback.size() || k->supplyOn != o->supplyOn || k->fsInt != o->fsInt)
+        return false;
+    for (std::size_t f = 0; f < k->feedback.size(); ++f)
+        if (k->feedback[f].element != o->feedback[f].element || k->feedback[f].param != o->feedback[f].param) return false;
+    std::array<double, kMaxThermal> temps{};
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        const auto& oc = o->ch[c];
+        if (k->thermalOn) {
+            for (int q = 0; q < k->thermalNodes; ++q) temps[std::size_t(q)] = oc.thermal.temperature(std::size_t(q));
+            ch.thermal.setState(temps.data());
+        }
+        ch.energy = oc.energy; ch.lastPower = oc.lastPower;
+        for (std::size_t f = 0; f < k->feedback.size(); ++f)
+            if (ch.solver.setElementParameter(k->feedback[f].element, k->feedback[f].param, oc.fbValue[f])) {
+                ch.fbValue[f] = oc.fbValue[f];
+                refreshBranch(ch.mapped[std::size_t(k->feedback[f].mapped)], ch.solver);
+            }
+        ch.railV = oc.railV; ch.rEff = oc.rEff; ch.load = oc.load;
+    }
+    k->phaseAcc = o->phaseAcc; k->ticks = o->ticks;
+    return true;
+}
+
+void CircuitRuntime::reset() noexcept {
+    Core* k = core_.get();
+    if (!k) return;
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        ch.solver.setState(ch.dcState.data());
+        ch.os.reset(); ch.pad.reset(); ch.dry.reset();
+        if (k->thermalOn) ch.thermal.setState(k->ambient.data());
+        ch.powerSum.fill(0.0); ch.lastPower.fill(0.0); ch.energy.fill(0.0);
+        ch.consecutive = 0;
+        for (std::size_t f = 0; f < k->feedback.size(); ++f) {   // prepared (ambient) parameter values
+            const Feedback& fb = k->feedback[f];
+            if (ch.solver.setElementParameter(fb.element, fb.param, fb.initial)) {
+                ch.fbValue[f] = fb.initial;
+                refreshBranch(ch.mapped[std::size_t(fb.mapped)], ch.solver);
+            }
+        }
+        ch.railV = k->vNom; ch.rEff = 1.0; ch.load = k->supplyOn ? k->supply.idleA : 0.0;
+        std::fill(ch.railTrace.begin(), ch.railTrace.end(), 1.0);
+    }
+    k->lastC = k->supply.cBaseF;
+    k->phaseAcc = 0; k->ticks = 0; k->fadeW = 0;
+    k->latched = false; k->resetRequested = false;  // failure count kept as a diagnostic
+}
+
+void CircuitRuntime::saveState(StateWriter& w) const noexcept {
+    const Core* k = core_.get();
+    if (!k) return;
+    const std::int64_t g[6] = {k->phaseAcc, k->ticks, k->samples, k->failed, k->latched ? 1 : 0, k->resetRequested ? 1 : 0};
+    w.pod(g);
+    w.pod(k->fadeW);
+    const std::size_t T = std::size_t(k->thermalNodes);
+    for (int c = 0; c < k->channels; ++c) {
+        const auto& ch = k->ch[c];
+        ch.solver.getState(k->scratch.data());
+        w.doubles(k->scratch.data(), std::size_t(ch.solver.stateSize()));
+        ch.os.getState(k->scratch.data());
+        w.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()));
+        ch.pad.save(w);
+        ch.dry.save(w);
+        for (std::size_t q = 0; q < T; ++q) {
+            const double t[4] = {k->thermalOn ? ch.thermal.temperature(q) : 0.0, ch.powerSum[q], ch.lastPower[q], ch.energy[q]};
+            w.pod(t);
+        }
+        const std::int64_t cons = ch.consecutive;
+        w.pod(cons);
+        // Additive items, present only for configurations that have them (layout unchanged otherwise).
+        if (k->supplyOn) {
+            const double s[3] = {ch.railV, ch.rEff, ch.load};
+            w.pod(s);
+        }
+        if (!k->feedback.empty()) w.doubles(ch.fbValue.data(), ch.fbValue.size());
+    }
+    if (k->supplyOn) w.pod(k->lastC);
+}
+
+bool CircuitRuntime::loadState(StateReader& r, bool apply) noexcept {
+    Core* k = core_.get();
+    if (!k) return false;
+    std::int64_t g[6] = {};
+    double fadeW = 0;
+    if (!r.pod(g) || !r.pod(fadeW)) return false;
+    if (g[0] < 0 || g[0] >= k->fsInt || g[1] < 0 || g[2] < 0 || g[3] < 0 || !(fadeW >= 0 && fadeW <= 1)) return false;
+    if (apply) {
+        k->phaseAcc = g[0]; k->ticks = std::int64_t(g[1]); k->samples = g[2]; k->failed = std::int64_t(g[3]);
+        k->latched = g[4] != 0; k->resetRequested = g[5] != 0; k->fadeW = fadeW;
+    }
+    const std::size_t T = std::size_t(k->thermalNodes);
+    for (int c = 0; c < k->channels; ++c) {
+        auto& ch = k->ch[c];
+        if (!r.doubles(k->scratch.data(), std::size_t(ch.solver.stateSize()))) return false;
+        if (apply) ch.solver.setState(k->scratch.data());
+        if (!r.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()))) return false;
+        if (!(apply ? ch.os.setState(k->scratch.data()) : ch.os.stateValid(k->scratch.data()))) return false;
+        if (!ch.pad.load(r, apply) || !ch.dry.load(r, apply)) return false;
+        std::array<double, kMaxThermal> temps{};
+        for (std::size_t q = 0; q < T; ++q) {
+            double t[4] = {};
+            if (!r.pod(t)) return false;
+            if (k->thermalOn && !(t[0] > 0 && std::isfinite(t[0]))) return false;
+            temps[q] = t[0];
+            if (apply) { ch.powerSum[q] = t[1]; ch.lastPower[q] = t[2]; ch.energy[q] = t[3]; }
+        }
+        if (apply && k->thermalOn) ch.thermal.setState(temps.data());
+        std::int64_t cons = 0;
+        if (!r.pod(cons) || cons < 0) return false;
+        if (apply) ch.consecutive = std::int64_t(cons);
+        if (k->supplyOn) {
+            double s[3] = {};
+            if (!r.pod(s)) return false;
+            const double vMin = k->supply.minRailFraction * k->vNom;
+            if (!(s[0] >= vMin && s[0] <= k->supply.sourceV && std::isfinite(s[1]) && s[1] > 0 && s[1] <= 1.0 + 1e-12 &&
+                  std::isfinite(s[2]) && s[2] >= 0))
+                return false;
+            if (apply) { ch.railV = s[0]; ch.rEff = s[1]; ch.load = s[2]; }
+        }
+        for (std::size_t f = 0; f < k->feedback.size(); ++f) {
+            double v = 0;
+            if (!r.pod(v)) return false;
+            const Feedback& fb = k->feedback[f];
+            if (!(std::isfinite(v) && v >= fb.pmin && v <= fb.pmax)) return false;
+            if (apply && ch.solver.setElementParameter(fb.element, fb.param, v)) {
+                ch.fbValue[f] = v;
+                refreshBranch(ch.mapped[std::size_t(fb.mapped)], ch.solver);
+            }
+        }
+    }
+    if (k->supplyOn) {
+        double c = 0;
+        if (!r.pod(c) || !(c >= k->supply.cMinF && c <= k->supply.cBaseF)) return false;
+        if (apply) k->lastC = c;
+    }
+    return true;
+}
+
+std::size_t CircuitRuntime::stateBytes() const noexcept {
+    StateWriter w(nullptr, 0);
+    saveState(w);
+    return w.size();
+}
+
+std::uint64_t CircuitRuntime::modelHash() const noexcept { return core_ ? core_->hash : 0; }
+
+int CircuitRuntime::latencySamples() const noexcept { return core_ ? core_->plan.declared : 0; }
+const LatencyPlan& CircuitRuntime::latencyPlan() const noexcept {
+    static const LatencyPlan kNone{};
+    return core_ ? core_->plan : kNone;
+}
+int CircuitRuntime::channels() const noexcept { return core_ ? core_->channels : 0; }
+int CircuitRuntime::factor() const noexcept { return core_ ? core_->factor : 0; }
+int CircuitRuntime::maxBlock() const noexcept { return core_ ? core_->maxBlock : 0; }
+double CircuitRuntime::sampleRate() const noexcept { return core_ ? core_->fs : 0.0; }
+int CircuitRuntime::ownedManifestCount() const noexcept { return core_ ? int(core_->manifests.size()) : 0; }
+
+CircuitRuntime::Diagnostics CircuitRuntime::diagnostics() const noexcept {
+    Diagnostics d;
+    if (!core_) return d;
+    const Core& k = *core_;
+    d.samples = k.samples; d.failedSubsteps = k.failed;
+    for (int c = 0; c < k.channels; ++c) d.consecutiveFailures = std::max(d.consecutiveFailures, k.ch[c].consecutive);
+    d.fallbackLatched = k.latched; d.resetRequested = k.resetRequested; d.fallbackWeight = k.fadeW;
+    d.thermalTicks = k.ticks; d.thermalPhase = double(k.phaseAcc) / double(k.fsInt);
+    d.supplyEnabled = k.supplyOn;
+    if (k.supplyOn) {
+        for (int c = 0; c < k.channels; ++c) {
+            d.railVolts[c] = k.ch[c].railV;
+            d.railFraction[c] = k.ch[c].railV / k.vNom;
+            d.effectiveRailFraction[c] = k.ch[c].rEff;
+            d.loadCurrentA[c] = k.ch[c].load;
+        }
+        d.reservoirF = k.lastC;
+    }
+    d.railClamps = k.railClamps;
+    d.feedbackElements = int(k.feedback.size());
+    d.feedbackUpdates = k.fbUpdates; d.feedbackClamps = k.fbClamps; d.feedbackRejected = k.fbRejected;
+    return d;
+}
+
+double CircuitRuntime::elementParameter(int c, int element, int p) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return std::numeric_limits<double>::quiet_NaN();
+    return core_->ch[c].solver.elementParameter(element, p);
+}
+
+const double* CircuitRuntime::railFractionTrace(int c) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return nullptr;
+    return core_->ch[c].railTrace.data();
+}
+
+const SyntheticSupply& CircuitRuntime::supply() const noexcept {
+    static const SyntheticSupply kNone{};
+    return core_ ? core_->supply : kNone;
+}
+
+bool CircuitRuntime::hasTemperatureFeedback() const noexcept { return core_ && !core_->feedback.empty(); }
+
+double CircuitRuntime::temperatureK(int c, int node) const noexcept {
+    if (!core_ || !core_->thermalOn || c < 0 || c >= core_->channels || node < 0 || node >= core_->thermalNodes) return 0.0;
+    return core_->ch[c].thermal.temperature(std::size_t(node));
+}
+
+double CircuitRuntime::lastPowerW(int c, int node) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels || node < 0 || node >= core_->thermalNodes) return 0.0;
+    return core_->ch[c].lastPower[std::size_t(node)];
+}
+
+double CircuitRuntime::voltage(int c, int node) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return 0.0;
+    return core_->ch[c].solver.voltage(node);
+}
+
+}  // namespace cd::runtime
