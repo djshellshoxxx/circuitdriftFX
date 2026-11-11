@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <set>
+#include "blueprint/BlueprintGraph.h"
 #include "blueprint/Compiler.h"
 #include "runtime/ProcessorGraph.h"
 
@@ -88,6 +89,15 @@ LiteMapped mapLite(const LiteKnobs& k) noexcept {
 
 const char* liteFactoryBlueprintJson() noexcept { return kFactoryBlueprint; }
 
+bool isFactoryTopology(const blueprint::Blueprint& bp) {
+    static const std::string canonical = [] {
+        blueprint::Blueprint f;
+        blueprint::Diagnostics d;
+        return blueprint::parseBlueprint(std::string_view(kFactoryBlueprint), f, d) ? blueprint::writeBlueprint(f) : std::string();
+    }();
+    return !canonical.empty() && blueprint::writeBlueprint(bp) == canonical;
+}
+
 bool circuitFromBlueprint(std::string_view json, double fs, int maxBlock, int channels, const runtime::QualitySettings& quality,
                           PreparedEngineConfig& cfg, std::string& err) {
     dsp::Oversampler::Spec spec;
@@ -105,6 +115,10 @@ bool circuitFromBlueprint(std::string_view json, double fs, int maxBlock, int ch
     t.maxNewton = info.maxNewton; t.padToFamilyMax = !quality.zeroLatency;
     runtime::CircuitConfig cc;
     if (!runtime::circuitConfigFromGraph(*r.graph, t, cc, err)) return false;
+    // The fixed factory topology carries the reduced SYNTHETIC supply (explicitly selected here, the
+    // compiler has no supply element): this is what makes the Sag macro audible in LITE and in the
+    // equivalent full configuration (upgrade export/import compiles the same canonical blueprint).
+    if (isFactoryTopology(r.graph->blueprint)) cc.supply = runtime::syntheticFactorySupply();
     cfg.graph = r.graph;
     cfg.engine.circuit = std::move(cc);
     cfg.engine.sampleRate = fs; cfg.engine.maxBlock = maxBlock; cfg.engine.channels = channels;

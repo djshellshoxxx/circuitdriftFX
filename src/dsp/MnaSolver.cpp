@@ -108,6 +108,38 @@ void MnaSolver::setSource(int k, double value) noexcept {
     if (k >= 0 && k < int(el_.size()) && el_[k].kind != NetElement::Kind::Device) el_[k].value = value;
 }
 
+bool MnaSolver::setElementParameter(int k, int pi, double value) noexcept {
+    if (k < 0 || k >= int(el_.size())) return false;
+    NetElement& e = el_[std::size_t(k)];
+    if (e.kind != NetElement::Kind::Device || !e.model || pi < 0 || pi >= int(e.model->params.size()) || pi >= 3) return false;
+    const ManifestParam& p = e.model->params[std::size_t(pi)];
+    if (!(std::isfinite(value) && value >= p.min && value <= p.max && value > 0)) return false;
+    switch (e.model->equation) {
+        case DeviceEquation::Resistor:
+            if (!std::isfinite(1.0 / value)) return false;
+            break;
+        case DeviceEquation::Capacitor:
+            if (!std::isfinite(value / h_)) return false;
+            break;
+        case DeviceEquation::ShockleyDiode: {
+            double nvt = pi == 1 ? value * e.param[2] : pi == 2 ? e.param[1] * value : e.param[1] * e.param[2];
+            if (!(nvt > 0 && std::isfinite(nvt))) return false;
+            break;
+        }
+        default: return false;
+    }
+    e.param[pi] = value;
+    return true;
+}
+
+double MnaSolver::elementParameter(int k, int pi) const noexcept {
+    if (k < 0 || k >= int(el_.size())) return std::numeric_limits<double>::quiet_NaN();
+    const NetElement& e = el_[std::size_t(k)];
+    if (e.kind != NetElement::Kind::Device || !e.model || pi < 0 || pi >= int(e.model->params.size()) || pi >= 3)
+        return std::numeric_limits<double>::quiet_NaN();
+    return e.param[pi];
+}
+
 void MnaSolver::evaluate(const double* x, double* F, double* J, bool dc) noexcept {
     std::fill(F, F + m_, 0.0);
     if (J) std::fill(J, J + std::size_t(m_) * m_, 0.0);
@@ -275,7 +307,7 @@ bool MnaSolver::step() noexcept {
     xSave_ = x_;  // same size: element copy, no allocation
     if (!newton(maxNewton_, false) || !finiteSolution(x_.data())) {
         x_ = xSave_;
-        if (failures_ < std::numeric_limits<long>::max()) ++failures_;
+        if (failures_ < std::numeric_limits<std::int64_t>::max()) ++failures_;
         if (consecutive_ < 3) ++consecutive_;
         return false;
     }

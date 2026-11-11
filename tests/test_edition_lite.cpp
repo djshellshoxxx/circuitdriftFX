@@ -197,6 +197,8 @@ void t05Render() {
         runtime::EngineConfig bi;
         bi.sampleRate = fs; bi.maxBlock = 512; bi.channels = 2; bi.quality.mode = runtime::QualityMode::Eco;
         bi.circuit = runtime::syntheticDiodeClipper();
+        bi.circuit.supply = runtime::syntheticFactorySupply();   // same reduced synthetic supply as the factory topology
+
         bi.initial = runtime::OutputParams{0.0, 0.0, 1.0, true, true, 15.0, true, false};
         bi.initialMacros = control::MacroValues{st.knobs.thermalAge, st.knobs.sag, 0.25 * st.knobs.thermalAge, 0.2};
         runtime::Engine builtin;
@@ -223,20 +225,30 @@ void knobEndpoints() {
         const auto d = lite.engine().diagnostics();
         CHECK(d.macros.age == k.thermalAge && d.macros.sag == k.sag && d.macros.drift == 0.25 * k.thermalAge && d.macros.warmth == 0.2,
               "effective macros at (%g,%g)", k.sag, k.thermalAge);
-        CHECK(std::fabs(d.effective.shelfGainDb + 6.0 * k.thermalAge) <= 1e-12 && !d.effective.supportsSag && !d.effective.supportsDrift,
-              "Age shelf / unsupported Sag-Drift on synthetic topology");
+        // Factory topology carries the reduced SYNTHETIC supply: Sag bound (C_eff), Drift still unbound.
+        const auto sup = runtime::syntheticFactorySupply();
+        const double cEff = std::max(sup.cMinF, sup.cBaseF / (1.0 + 3.0 * k.sag));
+        CHECK(std::fabs(d.effective.shelfGainDb + 6.0 * k.thermalAge) <= 1e-12 && d.effective.supportsSag && !d.effective.supportsDrift &&
+                  std::fabs(d.effective.reservoirC - cEff) <= 1e-18 && d.circuit.supplyEnabled && std::fabs(d.circuit.reservoirF - cEff) <= 1e-18,
+              "Age shelf / Sag bound (C_eff %.6g vs %.6g) / Drift unbound on synthetic topology", d.effective.reservoirC, cEff);
         worst = std::max(worst, peakDiff(yl, yf));
         CHECK(finite(yl), "non-finite at endpoint");
     }
     CHECK(worst <= 1e-6, "endpoint renders differ %.3e", worst);
-    // Sag is inaudible on the synthetic topology (no supply binding): documented, measured here.
+    // Sag is audible through the factory topology's reduced SYNTHETIC supply reservoir: measured here.
     LiteState s0, s1;
     s0.knobs = {0, 0.2}; s1.knobs = {1, 0.2};
     LiteEngine l0, l1;
     CHECK(l0.prepare(s0, fs, 512, 2, e) && l1.prepare(s1, fs, 512, 2, e), "prepare");
-    const double sagEffect = peakDiff(render(liteProc(l0), in, fs, 480, {}), render(liteProc(l1), in, fs, 480, {}));
-    std::printf("T05 knob endpoints {0,1}^2: LITE vs full peak %.3e; effective macros exact; Sag 0->1 output change %.3e "
-                "(synthetic topology has no supply binding: Sag unsupported/neutral)\n", worst, sagEffect);
+    const Buf y0 = render(liteProc(l0), in, fs, 480, {}), y1 = render(liteProc(l1), in, fs, 480, {});
+    const double sagEffect = peakDiff(y0, y1);
+    auto rms = [](const Buf& y) { double s = 0; for (std::size_t i = 2400; i < y[0].size(); ++i) s += y[0][i] * y[0][i]; return std::sqrt(s / double(y[0].size() - 2400)); };
+    const double sagDb = 20.0 * std::log10(rms(y1) / rms(y0));
+    const double r0 = l0.engine().diagnostics().circuit.railFraction[0], r1 = l1.engine().diagnostics().circuit.railFraction[0];
+    CHECK(sagEffect >= 1e-2 && sagDb < -0.5 && r1 < r0, "LITE Sag knob not audible: peak change %.3e, level %.3f dB, rail %.4f vs %.4f",
+          sagEffect, sagDb, r1, r0);
+    std::printf("T05 knob endpoints {0,1}^2: LITE vs full peak %.3e; effective macros exact; Sag 0->1 (SYNTHETIC supply) output change "
+                "peak %.3e, level %.2f dB (50-100 ms), rail fraction at 100 ms %.4f -> %.4f\n", worst, sagEffect, sagDb, r0, r1);
 }
 
 void stateRoundTrip() {

@@ -30,6 +30,17 @@
       "type": "object", "additionalProperties": false, "required": ["maxExpArg"],
       "properties": {"maxExpArg": {"type": "number", "minimum": 0, "maximum": 80}}
     },
+    "temperature": {
+      "type": "object", "additionalProperties": false,
+      "required": ["parameter", "tempcoPerK", "referenceK", "minK", "maxK"],
+      "properties": {
+        "parameter": {"type": "string", "minLength": 1},
+        "tempcoPerK": {"type": "number", "minimum": -0.1, "maximum": 0.1},
+        "referenceK": {"type": "number", "minimum": 0, "maximum": 2000},
+        "minK": {"type": "number", "minimum": 0, "maximum": 2000},
+        "maxK": {"type": "number", "minimum": 0, "maximum": 2000}
+      }
+    },
     "provenance": {
       "type": "object", "additionalProperties": false, "required": ["kind", "note"],
       "properties": {

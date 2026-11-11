@@ -12,10 +12,14 @@
 //    HPF on at 15 Hz; soft clip on; quality 4x FIR Eco.
 //  * Fixed clean factory topology: the SYNTHETIC fixture-v1 antiparallel diode clipper blueprint
 //    below (labelled synthetic; not a hardware model, G01 open).
-// Honest limits of the synthetic topology (no supply reservoir, no temperature law, no creative
-// pitch delay): the Sag macro and Drift have no binding there and are neutral/unsupported, so the
-// Sag knob is stored, exported and mapped exactly but is currently inaudible; Thermal Age is
-// audible through Age's creative -6*a dB 6 kHz shelf only.
+// The factory topology carries the reduced SYNTHETIC supply reservoir runtime::syntheticFactorySupply()
+// (attached by circuitFromBlueprint to the canonical factory blueprint, so LITE, the equivalent full
+// configuration and the upgrade-export import are identical). The Sag knob is therefore audible:
+// reservoir C_eff = max(C_min, C_base/(1+3s)) and the Main-source load I_phys + 3 s I_dyn drive the
+// rail-referenced headroom stage (base droop remains at s = 0). Honest remaining limits: no
+// temperature law and no creative pitch delay on this topology, so Drift (0.25a) has no binding and
+// stays neutral/unsupported; Thermal Age is audible through Age's creative -6*a dB 6 kHz shelf only.
+// Transient preservation and the external sidechain default to off (LITE exposes no control).
 // Format identities: PROPOSED PLACEHOLDERS ONLY (G08 AAX access/signing, G09 adapter pins and
 // vendor registration). They are syntactically distinct strings under the reserved ".invalid"
 // namespace; no vendor-registered code (AU manufacturer/subtype, AAX product ID, VST3 class ID)
@@ -87,6 +91,10 @@ LiteMapped mapLite(const LiteKnobs& k) noexcept;
 
 // Canonical JSON of the fixed clean factory topology (SYNTHETIC fixture-v1 diode clipper).
 const char* liteFactoryBlueprintJson() noexcept;
+// True when bp is canonically identical to the factory topology (non-audio). circuitFromBlueprint
+// attaches runtime::syntheticFactorySupply() (reduced SYNTHETIC supply reservoir) to exactly this
+// topology, in LITE and in full alike.
+bool isFactoryTopology(const blueprint::Blueprint& bp);
 
 // Engine configuration plus the compiled graph whose manifests the circuit netlist points into
 // (keep `graph` alive until the Engine is prepared; CircuitRuntime deep-copies the manifests).

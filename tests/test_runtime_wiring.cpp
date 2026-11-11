@@ -483,7 +483,7 @@ void snapshots() {
     Engine e1;
     CHECK(e1.prepare(c, e), "prepare");
     const state::SnapshotIdentity id = e1.snapshotIdentity();
-    CHECK(id.layout.layoutId == Engine::kSnapshotLayoutId && id.layout.version == 1 && id.layout.byteSize == e1.snapshotBytes() &&
+    CHECK(id.layout.layoutId == Engine::kSnapshotLayoutId && id.layout.version == Engine::kSnapshotLayoutVersion && Engine::kSnapshotLayoutVersion == 2 && id.layout.byteSize == e1.snapshotBytes() &&
           id.layout.byteSize > 0 && id.oversampling == 4 && id.sampleRate == 48000, "layout descriptor");
     state::SnapshotExchange x(id);
     CHECK(e1.attachSnapshotExchange(&x), "attach exchange");
@@ -520,7 +520,7 @@ void snapshots() {
     const Buf y2 = renderQueued(e2, q2, tailIn, {512u}, later);
     const double d = peakDiff(y1, y2);
     CHECK(d <= 1e-6, "snapshot continuation differs by %.3e", d);
-    std::printf("Snapshot: layout 'CDE1' v1 %u bytes (stereo Studio clipper); round-trip continuation peak diff %.3e (limit 1e-6)\n",
+    std::printf("Snapshot: layout 'CDE1' v2 %u bytes (stereo Studio clipper); round-trip continuation peak diff %.3e (limit 1e-6)\n",
                 id.layout.byteSize, d);
     // Mismatched layout (different topology) -> ResetWarm, configuration-only, equals a fresh engine.
     EngineConfig rc = baseConfig();

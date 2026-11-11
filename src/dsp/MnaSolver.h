@@ -5,6 +5,13 @@
 // Validated only against labelled synthetic RC/diode fixtures; no physical device claim (G01).
 // Threading: prepare() allocates and runs the DC solve off-thread; step()/setSource()/state access
 // are noexcept and allocation-free.
+// Additive parameter-update API (temperature feedback, resume packet 2): setElementParameter()
+// changes one manifest parameter of one Device element between substeps. It is noexcept, bounded
+// (O(1)) and allocation-free, and validates the domain exactly like prepare() (finite, inside the
+// manifest's [min,max], numerically representable conductance/step conductance/diode nVt). A
+// rejected update leaves every value unchanged. Capacitor updates keep the stored charge q_old
+// (charge conservation: the next step sees q_old with the new C). The DC operating point is not
+// re-solved; the next step() starts from the previous solution as usual.
 #pragma once
 #include <cstdint>
 #include <string>
@@ -45,6 +52,12 @@ public:
     // kept (never committed invalid), the failure counted, and false returned.
     bool step() noexcept;
     void setSource(int element, double value) noexcept;
+    // Additive (see header): false and no change for a non-Device element, an out-of-range index,
+    // or a value outside the manifest domain / numeric range.
+    bool setElementParameter(int element, int paramIndex, double value) noexcept;
+    // Current value of a Device element parameter; NaN for an invalid element/index.
+    double elementParameter(int element, int paramIndex) const noexcept;
+    int elementCount() const noexcept { return int(el_.size()); }
 
     int unknowns() const noexcept { return m_; }
     double voltage(int node) const noexcept { return node <= 0 ? 0.0 : x_[node - 1]; }

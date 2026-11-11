@@ -1,6 +1,6 @@
 // CircuitDrift runtime: oversampled electrical solve with thermal clock and solver-failure fallback
 // (P03 integration; 01-runtime "Coupled simulation contract", "Oversampling and quality").
-// Owner: cd_runtime. Depends only on cd_core/cd_dsp.
+// Owner: cd_runtime. Depends on cd_core/cd_dsp and cd_control (composeLoadCurrent only).
 //
 // Per host sample (order from the spec, restricted to what exists): upsampled input -> high-rate
 // latency pad -> source volts -> MnaSolver substep x OS -> dissipative power accumulation -> due
@@ -15,9 +15,28 @@
 //    instantaneous v*i [W] from the solved branch voltage is averaged over the OS substeps of each
 //    host sample. Capacitors (reactive storage) and sources (supplied power) are rejected. Audio
 //    amplitude is never used as watts.
-//  * Thermal feedback: none. MnaSolver has no parameter-update API and manifests define no
-//    temperature law, so temperatures are telemetry only. When feedback is added, a new T affects
-//    the sample after its tick (one-tick lag), which reference comparisons must document.
+//  * Thermal feedback (resume packet 2): every Device element whose manifest declares a
+//    TemperatureLaw AND that the thermal map assigns to a node is a feedback element. At each
+//    1 kHz tick, after the heat-network step, its parameter becomes law(nominal, T_node, k) via
+//    MnaSolver::setElementParameter (bounded, noexcept, allocation-free), with k the per-sample
+//    temperature-sensitivity control (Drift: 1+4d; default 1). ONE-TICK LAG: the new T affects the
+//    solver from the host sample AFTER the tick sample (the tick sample itself was already solved
+//    with the old value); reference comparisons must model this lag. Power accounting uses the
+//    updated parameter. Clamps of T (manifest domain) or of the value (parameter bounds) are counted.
+//    Only synthetic tempco fixtures exist (fixture.resistor.tempco; G01 open).
+//  * Supply reservoir (resume packet 3/T15/T16): an EXPLICIT REDUCED SUPPLY MODEL selected by
+//    CircuitConfig::supply (not placed in the MNA netlist). Per channel, per oversampled substep h:
+//    backward Euler C*(V-V_old)/h = I_rect(V) - I_load with an ideal rectifier diode in series with
+//    the source impedance, I_rect = max(0, (V_src - V)/R_src); V is bounded to
+//    [r_min*V_nom, V_src] (minimum-rail manifest bound, clamps counted). V_nom = V_src - R_src*I_idle
+//    (idle equilibrium, r = 1 at rest). The circuit output volts x drive a rail-referenced stage
+//    y = H*tanh(x/H), H = headroomV * r_eff, whose draw is I_phys = I_idle + I_dyn with
+//    I_dyn = |x|/R_load (drive-referenced, so the reservoir trajectory does not depend on r_eff);
+//    I_load = cd::control::composeLoadCurrent(source, I_phys, I_dyn, s, I_ext). C = C_eff from the
+//    Sag macro (max(C_min, C_base/(1+3s))); a C change keeps V continuous. r = V/V_nom is a
+//    control/readout; the device equation uses volts (H). r_eff = r + P(1-r) (TransientDetector
+//    preservation P) changes only the stage headroom: the physical reservoir V is unchanged.
+//    SYNTHETIC numbers (syntheticFactorySupply), not a calibrated supply (G01 open).
 //  * Thermal clock: 1000 Hz fractional phase accumulator advanced per host sample, independent of
 //    callback boundaries; the host sample straddling a tick boundary has its energy split exactly.
 //    The accumulator is an exact integer (phase = acc/fs, +1000 per sample), so integer-Hz rates
@@ -74,10 +93,41 @@ struct SyntheticThermal {
     std::vector<int> elementToNode;
 };
 
+// Reduced SYNTHETIC supply model (see header). Volts/amps/farads of the synthetic fixture only.
+struct SyntheticSupply {
+    bool enabled = false;
+    double sourceV = 1.1;           // rectified DC source V_src [V]
+    double sourceOhm = 100;         // rectifier/source impedance R_src [Ohm]
+    double cBaseF = 200e-6;         // reservoir C_base [F] (Sag binding)
+    double cMinF = 20e-6;           // reservoir C_min [F] (Sag binding)
+    double idleA = 1e-3;            // idle draw I_idle [A]
+    double loadOhm = 270;           // signal draw I_dyn = |x| / R_load [A]
+    double headroomV = 0.5;         // stage headroom at r_eff = 1 [V]
+    double minRailFraction = 0.2;   // minimum rail bound r_min (manifest)
+    double iBudgetA = 4e-3;         // external sidechain current budget I_budget [A]
+    double nominalV() const noexcept { return sourceV - sourceOhm * idleA; }
+};
+// Synthetic factory supply numbers (round, arbitrary; chosen so Sag is audible on the fixture).
+SyntheticSupply syntheticFactorySupply() noexcept;
+
+enum class LoadSource : std::uint8_t { Main = 0, External = 1, Blend = 2 };
+
+// Per-sample controls for process(); every pointer is null (neutral) or holds n values.
+struct CircuitControls {
+    const double* drive = nullptr;          // pre-stage gain on the circuit input (wet only)
+    const double* reservoirC = nullptr;     // C_eff [F]; null -> C_base
+    const double* sag = nullptr;            // smoothed Sag s in [0,1]; null -> 0
+    const double* preserve = nullptr;       // transient preservation P in [0,1]; null -> 0
+    const double* extCurrent = nullptr;     // I_ext [A] (>= 0); null -> 0
+    const double* tempSensitivity = nullptr;  // temperature-law multiplier k; null -> 1
+    LoadSource source = LoadSource::Main;
+};
+
 struct CircuitConfig {
     dsp::Netlist netlist;
     SyntheticIo io;
     SyntheticThermal thermal;
+    SyntheticSupply supply;         // disabled by default (no supply in the original fixtures)
     double sampleRate = 48000;      // integer Hz, 44.1-192 kHz (tested 44.1/48/96/192 only)
     int maxBlock = 512;             // 1..8192 prepared slice
     int channels = 1;               // 1 or 2 (independent electrical state per channel)
@@ -110,6 +160,13 @@ public:
         double fallbackWeight = 0;      // 0 = circuit, 1 = dry
         std::int64_t thermalTicks = 0;
         double thermalPhase = 0;        // [0,1) ticks
+        // supply / thermal feedback
+        bool supplyEnabled = false;
+        double railVolts[2] = {0, 0}, railFraction[2] = {0, 0}, effectiveRailFraction[2] = {0, 0};
+        double loadCurrentA[2] = {0, 0}, reservoirF = 0;
+        std::int64_t railClamps = 0;
+        int feedbackElements = 0;
+        std::int64_t feedbackUpdates = 0, feedbackClamps = 0, feedbackRejected = 0;
     };
 
     CircuitRuntime();
@@ -126,6 +183,14 @@ public:
     // driveGain: null or n per-sample gains applied to the circuit input only.
     void process(const double* const* in, double* const* wet, double* const* dry, int n,
                  const double* driveGain = nullptr) noexcept;
+    // Same with the full per-sample control set (supply, preservation, sidechain, temperature law).
+    void process(const double* const* in, double* const* wet, double* const* dry, int n,
+                 const CircuitControls& controls) noexcept;
+    // Audio-safe: copies the slow physical state (thermal temperatures/energy, 1 kHz clock phase,
+    // reservoir rail volts, feedback parameter values) from another prepared runtime with the same
+    // channel count, thermal node count, feedback layout and supply presence (live quality
+    // transition). False leaves *this unchanged.
+    bool adoptSlowState(const CircuitRuntime& other) noexcept;
     // Snapshot support (audio-safe, allocation-free). loadState(apply=false) only validates.
     void saveState(StateWriter& w) const noexcept;
     bool loadState(StateReader& r, bool apply) noexcept;
@@ -145,6 +210,12 @@ public:
     double lastPowerW(int ch, int node) const noexcept;   // host-sample average of the last sample
     double voltage(int ch, int node) const noexcept;
     int ownedManifestCount() const noexcept;
+    // Current solver value of element parameter k (temperature feedback readout); NaN if invalid.
+    double elementParameter(int ch, int element, int k) const noexcept;
+    // Rail fraction r at the last substep of each host sample of the last process() call (n values).
+    const double* railFractionTrace(int ch) const noexcept;
+    const SyntheticSupply& supply() const noexcept;
+    bool hasTemperatureFeedback() const noexcept;
 
 private:
     struct Core;
