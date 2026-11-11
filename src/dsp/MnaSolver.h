@@ -6,6 +6,7 @@
 // Threading: prepare() allocates and runs the DC solve off-thread; step()/setSource()/state access
 // are noexcept and allocation-free.
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "dsp/DeviceManifest.h"
@@ -30,6 +31,9 @@ struct Netlist {
 class MnaSolver {
 public:
     static constexpr int kMaxNodes = 32, kMaxUnknowns = 96, kMaxComponents = 64, kMaxNonlinear = 8;
+    // Port drive sources (input/supply ports) are injected by the graph compiler in addition to the
+    // 64 user components of the blueprint bound; the solver element bound covers both.
+    static constexpr int kMaxPortSources = 4, kMaxElements = kMaxComponents + kMaxPortSources;
     static constexpr int kDcIterations = 100;
     struct Options { int maxNewton = 8; double tol = 1e-7; }; // finite 0 < tol <= 1e-7
 
@@ -46,7 +50,7 @@ public:
     double voltage(int node) const noexcept { return node <= 0 ? 0.0 : x_[node - 1]; }
     double unknown(int k) const noexcept { return x_[k]; }
     int lastIterations() const noexcept { return lastIter_; }
-    long failures() const noexcept { return failures_; }
+    std::int64_t failures() const noexcept { return failures_; }
     bool needsFallback() const noexcept { return consecutive_ >= 3; }
     double lastScaledResidual() const noexcept { return lastRes_; }
 
@@ -74,7 +78,7 @@ private:
     std::vector<int> capSlot_;          // per element: qOld_ index or -1
     std::vector<double> qOld_, x_, xSave_, xTry_, F_, Ftry_, J_, dx_, rowScale_, unitScale_;
     int n_ = 0, m_ = 0, maxNewton_ = 8, lastIter_ = 0, consecutive_ = 0;
-    long failures_ = 0;
+    std::int64_t failures_ = 0;
     double h_ = 0, tol_ = 1e-7, vScale_ = 1, iScale_ = 1e-3, lastRes_ = 0;
 };
 

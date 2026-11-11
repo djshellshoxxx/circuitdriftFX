@@ -5,6 +5,10 @@
 // Oversampler: 2^k cascade (1x..64x; 32x/64x intended only for the offline T21 reference).
 // Threading: design/prepare allocate and run off the audio thread; process/reset are noexcept,
 // allocation-free, double precision. Coefficients are frozen at prepare for a given Spec.
+// Dynamic state (additive API for engine snapshots, P04/runtime): stateSize()/getState()/
+// setState() copy filter histories and ring positions as doubles (exact integers for positions)
+// into caller buffers; noexcept, allocation-free. setState requires the identical design (same
+// Spec/prepare) and ignores a buffer whose positions are out of range, leaving state unchanged.
 #pragma once
 #include <cstdint>
 #include <vector>
@@ -27,6 +31,10 @@ public:
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
     void reset() noexcept;
+    int stateSize() const noexcept { return int(upLine_.size() + dnEven_.size() + dnOdd_.size()) + 3; }
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;
+    bool stateValid(const double* in) const noexcept;
 private:
     void clear() noexcept;
     double dotEven(const std::vector<double>& line, int pos) const noexcept;
@@ -49,6 +57,9 @@ public:
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
     void reset() noexcept;
+    static constexpr int stateSize() noexcept { return 4 * (kMaxCoefs / 2) * 2; }
+    void getState(double* out) const noexcept;
+    void setState(const double* in) noexcept;
 private:
     struct Ap { double a = 0, x1 = 0, y1 = 0; };
     double path(Ap* s, int count, double x) noexcept;
@@ -82,6 +93,10 @@ public:
     void up(const double* in, double* out, int n) noexcept;
     void down(const double* in, double* out, int n) noexcept;
     void reset() noexcept;
+    int stateSize() const noexcept;
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;   // all stages or nothing
+    bool stateValid(const double* in) const noexcept;
 private:
     static constexpr int kMaxStages = 6;
     PolyphaseHalfband2x fir_[kMaxStages];
