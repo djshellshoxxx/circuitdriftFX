@@ -71,7 +71,7 @@ std::string canonicalBlueprint(const JsonValue& v, bool& ok) {
 bool saveLiteState(const LiteState& s, std::string& out, std::string& err) {
     if (!(std::isfinite(s.knobs.sag) && s.knobs.sag >= 0 && s.knobs.sag <= 1 && std::isfinite(s.knobs.thermalAge) &&
           s.knobs.thermalAge >= 0 && s.knobs.thermalAge <= 1)) { err = "knob out of range"; return false; }
-    if (double(s.seed) > kMaxSafeInt) { err = "seed exceeds 2^53"; return false; }
+    if (s.seed > (std::uint64_t(1) << 53)) { err = "seed exceeds 2^53"; return false; }
     if (s.qualityRevision != kLiteQualityRevision) { err = "unsupported quality revision"; return false; }
     if (!s.ui.isObject()) { err = "ui must be an object"; return false; }
     JsonValue o = JsonValue::makeObject();

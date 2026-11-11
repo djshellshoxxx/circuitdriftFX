@@ -20,3 +20,20 @@ AI-assisted independent review of the modules merged on PR #9 (control, state qu
 Also fixed: RtTrap positive control in `test_state_queue` was elided by clang Release (kept alive). Checked with no defect: RtQueue SPSC, GenerationPool reclaim, SnapshotExchange, AbMixer, SHA-256 (vs hashlib 0–299 B chunked), LocalCache, StateDocument repairs, quantizer/tempo/delay, blueprint parser bounds.
 
 Residual: clang build ran without sanitizers (runtime missing locally); libc++ not tested; runtime `long` diagnostic counters pending (owned by the engine-wiring writer).
+
+## Round 2 — 2026-11-11 (network, media, edition, uimodel, analysis, runtime additions, CI)
+
+Same method (AI-assisted, read-only reviewer, repro per finding; not a professional audit). gcc `-O2 -D_GLIBCXX_ASSERTIONS` 43/43 pass; TSAN 19/19 suites clean (cross-process network traffic invisible to TSAN). No Critical/High.
+
+| ID | Sev | Location | Defect | Status |
+|---|---|---|---|---|
+| R2-M1 | Medium | .github/workflows/nightly.yml | Stress/benchmark steps could never fail (`cmd \| tee` status, PIPESTATUS read after a later pipeline) | **Fixed**: capture `rc=${PIPESTATUS[0]}` immediately, `exit $rc`; benchmark `shell: bash` (pipefail). Simulated failing binary → step exit 3 |
+| R2-M2 | Medium | src/network/Member.cpp `attach` + Protocol.cpp `validateRegion` | Double fetch of shared header: second copy only partly re-validated → same-uid writer can inject NaN sampleRate / negative rail (UB in int64(ceil(NaN))) | **Unfixed** — use the validated header copy only (return it from validateRegion) |
+| R2-M3 | Medium (test harness) | tests/support/RtTrapWrap.cpp, CMakeLists wrap list | Trap misses pthread_cond_clockwait, pthread_mutex_clocklock, pwrite/fsync/nanosleep/writev, and calls from inside shared libs → false passes possible | **Unfixed** — extend wrap list; document LD_PRELOAD for in-library calls |
+| R2-L1 | Low | tests/support/RtTrapWrap.cpp | `flags & O_TMPFILE` true for any O_DIRECTORY open → va_arg UB | **Fixed** (glibc test `(flags & __O_TMPFILE) == __O_TMPFILE`) |
+| R2-L2 | Low | src/runtime/Engine.cpp `readState` (CDE1 v2) | Macro/filter state, bools and Scenario enum copied raw from snapshot payload with spot checks only; 1e300 state accepted (output still contained) | **Unfixed** — validate every double, route timeline via restore(), store enums/bools as checked integers. No external payload source wired today |
+| R2-L3 | Low | src/media/WavWriter.cpp | Data cap ignored header bytes → RIFF size field could wrap near 4 GiB | **Fixed** (cap = 0xFFFFFFFF − header − 1) |
+| R2-L4 | Low | src/edition/LiteState.cpp | Seed compared as double → 2^53+1 accepted and silently saved as 2^53 | **Fixed** + regression in `edition_lite` |
+| R2-L5 | Low | .github/workflows/*.yml | Actions pinned to mutable tags (@v4) | **Unfixed** — pin to full commit SHAs (supply-chain hardening) |
+
+Checked, no defect: shm create/open (O_EXCL, 0600, fstat owner/mode/size, O_NOFOLLOW), ring index/masking, broker/co-render bundle bounds, FileSink O_EXCL temp, PNG/GIF/LZW bounds (re-verified vs Pillow 12.3), LITE JSON limits, uimodel parsing, telemetry clamps, SlotEngine/ProcessorGraph, setElementParameter. Residual untested: shrinking ftruncate of the shm object by a same-uid process (SIGBUS).

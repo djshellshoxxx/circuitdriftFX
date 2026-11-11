@@ -290,6 +290,14 @@ void stateRoundTrip() {
     CHECK(rejects("\"sag\":0.6", "\"sag\":1.6"), "sag > 1 accepted (must not clamp)");
     LiteState bad;
     CHECK(!loadLiteState("{\"sag\":NaN}", bad, e) && !loadLiteState("", bad, e), "malformed accepted");
+    {   // review L (2026-11-11): 2^53+1 must be rejected, not rounded to 2^53 by a double compare
+        LiteState big{};
+        std::string out, e2;
+        big.seed = (std::uint64_t(1) << 53) + 1;
+        CHECK(!saveLiteState(big, out, e2), "seed 2^53+1 accepted");
+        big.seed = std::uint64_t(1) << 53;
+        CHECK(saveLiteState(big, out, e2), "seed 2^53 rejected: %s", e2.c_str());
+    }
     std::printf("T05 state: save/reload byte-identical (%zu bytes) and render bit-identical; 9 malformed/foreign states rejected\n", t1.size());
 }
 

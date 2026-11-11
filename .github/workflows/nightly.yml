@@ -29,10 +29,14 @@ jobs:
         run: |
           mkdir -p logs
           start=$(date +%s)
+          set +e
           ./build/cd_rt_stress_tests 2>&1 | tee logs/rt_stress.log
+          rc=${PIPESTATUS[0]}
+          set -e
           echo "total wall seconds: $(( $(date +%s) - start ))" | tee -a logs/rt_stress.log
-          test "${PIPESTATUS[0]}" -eq 0
+          exit "$rc"
       - name: Benchmark
+        shell: bash   # -eo pipefail: a failing benchmark must fail the step, not tee
         run: ./build/cd_bench 2>&1 | tee logs/bench.log
       - uses: actions/upload-artifact@v4
         if: always()
