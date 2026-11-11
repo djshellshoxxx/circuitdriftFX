@@ -30,6 +30,13 @@ public:
     // Up: one base sample -> two high-rate samples (gain 2 applied). Down: two -> one.
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
+    // Block forms (performance): bit-identical to n calls of up()/down() including the resulting
+    // state, but four independent output sums are interleaved so the sequential FP add chains
+    // overlap. They need reserveBlock(maxN) (allocates; off the audio thread) with n <= maxN and
+    // fall back to the per-sample path otherwise or for tiny n. up: n base -> 2n; down: 2n -> n.
+    void reserveBlock(int maxN);
+    void upBlock(const double* in, double* out2n, int n) noexcept;
+    void downBlock(const double* in2n, double* out, int n) noexcept;
     void reset() noexcept;
     int stateSize() const noexcept { return int(upLine_.size() + dnEven_.size() + dnOdd_.size()) + 3; }
     void getState(double* out) const noexcept;
@@ -40,6 +47,8 @@ private:
     double dotEven(const std::vector<double>& line, int pos) const noexcept;
     std::vector<double> h_, even_;                          // even_ = h[0], h[2], ..., h[2c]
     std::vector<double> upLine_, dnEven_, dnOdd_;          // doubled ring buffers (len 2*E)
+    std::vector<double> lin_;                               // block scratch (not state): history + block (+ odd terms)
+    int linMaxN_ = 0;
     int c_ = 0, E_ = 0, upPos_ = 0, dnPos_ = 0, oddPos_ = 0, oddLen_ = 0;
 };
 

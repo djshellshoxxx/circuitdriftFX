@@ -100,6 +100,7 @@ public:
 
 private:
     struct Core;
+    static void primeClipStage(Core& core, int channel) noexcept;
     std::unique_ptr<Core> core_;
     OutputParams pending_{};
 };

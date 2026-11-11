@@ -43,6 +43,65 @@ std::string withSeed(const char* token) {
     return text;
 }
 
+// A custom migration can introduce malformed in-memory strings even when the
+// original document was valid UTF-8. Reject those trees without throwing.
+bool migrateInvalidMetadataKey(core::JsonValue& tree, std::string&) {
+    tree.set("schemaVersion", core::JsonValue::makeNumber(1));
+    tree.set(std::string("\x80", 1), core::JsonValue::makeString("synthetic"));
+    return true;
+}
+
+bool migrateInvalidMetadataValue(core::JsonValue& tree, std::string&) {
+    tree.set("schemaVersion", core::JsonValue::makeNumber(1));
+    tree.set("x-token", core::JsonValue::makeString(std::string("\x80", 1)));
+    return true;
+}
+
+void migratedUtf8Boundary() {
+    auto input = sceneTree();
+    input.set("schemaVersion", core::JsonValue::makeNumber(0));
+    const auto legacy = core::writeJson(input);
+    state::StateDocument doc;
+    std::string error;
+    CHECK(state::loadState(kScene, doc, error));
+    const auto before = state::saveState(doc);
+    for (const state::MigrationFn step : {migrateInvalidMetadataKey, migrateInvalidMetadataValue}) {
+        const state::MigrationChain migrations{0, {step}};
+        bool rejected = false, threw = false;
+        try { rejected = !state::loadState(legacy, doc, error, migrations); }
+        catch (const std::invalid_argument&) { threw = true; }
+        CHECK(!threw && rejected);
+        CHECK(!error.empty());
+        CHECK(state::saveState(doc) == before);
+    }
+}
+
+void utf8WriterBoundary() {
+    using core::JsonValue;
+    const auto rejects = [](const JsonValue& value) {
+        try { (void)core::writeJson(value); return false; }
+        catch (const std::invalid_argument&) { return true; }
+    };
+    for (const std::string invalid : {
+        std::string("\x80", 1), std::string("\xC0\xAF", 2),
+        std::string("\xE0\x80\x80", 3), std::string("\xED\xA0\x80", 3),
+        std::string("\xF4\x90\x80\x80", 4), std::string("\xF0\x9F", 2)}) {
+        CHECK(rejects(JsonValue::makeString(invalid)));
+        auto obj = JsonValue::makeObject();
+        obj.set(invalid, JsonValue::makeNumber(1));
+        CHECK(rejects(obj));
+    }
+    const std::string valid = std::string("A\xC3\xA9\xF0\x9F\x98\x80", 7);
+    auto obj = JsonValue::makeObject();
+    obj.set(valid, JsonValue::makeString(valid));
+    std::string error;
+    JsonValue parsed;
+    CHECK(core::parseJson(core::writeJson(obj), parsed, error));
+    CHECK(parsed.get(valid) && parsed.get(valid)->string == valid);
+    CHECK(core::writeJson(JsonValue::makeString(std::string("nul\0byte", 8))) ==
+          "\"nul\\u0000byte\"");
+}
+
 void localeNumbers() {
     const std::string original = std::setlocale(LC_NUMERIC, nullptr);
     int commaLocales = 0;
@@ -273,6 +332,8 @@ void atomicFiles() {
 } // namespace
 
 int main() {
+    migratedUtf8Boundary();
+    utf8WriterBoundary();
     localeNumbers(); exactIdentitiesAndFeatures(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;

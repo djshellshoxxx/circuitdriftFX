@@ -50,7 +50,7 @@ const char* const kThermalFixtures[kSyntheticThermalFixtureCount] = {
         "provenance":{"kind":"synthetic-fixture","note":"Ideal resistor with an arbitrary linear tempco for thermal-feedback validation; not a measured component (G01 open)."}})",
 };
 
-bool positive(const core::JsonValue* v) { return v && v->isNumber() && v->number > 0; }
+bool positive(const core::JsonValue* v) { return v && v->isNumber() && std::isfinite(v->number) && v->number > 0; }
 
 bool parseTemperatureLaw(const core::JsonValue& t, DeviceManifest& m, std::string& why) {
     if (!t.isObject()) { why = "temperature must be an object"; return false; }
@@ -107,11 +107,11 @@ bool parseDeviceManifest(const core::JsonValue& v, DeviceManifest& m, std::strin
                                                   "parameters", "scales", "domain", "provenance", "temperature"};
     for (const auto& kv : v.object) if (!allowed.count(kv.first)) return bad("unknown key " + kv.first);
     const auto* sv = v.get("schemaVersion");
-    if (!sv || !sv->isNumber() || sv->number != 1) return bad("schemaVersion must be 1");
+    if (!sv || !sv->isNumber() || !sv->numberIsExactInteger || sv->number != 1) return bad("schemaVersion must be 1");
     const auto* id = v.get("modelId");
     if (!id || !id->isString() || id->string.empty() || id->string.size() > 64) return bad("modelId");
     const auto* rev = v.get("revision");
-    if (!rev || !rev->isNumber() || rev->number < 1 || rev->number != std::floor(rev->number) || rev->number > 1e6)
+    if (!rev || !rev->isNumber() || !rev->numberIsExactInteger || rev->number < 1 || rev->number > 1e6)
         return bad("revision");
     const auto* eq = v.get("equation");
     const Family* fam = nullptr;
@@ -139,6 +139,7 @@ bool parseDeviceManifest(const core::JsonValue& v, DeviceManifest& m, std::strin
         if (!n || !n->isString() || n->string != fam->params[k].first) return bad("parameter name/order");
         if (!u || !u->isString() || u->string != fam->params[k].second) return bad("unit of " + n->string);
         if (!lo || !hi || !d || !lo->isNumber() || !hi->isNumber() || !d->isNumber()) return bad("bounds of " + n->string);
+        if (!std::isfinite(lo->number) || !std::isfinite(hi->number) || !std::isfinite(d->number)) return bad("non-finite bounds: " + n->string);
         if (!(lo->number <= d->number && d->number <= hi->number)) return bad("default outside bounds: " + n->string);
         if (lo->number <= 0) return bad("non-positive lower bound: " + n->string);  // all families need >0
         m.params.push_back({n->string, u->string, lo->number, hi->number, d->number});

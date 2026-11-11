@@ -27,6 +27,12 @@ struct OutputStage::Core {
         dsp::Oversampler os;
         DelayLine pad, raw;
         std::vector<double> hi;
+        // Soft-clip bypass support (factor > 1): history of the pre-clip signal, L = 2*declared+4
+        // samples, used both as the pure-delay path while the clip is fully off and to re-prime the
+        // oversampler/pad exactly when it is re-enabled (their memory is shorter than L).
+        std::vector<double> hist;
+        int histPos = 0;
+        bool warm = true;   // oversampler/pad state is current (false while the pure-delay path runs)
     };
     Channel ch[kMaxChannels];
     LatencyPlan plan;
@@ -63,6 +69,9 @@ bool OutputStage::prepare(const OutputConfig& cfg, std::string& err) {
         ch.pad.prepare(core->plan.padHigh);
         ch.raw.prepare(cfg.upstreamLatency + core->plan.declared);
         ch.hi.assign(std::size_t(cfg.clipOs.factor), 0.0);
+        ch.hist.assign(std::size_t(2 * core->plan.declared + 4), 0.0);
+        ch.histPos = 0;
+        ch.warm = true;
     }
     const double fs = cfg.sampleRate;
     core->inGain.prepare(fs, kGainTau); core->trim.prepare(fs, kGainTau); core->mix.prepare(fs, kGainTau);
@@ -137,12 +146,29 @@ void OutputStage::applyInputGain(const double* const* in, double* const* out, in
     }
 }
 
+// Replays the stored pre-clip history through the (identity-clipped) up/pad/down chain so the
+// oversampler and pad hold exactly the state an always-running stage would have (FIR memory is
+// shorter than the ring, so the result is bit-identical; IIR histories converge). Bounded work.
+void OutputStage::primeClipStage(Core& core, int c) noexcept {
+    auto& ch = core.ch[c];
+    const int F = core.factor;
+    const int L = int(ch.hist.size());
+    double sink = 0;
+    for (int j = 0; j < L; ++j) {
+        double v = ch.hist[std::size_t((ch.histPos + j) % L)];
+        ch.os.up(&v, ch.hi.data(), 1);
+        for (int s = 0; s < F; ++s) ch.hi[std::size_t(s)] = ch.pad.process(ch.hi[std::size_t(s)]);
+        ch.os.down(ch.hi.data(), &sink, 1);
+    }
+}
+
 void OutputStage::process(const double* const* rawDry, const double* const* dryA, const double* const* wetA,
                           double* const* out, int n) noexcept {
     Core* k = core_.get();
     if (!k || n <= 0 || n > k->maxBlock || !rawDry || !dryA || !wetA || !out) return;
     for (int c = 0; c < k->channels; ++c) if (!rawDry[c] || !dryA[c] || !wetA[c] || !out[c]) return;
     const int C = k->channels, F = k->factor;
+    const LatencyPlan& plan = k->plan;
     for (int i = 0; i < n; ++i) {
         const double fb = k->fallback.next();
         const double m = k->mix.next(), trim = k->trim.next(), e = k->autoGain.next();
@@ -171,13 +197,38 @@ void OutputStage::process(const double* const* rawDry, const double* const* dryA
                 ch.hpf.reset(); f = 0.0; bump(k->stageResets);
             }
             y = hx == 0.0 ? y : (hx == 1.0 ? f : (1.0 - hx) * y + hx * f);
-            ch.os.up(&y, ch.hi.data(), 1);
-            for (int s = 0; s < F; ++s) {
-                const double x = ch.pad.process(ch.hi[std::size_t(s)]);
-                ch.hi[std::size_t(s)] = cx == 0.0 ? x : (cx == 1.0 ? dsp::softClip(x) : (1.0 - cx) * x + cx * dsp::softClip(x));
+            if (F > 1) {
+                // Soft clip fully off (cx == 0): a pure integer delay of the declared latency replaces
+                // the up/pad/down round trip (no resampling ripple/band-limit; latency unchanged). The
+                // oversampler is re-primed from the history ring when the clip turns back on.
+                const int L = int(ch.hist.size());
+                const double delayed = ch.hist[std::size_t((ch.histPos + L - plan.declared) % L)];
+                if (cx == 0.0) {
+                    ch.warm = false;
+                    ch.hist[std::size_t(ch.histPos)] = y;
+                    ch.histPos = ch.histPos + 1 == L ? 0 : ch.histPos + 1;
+                    y = delayed;
+                } else {
+                    if (!ch.warm) { primeClipStage(*k, c); ch.warm = true; }
+                    ch.hist[std::size_t(ch.histPos)] = y;
+                    ch.histPos = ch.histPos + 1 == L ? 0 : ch.histPos + 1;
+                    ch.os.up(&y, ch.hi.data(), 1);
+                    for (int s = 0; s < F; ++s) {
+                        const double x = ch.pad.process(ch.hi[std::size_t(s)]);
+                        ch.hi[std::size_t(s)] = cx == 1.0 ? dsp::softClip(x) : (1.0 - cx) * x + cx * dsp::softClip(x);
+                    }
+                    ch.os.down(ch.hi.data(), &y, 1);
+                    if (!isFiniteSample(y)) { ch.os.reset(); ch.pad.reset(); bump(k->stageResets); }
+                }
+            } else {
+                ch.os.up(&y, ch.hi.data(), 1);
+                for (int s = 0; s < F; ++s) {
+                    const double x = ch.pad.process(ch.hi[std::size_t(s)]);
+                    ch.hi[std::size_t(s)] = cx == 0.0 ? x : (cx == 1.0 ? dsp::softClip(x) : (1.0 - cx) * x + cx * dsp::softClip(x));
+                }
+                ch.os.down(ch.hi.data(), &y, 1);
+                if (!isFiniteSample(y)) { ch.os.reset(); ch.pad.reset(); bump(k->stageResets); }
             }
-            ch.os.down(ch.hi.data(), &y, 1);
-            if (!isFiniteSample(y)) { ch.os.reset(); ch.pad.reset(); bump(k->stageResets); }
             y = bx == 0.0 ? y : (bx == 1.0 ? raw[c] : (1.0 - bx) * y + bx * raw[c]);
             // Emergency containment (independent of the soft clip).
             if (!isFiniteSample(y)) { y = 0.0; bump(k->nonFinite); trip = true; }
@@ -194,6 +245,9 @@ void OutputStage::reset() noexcept {
     for (int c = 0; c < k->channels; ++c) {
         auto& ch = k->ch[c];
         ch.hpf.reset(); ch.os.reset(); ch.pad.reset(); ch.raw.reset();
+        std::fill(ch.hist.begin(), ch.hist.end(), 0.0);
+        ch.histPos = 0;
+        ch.warm = true;   // zero history and zero oversampler state agree
     }
     const OutputParams& p = pending_;
     k->inGain.snap(dbToGain(p.inputGainDb)); k->trim.snap(dbToGain(p.outputTrimDb)); k->mix.snap(p.mix);
@@ -234,6 +288,9 @@ void OutputStage::saveState(StateWriter& w) const noexcept {
         w.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()));
         ch.pad.save(w);
         ch.raw.save(w);
+        const std::int64_t hdr[2] = {ch.histPos, ch.warm ? 1 : 0};
+        w.pod(hdr);
+        w.doubles(ch.hist.data(), ch.hist.size());
     }
 }
 
@@ -257,6 +314,10 @@ bool OutputStage::loadState(StateReader& r, bool apply) noexcept {
         if (!r.doubles(k->scratch.data(), std::size_t(ch.os.stateSize()))) return false;
         if (!(apply ? ch.os.setState(k->scratch.data()) : ch.os.stateValid(k->scratch.data()))) return false;
         if (!ch.pad.load(r, apply) || !ch.raw.load(r, apply)) return false;
+        std::int64_t hdr[2] = {0, 0};
+        if (!r.pod(hdr) || hdr[0] < 0 || hdr[0] >= std::int64_t(ch.hist.size()) || (hdr[1] != 0 && hdr[1] != 1)) return false;
+        if (!(apply ? r.doubles(ch.hist.data(), ch.hist.size()) : r.bytes(nullptr, ch.hist.size() * sizeof(double)))) return false;
+        if (apply) { ch.histPos = int(hdr[0]); ch.warm = hdr[1] == 1; }
     }
     return true;
 }

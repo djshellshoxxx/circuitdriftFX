@@ -1,5 +1,7 @@
 // Numeric containment regressions; every circuit is a synthetic software fixture.
 #include "dsp/MnaSolver.h"
+#include "dsp/DeviceManifest.h"
+#include "core/Json.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -41,6 +43,54 @@ std::vector<double> state(const MnaSolver& solver) {
     std::vector<double> result(solver.stateSize());
     solver.getState(result.data());
     return result;
+}
+
+void manifestIdentityAndFiniteBounds() {
+    using cd::core::JsonValue;
+    JsonValue tree;
+    DeviceManifest parsed;
+    std::string error;
+    CHECK(cd::core::parseJson(syntheticFixtureJson(0), tree, error));
+    CHECK(parseDeviceManifest(tree, parsed, error));
+
+    // Decimal identities can round to integer doubles while retaining an inexact token.
+    for (const char* text : {"1.0000000000000001", "0.99999999999999999"}) {
+        JsonValue altered;
+        const std::string input = std::string(syntheticFixtureJson(0));
+        const std::string needle = "\"schemaVersion\":1";
+        const auto pos = input.find(needle);
+        CHECK(pos != std::string::npos);
+        if (pos == std::string::npos) continue;
+        auto changed = input;
+        changed.replace(pos, needle.size(), std::string("\"schemaVersion\":") + text);
+        CHECK(cd::core::parseJson(changed, altered, error));
+        CHECK(!parseDeviceManifest(altered, parsed, error));
+    }
+    for (const char* text : {"1.0000000000000001", "0.99999999999999999"}) {
+        const std::string input = syntheticFixtureJson(0);
+        const std::string needle = "\"revision\":1";
+        const auto pos = input.find(needle);
+        CHECK(pos != std::string::npos);
+        if (pos == std::string::npos) continue;
+        auto changed = input;
+        changed.replace(pos, needle.size(), std::string("\"revision\":") + text);
+        JsonValue altered;
+        CHECK(cd::core::parseJson(changed, altered, error));
+        CHECK(!parseDeviceManifest(altered, parsed, error));
+    }
+
+    const double inf = std::numeric_limits<double>::infinity();
+    for (const char* field : {"min", "max", "default"}) {
+        JsonValue altered = tree;
+        altered.get("parameters")->array[0].set(field, JsonValue::makeNumber(inf));
+        CHECK(!parseDeviceManifest(altered, parsed, error));
+    }
+    for (const char* field : {"voltageV", "currentA"}) {
+        JsonValue altered = tree;
+        altered.get("scales")->set(field, JsonValue::makeNumber(inf));
+        CHECK(!parseDeviceManifest(altered, parsed, error));
+    }
+    CHECK(parseDeviceManifest(tree, parsed, error));
 }
 
 void finitePreparation() {
@@ -150,6 +200,7 @@ void checkpointRejection() {
 } // namespace
 
 int main() {
+    manifestIdentityAndFiniteBounds();
     finitePreparation();
     transactionalPreparationAndSteps();
     checkpointRejection();
