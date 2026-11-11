@@ -96,6 +96,78 @@ double PolyphaseHalfband2x::down(const double* in2) noexcept {
     return dotEven(dnEven_, dnPos_) + 0.5 * odd;
 }
 
+void PolyphaseHalfband2x::dotEven4(const double* line, int base, double* acc4) const noexcept {
+    const double* e = even_.data();
+    const double* x0 = line + base;
+    const double* x1 = x0 - 1;
+    const double* x2 = x0 - 2;
+    const double* x3 = x0 - 3;
+    double a0 = 0, a1 = 0, a2 = 0, a3 = 0;
+    for (int j = 0, n = E_; j < n; ++j) {
+        const double c = e[j];
+        a0 += c * x0[j]; a1 += c * x1[j]; a2 += c * x2[j]; a3 += c * x3[j];
+    }
+    acc4[0] = a0; acc4[1] = a1; acc4[2] = a2; acc4[3] = a3;
+}
+
+// Ring invariant: line[p] == line[p + E] for every slot p, and the window for the sample written
+// at slot p is line[p .. p+E-1]. Writing four new samples at slots p..p-3 (no wrap) and deferring
+// their upper copies keeps every one of the four windows intact: window k only reaches upper copies
+// of samples written after it, whose old values (the oldest history) it still needs.
+void PolyphaseHalfband2x::upBlock(const double* in, double* out, int n) noexcept {
+    if (E_ == 0) { for (int i = 0; i < 2 * n; ++i) out[i] = 0; return; }
+    double* L = upLine_.data();
+    const int E = E_, d = (c_ - 1) / 2;
+    int i = 0;
+    while (i < n) {
+        if (n - i >= 4 && upPos_ >= 4) {
+            const int p = upPos_ - 1;
+            for (int k = 0; k < 4; ++k) L[p - k] = in[i + k];
+            double acc[4];
+            dotEven4(L, p, acc);
+            for (int k = 0; k < 4; ++k) {
+                out[2 * (i + k)] = 2.0 * acc[k];
+                out[2 * (i + k) + 1] = L[p - k + d];
+            }
+            for (int k = 0; k < 4; ++k) L[p - k + E] = in[i + k];
+            upPos_ = p - 3;
+            i += 4;
+        } else {
+            up(in[i], out + 2 * i);
+            ++i;
+        }
+    }
+}
+
+void PolyphaseHalfband2x::downBlock(const double* in, double* out, int n) noexcept {
+    if (E_ == 0) { for (int i = 0; i < n; ++i) out[i] = 0; return; }
+    double* L = dnEven_.data();
+    const int E = E_, d = (c_ + 1) / 2;
+    int i = 0;
+    while (i < n) {
+        if (n - i >= 4 && dnPos_ >= 4) {
+            const int p = dnPos_ - 1;
+            double ev[4], od[4];  // read all inputs first: safe even for out == in
+            for (int k = 0; k < 4; ++k) { ev[k] = in[2 * (i + k)]; od[k] = in[2 * (i + k) + 1]; }
+            for (int k = 0; k < 4; ++k) L[p - k] = ev[k];
+            double acc[4];
+            dotEven4(L, p, acc);
+            for (int k = 0; k < 4; ++k) {
+                const double odd = dnOdd_[std::size_t((oddPos_ + oddLen_ - d) % oddLen_)];
+                dnOdd_[std::size_t(oddPos_)] = od[k];
+                oddPos_ = (oddPos_ + 1) % oddLen_;
+                out[i + k] = acc[k] + 0.5 * odd;
+            }
+            for (int k = 0; k < 4; ++k) L[p - k + E] = ev[k];
+            dnPos_ = p - 3;
+            i += 4;
+        } else {
+            out[i] = down(in + 2 * i);
+            ++i;
+        }
+    }
+}
+
 void PolyphaseHalfband2x::reset() noexcept {
     std::fill(upLine_.begin(), upLine_.end(), 0.0);
     std::fill(dnEven_.begin(), dnEven_.end(), 0.0);
@@ -285,10 +357,8 @@ void Oversampler::up(const double* in, double* out, int n) noexcept {
     int len = n;
     for (int s = 0; s < stages_; ++s) {
         double* dst = (s == stages_ - 1) ? out : ((s % 2) ? bufB_.data() : bufA_.data());
-        for (int i = 0; i < len; ++i) {
-            if (family_ == OsFamily::Fir) fir_[s].up(src[i], dst + 2 * i);
-            else iir_[s].up(src[i], dst + 2 * i);
-        }
+        if (family_ == OsFamily::Fir) fir_[s].upBlock(src, dst, len);
+        else for (int i = 0; i < len; ++i) iir_[s].up(src[i], dst + 2 * i);
         src = dst; len *= 2;
     }
 }
@@ -300,8 +370,8 @@ void Oversampler::down(const double* in, double* out, int n) noexcept {
     int len = n * factor_;
     for (int s = stages_ - 1, k = 0; s >= 0; --s, ++k) {
         double* dst = (s == 0) ? out : ((k % 2) ? bufB_.data() : bufA_.data());
-        for (int i = 0; i < len / 2; ++i)
-            dst[i] = (family_ == OsFamily::Fir) ? fir_[s].down(src + 2 * i) : iir_[s].down(src + 2 * i);
+        if (family_ == OsFamily::Fir) fir_[s].downBlock(src, dst, len / 2);
+        else for (int i = 0; i < len / 2; ++i) dst[i] = iir_[s].down(src + 2 * i);
         src = dst; len /= 2;
     }
 }
