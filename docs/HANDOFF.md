@@ -11,22 +11,30 @@ Codex is integration owner for the user-approved reconciliation and safety fixes
 ## What exists
 
 - `cd_core`: stable 74-parameter registry and bounded JSON parsing/writing.
-- `cd_dsp`: thermal/protection primitives, original fixed 77-tap `Halfband2x`, configurable `PolyphaseHalfband2x` FIR/IIR cascade, synthetic device manifests and MNA solver.
-- `cd_state`: scene/session documents, migration mechanism, compatibility decisions and local save helper. These are worker-side primitives; there is no integrated audio state transaction queue.
-- Acceptance and safety regression executables, with verification limits recorded in the integration review.
+- `cd_dsp`: thermal network (with step status), protection primitives, fixed and configurable halfband/oversampling, synthetic manifests, MNA solver.
+- `cd_control`: macros, transient/sidechain detectors, seeded creative motion and pitch-drift delay, tempo clock, scale quantizer/MIDI tracker, worker-side pitch detector, harmonic calibration map.
+- `cd_state`: scene/session documents with save pre-validation, SPSC transaction queue, generation pool, snapshot exchange, A/B mixer, 20-step history.
+- `cd_blueprint`: blueprint parser/compiler to immutable `PreparedGraph`, lifecycle timeline, fault overlays.
+- `cd_runtime`: `Engine` = oversampled MNA circuit + aligned dry + output stage + containment, latency planning.
+- `cd_community`: SHA-256, catalog client, LRU cache against an abstract transport (mock only).
+- Tests: one ctest suite per `tests/test_*.cpp`; RtTrap allocation trap in `tests/support`.
 
-The product is incomplete. No JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model, cross-platform runtime qualification or measured CPU/memory compliance is claimed. The T21 hot 4x synthetic stimulus misses its proposed target; see traceability.
+The product is incomplete: modules are not yet composed into one processing graph; no JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model or measured CPU/memory compliance. See traceability for findings.
 
-## Resume packets
+## Resume packets (updated by checkpoint on PR #9)
 
-1. **P04 queue/snapshot interface**: resolve provider-owned runtime layout and generations with the solver owner. Define producer/consumer ownership, coherent configuration revision, bounded preallocated request/publish slots, sample index/clock remainder, off-audio reclamation and stopped-audio save fallback before implementation. Acceptance: partitioned blocks including zero frames, queue pressure, concurrent save/restore, old-generation rejection and no audio allocation/lock/I/O. Configuration persistence must work when a dynamic checkpoint is unavailable. Do not replace the existing registry or JSON implementation.
-2. **UX-09 instrumentation**: agree the process-entry contract and platform trap scope. A test-only thread-local callback scope may instrument allocation/deallocation, mutex/OS I/O and count violations without callback logging. Prove traps with positive controls and prove worker activity is excluded. Primitive smoke tests alone cannot pass the required one-hour integrated audio stress test.
-3. **P03 integration**: place the current MNA solver inside the current oversampler; preserve thermal and electrical timebases across block partitions. Implement finite-output containment and the specified delayed-dry fallback. Re-measure aliasing on the circuit before claiming T21, then add latency padding/compensation and transitions. Keep the hot-case miss visible; do not lower its threshold or silently change quality.
-4. **Publication**: current export validation supports only the explicitly bounded synthetic scene subset. Nonempty opaque macros/timeline/faults or unsupported blueprint payloads are rejected until P05/P10/P11 provide safe typed schemas. No cloud service is provisioned and no scene is uploaded by these helpers.
+Module writers this checkpoint (disjoint files; coordinator owns CMake/docs/integration): control (Macros/Dynamics/CreativeMotion), musical (TempoClock/ScaleQuantizer/PitchDetector/HarmonicTarget), state (RtQueue/TransactionQueue/SnapshotExchange/AbSlots/History), runtime (src/runtime, tests/support/RtTrap), blueprint (src/blueprint), community (src/community), repair (StateDocument/ThermalNetwork additive). Agree a writer before editing another module.
+
+1. **Wire the engine**: Engine consumes TransactionQueue events (sample-accurate parameter changes), GenerationPool-installed blueprint `PreparedGraph`s with 20 ms graph crossfade, MacroSmoother/evaluate effective values, timeline/fault overlays, AbMixer over two Engine paths, and SnapshotExchange capture with a provider layout descriptor. Keep all audio paths under RtTrap with positive controls.
+2. **Temperature feedback**: MnaSolver needs a bounded parameter-update API and manifests need temperature laws before thermal state can affect the circuit (G01).
+3. **Quality transitions**: live quality change with 20 ms crossfade and the host latency handshake; phase-family changes staged to deactivation.
+4. **P12 LITE**: edition manifest + two-knob mapping (liteMappingVersion=1) over the same Engine; T05 peak ≤1e-6 versus the equivalent full configuration.
+5. **UX-09 completion**: mutex/OS-I/O traps and the one-hour integrated stress.
+6. **Adapters/UI (P08/P09/P18)** need G09 (JUCE pin/licence) and G11 decisions from the owner.
 
 ## Verification and gates
 
-Preferred build:
+Preferred build (add `-G Ninja` if available; set `ASAN_OPTIONS=detect_leaks=0` only where LSan cannot run):
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON

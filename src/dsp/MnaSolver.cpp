@@ -26,7 +26,7 @@ bool MnaSolver::prepareInternal(const Netlist& net, double h, const Options& opt
     if (opt.maxNewton < 1 || opt.maxNewton > 12 || !(opt.tol > 0 && opt.tol <= 1e-7 && std::isfinite(opt.tol)))
         return bad("Newton options out of range (finite 0 < tolerance <= 1e-7 required)");
     if (net.nodes < 1 || net.nodes > kMaxNodes) return bad("node count outside 1..32");
-    if (net.elements.empty() || net.elements.size() > kMaxComponents) return bad("component count outside 1..64");
+    if (net.elements.empty() || net.elements.size() > std::size_t(kMaxElements)) return bad("element count outside 1..68 (64 components + 4 port sources)");
     if (!(net.voltageScaleV > 0 && net.currentScaleA > 0 && std::isfinite(net.voltageScaleV) && std::isfinite(net.currentScaleA)))
         return bad("circuit scales must be strictly positive");
 
@@ -106,6 +106,38 @@ bool MnaSolver::prepareInternal(const Netlist& net, double h, const Options& opt
 
 void MnaSolver::setSource(int k, double value) noexcept {
     if (k >= 0 && k < int(el_.size()) && el_[k].kind != NetElement::Kind::Device) el_[k].value = value;
+}
+
+bool MnaSolver::setElementParameter(int k, int pi, double value) noexcept {
+    if (k < 0 || k >= int(el_.size())) return false;
+    NetElement& e = el_[std::size_t(k)];
+    if (e.kind != NetElement::Kind::Device || !e.model || pi < 0 || pi >= int(e.model->params.size()) || pi >= 3) return false;
+    const ManifestParam& p = e.model->params[std::size_t(pi)];
+    if (!(std::isfinite(value) && value >= p.min && value <= p.max && value > 0)) return false;
+    switch (e.model->equation) {
+        case DeviceEquation::Resistor:
+            if (!std::isfinite(1.0 / value)) return false;
+            break;
+        case DeviceEquation::Capacitor:
+            if (!std::isfinite(value / h_)) return false;
+            break;
+        case DeviceEquation::ShockleyDiode: {
+            double nvt = pi == 1 ? value * e.param[2] : pi == 2 ? e.param[1] * value : e.param[1] * e.param[2];
+            if (!(nvt > 0 && std::isfinite(nvt))) return false;
+            break;
+        }
+        default: return false;
+    }
+    e.param[pi] = value;
+    return true;
+}
+
+double MnaSolver::elementParameter(int k, int pi) const noexcept {
+    if (k < 0 || k >= int(el_.size())) return std::numeric_limits<double>::quiet_NaN();
+    const NetElement& e = el_[std::size_t(k)];
+    if (e.kind != NetElement::Kind::Device || !e.model || pi < 0 || pi >= int(e.model->params.size()) || pi >= 3)
+        return std::numeric_limits<double>::quiet_NaN();
+    return e.param[pi];
 }
 
 void MnaSolver::evaluate(const double* x, double* F, double* J, bool dc) noexcept {
@@ -275,7 +307,7 @@ bool MnaSolver::step() noexcept {
     xSave_ = x_;  // same size: element copy, no allocation
     if (!newton(maxNewton_, false) || !finiteSolution(x_.data())) {
         x_ = xSave_;
-        if (failures_ < std::numeric_limits<long>::max()) ++failures_;
+        if (failures_ < std::numeric_limits<std::int64_t>::max()) ++failures_;
         if (consecutive_ < 3) ++consecutive_;
         return false;
     }
