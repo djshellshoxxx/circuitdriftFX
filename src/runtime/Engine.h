@@ -1,9 +1,11 @@
 // CircuitDrift runtime: integrated engine (P03 integration slice + resume packet 1 wiring).
 // Composition per host sample: timestamped events -> entry sanitize/range guard -> input gain ->
-// macro/lifecycle effective values -> CircuitRuntime (oversampled MNA, thermal clock, latched
-// solver fallback; built-in circuit or crossfaded blueprint graph paths) -> Age shelf on wet ->
-// OutputStage (level-matched blend -> trim -> HPF -> oversampled soft clip -> host bypass ->
-// containment).
+// macro smoother / lifecycle / creative-motion / tempo targets -> transient + sidechain detectors
+// -> fault channels (electrical rate) -> effective values (evaluate) -> CircuitRuntime (oversampled
+// MNA, thermal clock, latched solver fallback; built-in circuit or crossfaded blueprint graph
+// paths) -> Age shelf on wet -> pitch-drift delay on wet (dry delayed to match) -> OutputStage
+// (level-matched blend -> trim -> HPF -> oversampled soft clip -> host bypass -> containment) ->
+// telemetry frame at each 128-sample quantum boundary.
 // Owner: cd_runtime. Depends on cd_core/cd_dsp/cd_control/cd_state/cd_blueprint; never on UI/JUCE.
 //
 // Lifetime/generations: buildPrepared() (non-audio) builds a complete candidate with a new
@@ -17,8 +19,38 @@
 // host latency-change handshake are NOT implemented (later work). Zero Latency is a separate
 // preparation mode (1x, no padding, native-rate soft clip).
 // Clocks: the sample counter advances only by processed frames; a zero-frame call applies events
-// only. A changed ProcessContext::epoch is counted (no network/pitch history exists yet to clear);
-// capacitor/thermal state persists across epochs.
+// only. A changed ProcessContext::epoch is a transport seek: it is counted and clears the tempo
+// clock's phase lock and coefficient history (TempoClock re-prepared, phase resynced from the new
+// PPQ); capacitor/thermal/detector/fault state persists. No network or pitch-detector history is
+// wired yet, so nothing else is cleared.
+// Overlays (Overlays.h, EngineConfig::overlays; SYNTHETIC fixtures, G01 open):
+//  * Detectors (CD-F15/F16): TransientDetector on the gained main input (b, P = amount*b) and
+//    SidechainLoadDetector on the optional AudioBuses sidechain (I_ext = depth*I_budget*clamp(E/
+//    E_ref,0,4)); I_load = composeLoadCurrent(source, I_phys, I_dyn, s, I_ext) with I_phys = I_dyn
+//    = 0 because the fixtures have no supply port. Neither P/r_eff nor I_load has a consumer (no
+//    reservoir), so they are diagnostics only and audio is bit-identical to a detector-less engine.
+//    Sidechain samples are never read by any audio path; a missing bus with source != Main gives
+//    I_ext = 0 and status kSidechainDisconnected.
+//  * Tempo (CD-F13): ProcessContext transport -> TempoClock::setHost once per call (PPQ only while
+//    playing), step() per sample; fallback flags in diagnostics, kTempoFallback while enabled. The
+//    recovery coefficient has no consumer (no reservoir); tempo.depth adds the clock's sinusoidal
+//    drift to the creative modulation q (audible only through the pitch-drift delay).
+//  * Creative motion (D09): with a Drift binding, CreativeMotion (seed = deriveSeed(motionSeed,
+//    slot, "cd.runtime.engine.drift", DelayMotion)) advances per sample and q feeds evaluate()'s
+//    modulation hook. With pitchDrift.enabled and not Zero Latency, PitchDriftDelay (1.5 ms base,
+//    1.5*d*q ms deviation, slew 0.002 s/s) runs on the wet path and its rounded base delay is
+//    added to the declared latency (prepare-time only; a runtime pitchDrift.enabled toggle is
+//    counted unsupported). Its ring has no state API: payload restores reset it (counted),
+//    copyStateFrom copies it directly.
+//  * Faults (CD-F19): up to kMaxFaultSlots FaultChannels on netlist elements, ticked factor times
+//    per host sample (electrical rate) with the transient evidence b as excitation; Apply/Reset
+//    via ParamTarget::Fault* events (the registry has no fault IDs). Outputs map to evaluate()'s
+//    fault hook (leakage fraction, bias offset) while a channel is not cleared; Reset Faults
+//    leaves no hook behind. MnaSolver has no parameter-update API, so C/R values cannot reach the
+//    netlist yet: faults are audibly neutral on the fixtures (resume packet 2 / G01).
+//  * Telemetry (CD-F17): attachTelemetry(); frames carry branch temperatures K, power W, current A,
+//    voltage V, input/output node volts and solver iterations, at every 128 processed samples,
+//    drop-on-full through the wait-free writer; the reader's state never affects audio.
 // Unsupported layouts/rates are explicit: channels 1|2 (in == out count), 44.1-192 kHz, double
 // samples only (32-bit host conversion belongs to adapters). A context whose sampleRate or channel
 // count differs from the prepared engine yields silence and a status flag; clocks do not advance.
@@ -29,7 +61,9 @@
 // so queue offsets are relative to the call (the call is the queue's consuming slice). Host IDs
 // map through the cd::core registry (toPlain) to: macro.age/sag/drift/warmth, input.gain,
 // output.gain (trim), mix, gainMatch.enabled (auto-gain), output.softClip, hpf.enabled,
-// hpf.frequency, slot.<role>.lifecycle and slot.<role>.scenario. Other registry IDs are counted as
+// hpf.frequency, slot.<role>.lifecycle, slot.<role>.scenario, sidechain.source/depth/hpf,
+// transient.preserve, tempo.enabled/division/modifier/depth (and pitchDrift.enabled, prepare-time
+// only: a differing value is counted unsupported). Other registry IDs are counted as
 // unsupported, unregistered IDs as unknown, the other A/B slot's IDs as otherSlot; none change
 // audio. ConfigPublish events are counted only: graph installs are driven by the GraphInstaller
 // pool (newest publish wins). Note events are counted (no voices exist).
@@ -39,8 +73,8 @@
 // (EngineConfig::macroBindings): Warmth -> pre-stage drive dB on the circuit input (wet only); Age
 // -> RBJ high shelf -6*a dB at 6 kHz, Q 0.707 on the wet path (creative tilt). Sag, Drift and
 // Age's service-age/tolerance/leakage and Warmth's bias/flux have no binding in the synthetic
-// fixtures (no supply reservoir, no temperature law, no creative pitch delay): Sag/Drift report
-// unsupported and are neutral. Lifecycle: slot lifecycle/scenario drive a
+// fixtures by default (no supply reservoir, no temperature law): Sag/Drift report unsupported and
+// are neutral unless a config sets macroBindings.hasDrift (creative motion, see Overlays). Lifecycle: slot lifecycle/scenario drive a
 // cd::blueprint::LifecycleTimeline whose condition becomes evaluate()'s timeline offsets; the
 // synthetic circuits have no consumer for those effective values (telemetry only).
 // Graphs: attachGraphInstaller(); at each callback boundary with no fade running, the newest
@@ -48,10 +82,12 @@
 // equal-sum). The dry path is taken from the old path until the fade ends (the new path's delay
 // lines are full by then because latency <= fade length). Latency must be identical. After the
 // fade the engine raises the installer's releasedBelow so the worker retires the old processor.
-// Snapshots: provider layout kSnapshotLayoutId/kSnapshotLayoutVersion; byteSize depends on the
-// active path. Contents: header (sample counter, epoch), macro runtime, circuit state (MnaSolver
+// Snapshots: provider layout kSnapshotLayoutId/kSnapshotLayoutVersion (v2); byteSize depends on the
+// active path. Contents: header (sample counter, epoch), macro runtime, overlay runtime (detectors,
+// tempo clock, creative motion, fault channels, parameter targets), circuit state (MnaSolver
 // getState unknowns+charges, oversampler histories, latency pads, dry delay, thermal temperatures/
-// energy, 1 kHz clock accumulator, fallback latch/fade, counters), output stage state.
+// energy, 1 kHz clock accumulator, fallback latch/fade, counters), output stage state, pitch-drift
+// dry alignment delay.
 // attachSnapshotExchange() publishes a capture at the end of the call that sees a request
 // (deferred while a graph fade runs). restoreSnapshot() restores only with an identical
 // SnapshotIdentity (layout, Fs, OS, model hash) and a validating payload; otherwise ResetWarm
@@ -66,12 +102,14 @@
 #include <span>
 #include <string>
 #include <vector>
+#include "analysis/Telemetry.h"
 #include "blueprint/Timeline.h"
 #include "control/Macros.h"
 #include "core/ParameterRegistry.h"
 #include "dsp/Oversampling.h"
 #include "runtime/CircuitRuntime.h"
 #include "runtime/OutputStage.h"
+#include "runtime/Overlays.h"
 #include "runtime/ProcessorGraph.h"
 #include "state/SnapshotExchange.h"
 #include "state/TransactionQueue.h"
@@ -95,10 +133,11 @@ struct QualityInfo {
     bool familyException = false;    // IIR: exception to the FIR production default
     bool zeroLatency = false;
     int circuitLatency = 0, clipLatency = 0, latencySamples = 0;
+    int driftLatency = 0;            // pitch-drift delay base (integer-rounded), 0 when inactive
 };
 
 // Macro bindings of the built-in synthetic fixtures: Age (creative shelf) and Warmth (pre-stage
-// drive) only. No supply reservoir, bias span, flux domain or temperature law exists (G01/G02).
+// drive) only (Drift is opt-in per config: macroBindings.hasDrift). No supply reservoir, bias span, flux domain or temperature law exists (G01/G02).
 control::ManifestBindings syntheticMacroBindings() noexcept;
 
 struct EngineConfig {
@@ -118,6 +157,8 @@ struct EngineConfig {
     double initialLifecycle = 0;                 // slot lifecycle u in [0,1]
     blueprint::Scenario initialScenario = blueprint::Scenario::Default;
     core::ParamScope slotRole = core::ParamScope::SlotA;  // which slot.<x>.* IDs this engine accepts
+    // Detectors, tempo, creative motion and fault slots (see Overlays.h).
+    OverlayConfig overlays{};
 };
 
 struct ProcessContext {
@@ -126,20 +167,38 @@ struct ProcessContext {
     uint64_t epoch = 0;
     uint32_t frames = 0;
     bool offline = false;
+    // Host transport at the first sample of the call (CD-F13). hasTempo: bpm valid; hasPpq: ppq
+    // valid. PPQ is used only while playing; otherwise the tempo phase free-runs on the sample clock.
+    double bpm = 0;
+    double ppqPosition = 0;
+    bool playing = false;
+    bool hasTempo = false;
+    bool hasPpq = false;
 };
 
-enum class ParamTarget : uint8_t { InputGainDb, OutputTrimDb, Mix, AutoGain, HpfEnabled, HpfCutoffHz, SoftClipEnabled, HostBypass, Count };
+// Fault targets (CD-F19 Apply): the registry has no fault IDs, so fault Apply/Reset travel as
+// ParamEvents on the sample-accurate event path. index = fault slot (EngineConfig::overlays.faults).
+// FaultEnabled/FaultSeverity rebuild the slot's overlay with revision+1 and FaultChannel::apply it;
+// FaultResetAll ramps every slot back to nominal over 20 ms (index ignored). Type, seed, bounds and
+// the microphonic f/Q are prepare-time configuration (fault type is non-automatable).
+enum class ParamTarget : uint8_t { InputGainDb, OutputTrimDb, Mix, AutoGain, HpfEnabled, HpfCutoffHz, SoftClipEnabled, HostBypass,
+                                   FaultEnabled, FaultSeverity, FaultResetAll, Count };
 
 struct ParamEvent {
     uint32_t offset = 0;             // sample offset in this call; > frames applies at the end
     ParamTarget target = ParamTarget::Mix;
     double value = 0;                // booleans: value >= 0.5
+    uint32_t index = 0;              // fault slot for Fault* targets
 };
 
 struct AudioBuses {
     int channels = 0;
     const double* const* in = nullptr;
     double* const* out = nullptr;    // may equal in (in-place)
+    // Optional auxiliary sidechain input (CD-F16): 1 or 2 channels, read only by the sidechain load
+    // detector and never mixed into any audio path. nullptr = disconnected.
+    int sidechainChannels = 0;
+    const double* const* sidechain = nullptr;
 };
 
 struct ProcessBlock {
@@ -153,12 +212,46 @@ namespace status {
 constexpr uint32_t kOk = 0, kNotPrepared = 1u << 0, kRateMismatch = 1u << 1, kLayoutMismatch = 1u << 2,
                    kInputSanitized = 1u << 3, kContainment = 1u << 4, kCircuitFallback = 1u << 5,
                    kResetRequested = 1u << 6, kEventsCoalesced = 1u << 7, kGraphFading = 1u << 8,
-                   kGraphInstalled = 1u << 9;
+                   kGraphInstalled = 1u << 9, kSidechainDisconnected = 1u << 10, kTempoFallback = 1u << 11,
+                   kFaultActive = 1u << 12;
 }
 
 struct ProcessResult {
     uint32_t frames = 0;
     uint32_t status = status::kOk;
+};
+
+struct OverlayDiagnostics {
+    // detectors (CD-F15/F16)
+    double transientEvidence = 0, transientStrength = 0;   // b, P = amount*b
+    double sidechainCurrentA = 0, loadCurrentA = 0;        // I_ext; composeLoadCurrent(src, I_phys=0, I_dyn=0, s, I_ext)
+    int sidechainSource = 0;
+    bool sidechainConnected = false, sidechainDisconnected = false, sidechainSanitized = false, transientSanitized = false;
+    // tempo (CD-F13)
+    bool tempoEnabled = false;
+    double bpm = 0, ppq = 0, tempoPhase = 0, recoveryCoefficient = 0, tempoDrift = 0;
+    control::TempoStatus tempoStatus{};
+    std::int64_t tempoResets = 0;
+    // creative motion (D09)
+    bool driftDelayActive = false;
+    int driftLatency = 0;
+    double motionQ = 0, modulationQ = 0, driftDelaySamples = 0;
+    std::int64_t driftDelayStateResets = 0;
+    // faults (CD-F19)
+    struct Fault {
+        bool used = false, available = false, cleared = true;
+        const char* reason = "";
+        blueprint::FaultOverlay overlay{};
+        blueprint::FaultOutputs out{};
+        std::int64_t transitions = 0;
+    } faults[kMaxFaultSlots]{};
+    bool faultActive = false;
+    control::FaultOverlay faultHook{};
+    std::int64_t faultApplied = 0, faultRejected = 0, faultResets = 0;
+    // telemetry (CD-F17)
+    bool telemetryAttached = false;
+    std::int64_t telemetryFrames = 0;
+    std::uint64_t telemetryPublished = 0, telemetryDropped = 0, telemetryDiscarded = 0;
 };
 
 struct EngineDiagnostics {
@@ -181,6 +274,7 @@ struct EngineDiagnostics {
     double driveGain = 1, lifecycle = 0;
     CircuitRuntime::Diagnostics circuit{};
     OutputStage::Diagnostics output{};
+    OverlayDiagnostics overlay{};
 };
 
 // Per-prepared-engine macro/lifecycle runtime (trivially copyable: part of the snapshot layout).
@@ -215,7 +309,17 @@ private:
     uint64_t generation_ = 0;
     std::vector<double> raw_, gained_, wet_, dry_, wet2_, dry2_, drive_;
     std::vector<double> shelf_;            // 5 * maxBlock per-sample coefficients (b0,b1,b2,a1,a2)
+    std::vector<double> driftD_, driftQ_;  // per-sample smoothed d and modulation q (pitch-drift delay)
     MacroRuntime macro_{};
+    OverlayRuntime overlay_{}, overlayInit_{};   // live / pristine prepared overlay state
+    control::PitchDriftDelay pitch_[2];
+    DelayLine driftDry_[2];                // dry alignment for the pitch-drift base delay
+    bool driftActive_ = false;
+    bool pitchDriftParam_ = false;         // prepared pitchDrift.enabled
+    int factor_ = 1;                       // electrical rate = fs * factor (fault channels)
+    bool faultUsed_[kMaxFaultSlots] = {}, faultAvail_[kMaxFaultSlots] = {};
+    const char* faultReason_[kMaxFaultSlots] = {};
+    blueprint::FaultBounds faultBounds_[kMaxFaultSlots] = {};
     control::ManifestBindings bindings_{};
     control::BaseValues base_{};
     int fadeLen_ = 1;
@@ -227,6 +331,7 @@ public:
     static constexpr uint32_t kMaxEventsPerCall = 4096;
     static constexpr double kEntryLimit = 1e6;   // entry range guard (+120 dBFS), keeps state finite
     static constexpr double kGraphFadeSeconds = 0.020;
+    static constexpr uint32_t kTelemetryQuantum = 128;   // one telemetry frame per 128 processed samples
 
     // Non-audio. Returns nullptr with error on failure; active engine unaffected.
     std::unique_ptr<PreparedEngine> buildPrepared(const EngineConfig& cfg, std::string& error);
@@ -265,7 +370,7 @@ public:
 
     // ---- snapshots ----
     static constexpr std::uint32_t kSnapshotLayoutId = 0x31454443u;  // 'CDE1', provider cd.runtime.Engine
-    static constexpr std::uint32_t kSnapshotLayoutVersion = 1;
+    static constexpr std::uint32_t kSnapshotLayoutVersion = 2;   // v2: + OverlayRuntime, drift dry delay
     state::SnapshotIdentity snapshotIdentity() const noexcept;    // of the active prepared path
     std::size_t snapshotBytes() const noexcept;
     bool attachSnapshotExchange(state::SnapshotExchange* exchange) noexcept;  // non-audio; identity must match
@@ -280,12 +385,22 @@ public:
     // snapshot identities match; scratch must hold snapshotBytes(). False leaves *this unchanged.
     bool copyStateFrom(const Engine& src, std::span<std::byte> scratch) noexcept;
 
+    // ---- telemetry (CD-F17) ----
+    // Non-audio. The engine becomes the writer's only producer; null detaches. Frames are published
+    // at every kTelemetryQuantum boundary of the processed-sample counter (calls are split there
+    // while attached; audio is block-partition invariant so this never changes output).
+    void attachTelemetry(analysis::TelemetryWriter* writer) noexcept { telemetry_ = writer; }
+
 private:
     void applyEvent(const ParamEvent& e) noexcept;
     void applyTransaction(PreparedEngine& p, const state::TransactionEvent& e) noexcept;
     void applyHostParam(PreparedEngine& p, uint32_t hostId, double normalized) noexcept;
-    void runSlice(PreparedEngine& p, const double* const* in, double* const* out, int offset, int n, uint32_t& st) noexcept;
-    void macroSlice(PreparedEngine& p, int n) noexcept;
+    void runSlice(PreparedEngine& p, const AudioBuses& buses, int offset, int n, uint32_t& st) noexcept;
+    void macroSlice(PreparedEngine& p, const double* const* gained, const AudioBuses& buses, int off, int n, uint32_t& st) noexcept;
+    static void evaluateWithOverlays(PreparedEngine& p, const double* v) noexcept;
+    void callBoundary(PreparedEngine& p, const ProcessContext& ctx, const AudioBuses& buses, uint32_t& st) noexcept;
+    void publishTelemetry(PreparedEngine& p) noexcept;
+    uint32_t sliceLimit(uint32_t pos, uint32_t end) const noexcept;
     void graphBoundary(PreparedEngine& p, uint32_t& st) noexcept;
     void captureBoundary() noexcept;
     bool validateCall(const ProcessContext& ctx, const AudioBuses& buses, ProcessResult& r) noexcept;
@@ -299,7 +414,7 @@ private:
     uint64_t nextGeneration_ = 0;
     int64_t samples_ = 0;
     uint64_t epoch_ = 0;
-    bool haveEpoch_ = false;
+    bool haveEpoch_ = false, pendingSeek_ = false;
     std::int64_t epochChanges_ = 0, inputNonFinite_ = 0, inputClamped_ = 0, eventsCoalesced_ = 0, staleInstalls_ = 0;
     core::ParamScope role_ = core::ParamScope::SlotA;
     // graphs (audio-side pointers; ownership stays in the installer's pool)
@@ -314,6 +429,10 @@ private:
     std::int64_t snapPublished_ = 0, snapDeferred_ = 0, snapRefused_ = 0;
     // transaction counters
     std::int64_t paramEvents_ = 0, unsupported_ = 0, unknown_ = 0, otherSlot_ = 0, configEvents_ = 0, noteEvents_ = 0;
+    // overlays / telemetry
+    bool scConnected_ = false;
+    std::int64_t driftResets_ = 0, telemetryFrames_ = 0;
+    analysis::TelemetryWriter* telemetry_ = nullptr;
 };
 
 }  // namespace cd::runtime
