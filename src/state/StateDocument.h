@@ -50,8 +50,14 @@ struct StateDocument {
     std::uint64_t seed = 0;
     std::optional<core::JsonValue> ui;            // local only; stripped on publish
     std::optional<EngineCheckpoint> checkpoint;   // session only; stripped on publish
-    std::vector<std::pair<std::string, core::JsonValue>> metadata;  // unknown harmless top-level keys
+    // Unknown harmless top-level keys. Keys must be unique and must not collide with any envelope
+    // field name (schemaVersion, product, kind, ..., ui, checkpoint); saving rejects collisions
+    // instead of letting them overwrite canonical fields.
+    std::vector<std::pair<std::string, core::JsonValue>> metadata;
 };
+// createdAt: RFC 3339 UTC "YYYY-MM-DDTHH:MM:SS[.fraction]Z", proleptic Gregorian calendar
+// (month/day incl. leap years), hour 00-23, minute 00-59, second 00-59. Leap-second policy:
+// SS=60 is rejected (no leap-second table is carried; createdAt is informational only).
 
 // Migration step k transforms a document of version (chain.firstVersion + k) to the next version
 // and must set schemaVersion accordingly. Pure: depends only on its input tree.
@@ -67,9 +73,19 @@ struct LoadReport { int sourceVersion = 0; int migrationsApplied = 0; };
 
 bool loadState(std::string_view text, StateDocument& out, std::string& error,
                const MigrationChain& chain = productionMigrations(), LoadReport* report = nullptr);
-// Numeric seed/sampleIndex identities are limited to [0, 2^53] by schema v1.
-// Throws std::invalid_argument instead of rounding larger in-memory identities.
+// Ordinary save. Validates the whole in-memory envelope before producing text: scene/session
+// blueprint counts and checkpoint rules, blueprints, parameter ids/ranges (duplicates rejected),
+// payload container types, reserved/duplicate metadata keys, size/depth/metadata bounds and
+// createdAt. The candidate text is then reloaded with loadState() and must reproduce itself;
+// text the loader would reject is never returned. A null macros/timeline/faults saves as {}.
+// Numeric seed/sampleIndex identities are limited to [0, 2^53] by schema v1 (never rounded).
+// Non-throwing form: false + error, out unchanged.
+bool saveState(const StateDocument& doc, std::string& out, std::string& error);
+// Throwing form: std::invalid_argument carrying the same error on any rejection.
 std::string saveState(const StateDocument& doc);
+// Validating file save: saveState() then saveStateFileAtomic(). A rejected document never
+// touches the filesystem, so an existing destination stays byte-identical.
+bool saveStateFile(const std::string& path, const StateDocument& doc, std::string& error);
 // Community/scene export: requires kind Scene; strips checkpoint, UI preferences and metadata.
 // Until P05/P10/P11 provide complete validators, only the minimal synthetic blueprint
 // {schemaVersion,id,components:[{id,modelId}]} and empty macros/timeline/faults are
@@ -82,6 +98,8 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
 // Requires a trusted destination directory. Failure before replacement preserves
 // the old file; successful return does not promise directory durability after power loss.
 // POSIX and Windows local-file replacement are supported; never call from audio.
+// Writes text verbatim (no document validation); use saveStateFile() for state documents.
+// POSIX replacement keeps mkstemp's owner-only mode (0600) by design; umask is never changed.
 bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error);
 
 struct RuntimeIdentity {
@@ -89,8 +107,15 @@ struct RuntimeIdentity {
     double sampleRate = 0;
     int oversampling = 1;
     std::size_t electricalSize = 0, thermalSize = 0;
+    // Number of 64-bit RNG states the prepared runtime restores. Must be declared: an
+    // undeclared layout never restores (ResetWarm), so RNG state is never guessed.
+    std::optional<std::size_t> rngStateCount;
 };
 enum class RestoreDecision : unsigned char { Restore, ResetWarm, NoCheckpoint };
+// Limited compatibility primitive: compares engine model version, model revision, Fs,
+// oversampling, electrical/thermal state sizes and RNG state count only. It does NOT establish
+// topology identity, filter/delay histories, RNG algorithm identity, thermal-clock phase,
+// fallback state, configuration generation or A/B continuity (complete identity is P04/G12).
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason);
 
 }  // namespace cd::state
