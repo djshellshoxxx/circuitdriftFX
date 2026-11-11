@@ -10,27 +10,29 @@ Codex is integration owner for the user-approved reconciliation and safety fixes
 
 ## What exists
 
-- `cd_core`: stable 74-parameter registry and bounded JSON parsing/writing.
-- `cd_dsp`: thermal network (with step status), protection primitives, fixed and configurable halfband/oversampling, synthetic manifests, MNA solver.
-- `cd_control`: macros, transient/sidechain detectors, seeded creative motion and pitch-drift delay, tempo clock, scale quantizer/MIDI tracker, worker-side pitch detector, harmonic calibration map.
+- `cd_core`: stable 74-parameter registry and bounded JSON parsing/writing (locale-independent, exact integer identities, UTF-8-validated output).
+- `cd_dsp`: thermal network (with step status), protection primitives, fixed and configurable halfband/oversampling (4-output FIR block path), synthetic manifests, MNA solver (m≤8 specialisations, bounded `updateParameter` API).
+- `cd_control`: macros, transient/sidechain detectors, seeded creative motion and pitch-drift delay (with snapshot state API), tempo clock, scale quantizer/MIDI tracker, worker-side pitch detector, harmonic calibration map.
 - `cd_state`: scene/session documents with save pre-validation, SPSC transaction queue, generation pool, snapshot exchange, A/B mixer, 20-step history.
 - `cd_blueprint`: blueprint parser/compiler to immutable `PreparedGraph`, lifecycle timeline, fault overlays.
-- `cd_runtime`: `Engine` = oversampled MNA circuit + aligned dry + output stage + containment, latency planning.
+- `cd_runtime`: `Engine` = oversampled MNA circuit + aligned dry + output stage + containment, latency planning, transaction/macro/graph/A-B/snapshot wiring, detectors, tempo clock, pitch-drift delay, fault channels, telemetry publication (snapshot layout v3).
+- `cd_analysis`: telemetry frames and XY/rail/phase display math. `cd_media`: recorder core (PNG/GIF/WAV, A/V sync). `cd_uimodel`: framework-independent view-model (gestures, shell, sphere, tooltips). `cd_edition`: LITE edition over the same Engine.
+- `cd_network`: protocol envelope, prepared SPSC rings, group broker, member consumer, bleed, SYNTHETIC shared PSU and deterministic co-render/influence bundle — in-process mocks only (G05).
 - `cd_community`: SHA-256, catalog client, LRU cache against an abstract transport (mock only).
-- Tests: one ctest suite per `tests/test_*.cpp`; RtTrap allocation trap in `tests/support`.
+- Tests: one ctest suite per `tests/test_*.cpp`; RtTrap allocation/lock/I-O trap in `tests/support`; `tests/test_rt_stress.cpp` (5 s per PR, one hour nightly and executed locally); `benchmarks/bench_engine.cpp` with `benchmarks/README.md`.
 
-The product is incomplete: modules are not yet composed into one processing graph; no JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model or measured CPU/memory compliance. See traceability for findings.
+The product is incomplete: no JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model, real IPC transport or measured CPU/memory compliance on reference hardware. See traceability for findings.
 
-## Resume packets (updated by checkpoint on PR #9)
+## Resume packets (updated by checkpoint on PR #10)
 
-Module writers this checkpoint (disjoint files; coordinator owns CMake/docs/integration): control (Macros/Dynamics/CreativeMotion), musical (TempoClock/ScaleQuantizer/PitchDetector/HarmonicTarget), state (RtQueue/TransactionQueue/SnapshotExchange/AbSlots/History), runtime (src/runtime, tests/support/RtTrap), blueprint (src/blueprint), community (src/community), repair (StateDocument/ThermalNetwork additive). Agree a writer before editing another module.
+Module writers this checkpoint (disjoint files; coordinator owns CMake/docs/integration): runtime wiring (src/runtime), performance (src/dsp internals, benchmarks), network (src/network, tests/test_network_*), faults-to-solver (src/runtime, in progress on `wt-faults`). Agree a writer before editing another module.
 
-1. **Wire the engine**: Engine consumes TransactionQueue events (sample-accurate parameter changes), GenerationPool-installed blueprint `PreparedGraph`s with 20 ms graph crossfade, MacroSmoother/evaluate effective values, timeline/fault overlays, AbMixer over two Engine paths, and SnapshotExchange capture with a provider layout descriptor. Keep all audio paths under RtTrap with positive controls.
-2. **Temperature feedback**: MnaSolver needs a bounded parameter-update API and manifests need temperature laws before thermal state can affect the circuit (G01).
-3. **Quality transitions**: live quality change with 20 ms crossfade and the host latency handshake; phase-family changes staged to deactivation.
-4. **P12 LITE**: edition manifest + two-knob mapping (liteMappingVersion=1) over the same Engine; T05 peak ≤1e-6 versus the equivalent full configuration.
-5. **UX-09 completion**: mutex/OS-I/O traps and the one-hour integrated stress.
-6. **Adapters/UI (P08/P09/P18)** need G09 (JUCE pin/licence) and G11 decisions from the owner.
+1. **Faults to solver parameters**: apply `FaultOutputs` (resistanceOhm, capacitanceF) to the faulted element through `MnaSolver::updateParameter` per substep, clamped to manifest bounds; ESR/leakage halves stay unavailable with a reason until the fixtures carry those parameters. Acceptance: audible bounded change at severity 1, bit-identity at severity 0, exact reset, partition invariance, exact snapshot continuation, 0 refused updates, RtTrap clean.
+2. **Network frame consumption**: Engine consumes `cd::network::NetworkFrame` in the per-sample order ("available network frame"): bleed into the pre-circuit input and shared rail fraction as a readout; Network-unavailable status fades to local with zero bleed. Requires the adapter to supply the host transport epoch. Real shared memory, broker process and the per-host matrix remain G05.
+3. **Temperature feedback**: manifests need temperature laws (G01) before thermal state can drive `updateParameter`; the API is ready.
+4. **Quality transitions**: live quality change with 20 ms crossfade and the host latency handshake; phase-family changes staged to deactivation.
+5. **Performance on reference hardware**: rerun `cd_bench` on the listed CPUs (G03/G04); Eco and 1x targets are still missed on the shared VM. Further optimisation must keep bit-identity or document the numerical change.
+6. **Adapters/UI (P08/P09/P18)** need G09 (JUCE pin/licence) and G11 decisions from the owner; MP4 needs G07.
 
 ## Verification and gates
 
