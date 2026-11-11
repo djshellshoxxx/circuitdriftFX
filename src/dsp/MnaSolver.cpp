@@ -93,9 +93,13 @@ bool MnaSolver::prepareInternal(const Netlist& net, double h, const Options& opt
         else if (el_[k].kind == NetElement::Kind::Device && el_[k].model->equation == DeviceEquation::Capacitor) capSlot_[k] = caps++;
     }
     qOld_.assign(caps, 0.0);
-    for (auto* v : {&x_, &xSave_, &xTry_, &F_, &Ftry_, &dx_, &rowScale_, &unitScale_}) v->assign(m_, 0.0);
-    J_.assign(std::size_t(m_) * m_, 0.0);
+    const std::size_t pad = std::size_t(m_) + 1;
+    for (auto* v : {&x_, &xSave_, &xTry_, &F_, &Ftry_, &dx_, &rowScale_, &unitScale_, &xEval_, &FEval_}) v->assign(pad, 0.0);
+    J_.assign(pad * pad, 0.0);
+    Jtry_.assign(pad * pad, 0.0);
+    JEval_.assign(pad * pad, 0.0);
     for (int k = 0; k < m_; ++k) unitScale_[k] = k < n_ ? vScale_ : iScale_;
+    buildOps();
     failures_ = 0; consecutive_ = 0;
     if (!newton(kDcIterations, true)) return bad("DC operating point did not converge or matrix singular");
     if (!finiteSolution(x_.data())) return bad("DC state or capacitor charge exceeds numeric range");
@@ -129,6 +133,7 @@ bool MnaSolver::setElementParameter(int k, int pi, double value) noexcept {
         default: return false;
     }
     e.param[pi] = value;
+    refreshOp(k);
     return true;
 }
 
@@ -140,144 +145,226 @@ double MnaSolver::elementParameter(int k, int pi) const noexcept {
     return e.param[pi];
 }
 
-void MnaSolver::evaluate(const double* x, double* F, double* J, bool dc) noexcept {
-    std::fill(F, F + m_, 0.0);
-    if (J) std::fill(J, J + std::size_t(m_) * m_, 0.0);
-    auto V = [&](int node) { return node == 0 ? 0.0 : x[node - 1]; };
-    auto addF = [&](int node, double i) { if (node) F[node - 1] += i; };
-    auto addJ = [&](int r, int c, double g) { if (J && r >= 0 && c >= 0) J[std::size_t(r) * m_ + c] += g; };
-    auto stamp = [&](int a, int b, double g) {  // conductance-like 2-terminal Jacobian
-        addJ(a - 1, a - 1, g); addJ(a - 1, b - 1, -g); addJ(b - 1, a - 1, -g); addJ(b - 1, b - 1, g);
-    };
+void MnaSolver::buildOps() noexcept {
+    ops_.assign(el_.size(), Op{});
     for (std::size_t k = 0; k < el_.size(); ++k) {
         const NetElement& e = el_[k];
-        const double v = V(e.a) - V(e.b);
-        double i = 0, g = 0;
+        Op& o = ops_[k];
+        o.a = e.a; o.b = e.b; o.elem = int(k);
         switch (e.kind) {
+            case NetElement::Kind::CurrentSource: o.kind = Op::ISrc; break;
+            case NetElement::Kind::VoltageSource: o.kind = Op::VSrc; o.row = vsRow_[k] + 1; break;
             case NetElement::Kind::Device:
                 switch (e.model->equation) {
-                    case DeviceEquation::Resistor:
-                        g = 1.0 / e.param[0]; i = g * v;
-                        break;
-                    case DeviceEquation::Capacitor:
-                        if (dc) continue;
-                        g = e.param[0] / h_; i = (e.param[0] * v - qOld_[capSlot_[k]]) / h_;
-                        break;
-                    case DeviceEquation::ShockleyDiode: {
-                        const double is = e.param[0], nvt = e.param[1] * e.param[2], cap = e.model->maxExpArg;
-                        const double arg = v / nvt;
-                        if (arg > cap) {  // C1 linear extension beyond the documented exponent domain
-                            const double ec = std::exp(cap);
-                            i = is * (ec * (1.0 + arg - cap) - 1.0); g = is * ec / nvt;
-                        } else {
-                            const double ex = std::exp(arg);
-                            i = is * (ex - 1.0); g = is * ex / nvt;
-                        }
-                        break;
-                    }
+                    case DeviceEquation::Resistor: o.kind = Op::Res; break;
+                    case DeviceEquation::Capacitor: o.kind = Op::Cap; o.slot = capSlot_[k]; break;
+                    case DeviceEquation::ShockleyDiode: o.kind = Op::Diode; o.cap = e.model->maxExpArg; break;
                 }
-                addF(e.a, i); addF(e.b, -i);
-                stamp(e.a, e.b, g);
+                refreshOp(int(k));
                 break;
-            case NetElement::Kind::CurrentSource:
-                addF(e.a, e.value); addF(e.b, -e.value);
-                break;
-            case NetElement::Kind::VoltageSource: {
-                const int r = vsRow_[k];
-                addF(e.a, x[r]); addF(e.b, -x[r]);
-                addJ(e.a - 1, r, 1.0); addJ(e.b - 1, r, -1.0);
-                F[r] = v - e.value;
-                addJ(r, e.a - 1, 1.0); addJ(r, e.b - 1, -1.0);
-                break;
-            }
         }
     }
+}
+
+void MnaSolver::refreshOp(int k) noexcept {
+    const NetElement& e = el_[std::size_t(k)];
+    Op& o = ops_[std::size_t(k)];
+    switch (o.kind) {
+        case Op::Res: o.p0 = 1.0 / e.param[0]; break;
+        case Op::Cap: o.p0 = e.param[0]; o.c1 = e.param[0] / h_; break;
+        case Op::Diode: o.p0 = e.param[0]; o.c1 = e.param[1] * e.param[2]; break;
+        default: break;
+    }
+}
+
+// Same stamps, same order and same rounding as the original per-element loop; ground contributions
+// land in padded slot 0 instead of being branched away. dc omits capacitor terms.
+void MnaSolver::evalPadded(const double* x, double* F, double* J, bool dc) const noexcept {
+    const std::size_t ld = std::size_t(m_) + 1;
+    std::fill(F, F + ld, 0.0);
+    if (J) std::fill(J, J + ld * ld, 0.0);
+    for (std::size_t k = 0; k < ops_.size(); ++k) {
+        const Op& o = ops_[k];
+        const std::size_t a = std::size_t(o.a), b = std::size_t(o.b);
+        const double v = x[a] - x[b];
+        double i = 0, g = 0;
+        switch (o.kind) {
+            case Op::Res:
+                g = o.p0; i = g * v;
+                break;
+            case Op::Cap:
+                if (dc) continue;
+                g = o.c1; i = (o.p0 * v - qOld_[std::size_t(o.slot)]) / h_;
+                break;
+            case Op::Diode: {
+                const double arg = v / o.c1;
+                if (arg > o.cap) {  // C1 linear extension beyond the documented exponent domain
+                    const double ec = std::exp(o.cap);
+                    i = o.p0 * (ec * (1.0 + arg - o.cap) - 1.0); g = o.p0 * ec / o.c1;
+                } else {
+                    const double ex = std::exp(arg);
+                    i = o.p0 * (ex - 1.0); g = o.p0 * ex / o.c1;
+                }
+                break;
+            }
+            case Op::ISrc: {
+                const double val = el_[std::size_t(o.elem)].value;
+                F[a] += val; F[b] += -val;
+                continue;
+            }
+            case Op::VSrc: {
+                const std::size_t r = std::size_t(o.row);
+                F[a] += x[r]; F[b] += -x[r];
+                if (J) { J[a * ld + r] += 1.0; J[b * ld + r] += -1.0; }
+                F[r] = v - el_[std::size_t(o.elem)].value;
+                if (J) { J[r * ld + a] += 1.0; J[r * ld + b] += -1.0; }
+                continue;
+            }
+        }
+        F[a] += i; F[b] += -i;
+        if (J) { J[a * ld + a] += g; J[a * ld + b] += -g; J[b * ld + a] += -g; J[b * ld + b] += g; }
+    }
+}
+
+void MnaSolver::evaluate(const double* x, double* F, double* J, bool dc) noexcept {
+    const std::size_t m = std::size_t(m_), ld = m + 1;
+    for (std::size_t k = 0; k < m; ++k) xEval_[k + 1] = x[k];
+    evalPadded(xEval_.data(), FEval_.data(), J ? JEval_.data() : nullptr, dc);
+    for (std::size_t k = 0; k < m; ++k) F[k] = FEval_[k + 1];
+    if (J)
+        for (std::size_t r = 0; r < m; ++r)
+            for (std::size_t c = 0; c < m; ++c) J[r * m + c] = JEval_[(r + 1) * ld + c + 1];
 }
 
 double MnaSolver::scaledResidual(const double* F) const noexcept {
     double r = 0;
     for (int k = 0; k < m_; ++k) {
-        const double s = std::fabs(F[k]) / (k < n_ ? iScale_ : vScale_);
+        const double s = std::fabs(F[k + 1]) / (k < n_ ? iScale_ : vScale_);
         if (!std::isfinite(s)) return INFINITY;
         r = std::max(r, s);
     }
     return r;
 }
 
-bool MnaSolver::luSolve(double* A, double* b) noexcept {
-    const int m = m_;
+// A is the (m x m) block at A[0], row stride ldi. Failure conditions match the original per-entry
+// checks: any non-finite input, intermediate or output entry returns false (non-finiteness is
+// sticky, so testing a row or a sum once is equivalent to testing every element).
+namespace {
+// M > 0 fixes the system size at compile time so small circuits fully unroll; M == 0 is the
+// runtime-size fallback. The arithmetic is identical for every M.
+template <int M>
+bool luImpl(double* A, std::size_t ld, double* b, double* rowScale, int mRuntime) noexcept {
+    const int m = M > 0 ? M : mRuntime;
     for (int r = 0; r < m; ++r) {
         if (!std::isfinite(b[r])) return false;
-        double s = 0;
+        const double* row = A + std::size_t(r) * ld;
+        double s = 0, chk = 0;
         for (int c = 0; c < m; ++c) {
-            const double a = A[std::size_t(r) * m + c];
-            if (!std::isfinite(a)) return false;
+            const double a = row[c];
+            chk += a - a;                       // 0 for finite, NaN otherwise
             s = std::max(s, std::fabs(a));
         }
+        if (!(chk == 0.0)) return false;
         if (!(s > 0) || !std::isfinite(s)) return false;
-        rowScale_[r] = s;
+        rowScale[r] = s;
     }
     for (int k = 0; k < m; ++k) {
         int p = k;
         double best = -1;
         for (int r = k; r < m; ++r) {
-            const double q = std::fabs(A[std::size_t(r) * m + k]) / rowScale_[r];
+            const double q = std::fabs(A[std::size_t(r) * ld + k]) / rowScale[r];
             if (!std::isfinite(q)) return false;
             if (q > best) { best = q; p = r; }
         }
         if (!(best > 1e-13)) return false;  // singular relative to the row's scale
         if (p != k) {
-            for (int c = 0; c < m; ++c) std::swap(A[std::size_t(k) * m + c], A[std::size_t(p) * m + c]);
+            // Columns < k of rows >= k are never read again, so only c >= k need to move.
+            for (int c = k; c < m; ++c) std::swap(A[std::size_t(k) * ld + c], A[std::size_t(p) * ld + c]);
             std::swap(b[k], b[p]);
-            std::swap(rowScale_[k], rowScale_[p]);
+            std::swap(rowScale[k], rowScale[p]);
         }
-        const double piv = A[std::size_t(k) * m + k];
+        const double* rk = A + std::size_t(k) * ld;
+        const double piv = rk[k];
         if (!std::isfinite(piv) || piv == 0) return false;
         for (int r = k + 1; r < m; ++r) {
-            const double f = A[std::size_t(r) * m + k] / piv;
+            double* rr = A + std::size_t(r) * ld;
+            const double f = rr[k] / piv;
             if (!std::isfinite(f)) return false;
             if (f == 0) continue;
+            double chk = 0;
             for (int c = k; c < m; ++c) {
-                double& a = A[std::size_t(r) * m + c];
-                a -= f * A[std::size_t(k) * m + c];
-                if (!std::isfinite(a)) return false;
+                const double a = rr[c] - f * rk[c];
+                rr[c] = a;
+                chk += a - a;
             }
+            if (!(chk == 0.0)) return false;
             b[r] -= f * b[k];
             if (!std::isfinite(b[r])) return false;
         }
     }
     for (int k = m - 1; k >= 0; --k) {
+        const double* rk = A + std::size_t(k) * ld;
         double s = b[k];
-        for (int c = k + 1; c < m; ++c) {
-            s -= A[std::size_t(k) * m + c] * b[c];
-            if (!std::isfinite(s)) return false;
-        }
-        b[k] = s / A[std::size_t(k) * m + k];
+        for (int c = k + 1; c < m; ++c) s -= rk[c] * b[c];
+        if (!std::isfinite(s)) return false;
+        b[k] = s / rk[k];
         if (!std::isfinite(b[k])) return false;
     }
     return true;
 }
+}  // namespace
+
+bool MnaSolver::luSolve(double* A, int ldi, double* b) noexcept {
+    const std::size_t ld = std::size_t(ldi);
+    double* rs = rowScale_.data();
+    switch (m_) {
+        case 1: return luImpl<1>(A, ld, b, rs, 1);
+        case 2: return luImpl<2>(A, ld, b, rs, 2);
+        case 3: return luImpl<3>(A, ld, b, rs, 3);
+        case 4: return luImpl<4>(A, ld, b, rs, 4);
+        case 5: return luImpl<5>(A, ld, b, rs, 5);
+        case 6: return luImpl<6>(A, ld, b, rs, 6);
+        case 7: return luImpl<7>(A, ld, b, rs, 7);
+        case 8: return luImpl<8>(A, ld, b, rs, 8);
+        default: return luImpl<0>(A, ld, b, rs, m_);
+    }
+}
 
 bool MnaSolver::newton(int maxIter, bool dc) noexcept {
+    const int m = m_, ld = m_ + 1;
+    const double* unit = unitScale_.data();
+    double* dx = dx_.data();
+    bool haveEval = false;   // F_/J_ already hold the evaluation at x_ (from the accepted trial)
+    double res0 = 0;
     for (int it = 1; it <= maxIter; ++it) {
-        evaluate(x_.data(), F_.data(), J_.data(), dc);
-        const double res0 = scaledResidual(F_.data());
+        if (haveEval) {
+            // The accepted trial evaluated exactly (x_, same step context): reuse it bit-for-bit.
+            std::swap(F_, Ftry_);
+            std::swap(J_, Jtry_);
+        } else {
+            evalPadded(x_.data(), F_.data(), J_.data(), dc);
+            res0 = scaledResidual(F_.data());
+        }
         if (!std::isfinite(res0)) return false;
-        for (int k = 0; k < m_; ++k) dx_[k] = -F_[k];
-        if (!luSolve(J_.data(), dx_.data())) return false;
+        const double* F = F_.data();
+        const double* x = x_.data();
+        for (int k = 0; k < m; ++k) dx[k] = -F[k + 1];
+        if (!luSolve(J_.data() + ld + 1, ld, dx)) return false;
         double stepRel = 0;
-        for (int k = 0; k < m_; ++k) {
+        for (int k = 0; k < m; ++k) {
             // Compute |dx|/(|x|+unit) without overflowing the denominator.
-            const double scale = std::max(std::fabs(x_[k]), unitScale_[k]);
-            const double rel = (std::fabs(dx_[k]) / scale) / (std::fabs(x_[k]) / scale + unitScale_[k] / scale);
+            const double xk = x[k + 1];
+            const double scale = std::max(std::fabs(xk), unit[k]);
+            const double rel = (std::fabs(dx[k]) / scale) / (std::fabs(xk) / scale + unit[k] / scale);
             if (!std::isfinite(rel)) return false;
             stepRel = std::max(stepRel, rel);
         }
+        double* xt = xTry_.data();
         if (res0 <= tol_ && stepRel <= tol_) {
             // Retain the final correction, but validate the state and its actual residual.
-            for (int k = 0; k < m_; ++k) xTry_[k] = x_[k] + dx_[k];
-            if (!finiteSolution(xTry_.data())) return false;
-            evaluate(xTry_.data(), Ftry_.data(), nullptr, dc);
+            for (int k = 1; k <= m; ++k) xt[k] = x[k] + dx[k - 1];
+            if (!finiteSolution(xt)) return false;
+            evalPadded(xt, Ftry_.data(), nullptr, dc);
             const double res = scaledResidual(Ftry_.data());
             if (!std::isfinite(res) || res > tol_) return false;
             std::swap(x_, xTry_);
@@ -286,10 +373,10 @@ bool MnaSolver::newton(int maxIter, bool dc) noexcept {
         }
         double lambda = 1.0, res = INFINITY;
         for (int trial = 0; trial < 4; ++trial, lambda *= 0.5) {
-            for (int k = 0; k < m_; ++k) xTry_[k] = x_[k] + lambda * dx_[k];
+            for (int k = 1; k <= m; ++k) xt[k] = x[k] + lambda * dx[k - 1];
             res = INFINITY;
-            if (finiteSolution(xTry_.data())) {
-                evaluate(xTry_.data(), Ftry_.data(), nullptr, dc);
+            if (finiteSolution(xt)) {
+                evalPadded(xt, Ftry_.data(), Jtry_.data(), dc);
                 res = scaledResidual(Ftry_.data());
             }
             if (res < res0 || (trial == 3 && std::isfinite(res))) break;
@@ -297,6 +384,8 @@ bool MnaSolver::newton(int maxIter, bool dc) noexcept {
         if (!std::isfinite(res)) return false;
         std::swap(x_, xTry_);
         if (res <= tol_ && lambda * stepRel <= tol_) { lastIter_ = it; lastRes_ = res; return true; }
+        haveEval = true;
+        res0 = res;
     }
     lastIter_ = maxIter;
     return false;
@@ -305,7 +394,8 @@ bool MnaSolver::newton(int maxIter, bool dc) noexcept {
 bool MnaSolver::step() noexcept {
     if (m_ == 0) return false;
     xSave_ = x_;  // same size: element copy, no allocation
-    if (!newton(maxNewton_, false) || !finiteSolution(x_.data())) {
+    // newton() returns true only for a state it has already validated with finiteSolution().
+    if (!newton(maxNewton_, false)) {
         x_ = xSave_;
         if (failures_ < std::numeric_limits<std::int64_t>::max()) ++failures_;
         if (consecutive_ < 3) ++consecutive_;
@@ -317,32 +407,36 @@ bool MnaSolver::step() noexcept {
 }
 
 void MnaSolver::getState(double* out) const noexcept {
-    std::copy(x_.begin(), x_.end(), out);
+    std::copy(x_.begin() + 1, x_.end(), out);
     std::copy(qOld_.begin(), qOld_.end(), out + m_);
 }
 
 void MnaSolver::setState(const double* in) noexcept {
-    if (!in || !finiteSolution(in)) return;
+    if (!in) return;
+    for (int k = 0; k < m_; ++k) xEval_[std::size_t(k) + 1] = in[k];
+    if (!finiteSolution(xEval_.data())) return;
     for (std::size_t k = 0; k < qOld_.size(); ++k)
         if (!std::isfinite(in[m_ + k])) return;
-    std::copy(in, in + m_, x_.begin());
+    std::copy(in, in + m_, x_.begin() + 1);
     std::copy(in + m_, in + m_ + qOld_.size(), qOld_.begin());
 }
 
 bool MnaSolver::finiteSolution(const double* x) const noexcept {
-    for (int k = 0; k < m_; ++k) if (!std::isfinite(x[k])) return false;
-    for (std::size_t k = 0; k < el_.size(); ++k) {
-        const auto& e = el_[k];
-        const double v = (e.a ? x[e.a - 1] : 0.0) - (e.b ? x[e.b - 1] : 0.0);
-        if (!std::isfinite(v) || (capSlot_[k] >= 0 && !std::isfinite(e.param[0] * v))) return false;
+    // x - x is 0 for finite values and NaN otherwise; one sticky test replaces per-value branches.
+    double chk = 0;
+    for (int k = 1; k <= m_; ++k) chk += x[k] - x[k];
+    for (const Op& o : ops_) {
+        const double v = x[o.a] - x[o.b];
+        chk += v - v;
+        if (o.kind == Op::Cap) { const double q = o.p0 * v; chk += q - q; }
     }
-    return true;
+    return chk == 0.0;
 }
 
 void MnaSolver::storeCharges() noexcept {
     // finiteSolution checks every charge before any is committed.
-    for (std::size_t k = 0; k < el_.size(); ++k)
-        if (capSlot_[k] >= 0) qOld_[capSlot_[k]] = el_[k].param[0] * (voltage(el_[k].a) - voltage(el_[k].b));
+    for (const Op& o : ops_)
+        if (o.kind == Op::Cap) qOld_[std::size_t(o.slot)] = o.p0 * (x_[std::size_t(o.a)] - x_[std::size_t(o.b)]);
 }
 
 }  // namespace cd::dsp

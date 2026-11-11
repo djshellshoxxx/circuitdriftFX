@@ -60,8 +60,8 @@ public:
     int elementCount() const noexcept { return int(el_.size()); }
 
     int unknowns() const noexcept { return m_; }
-    double voltage(int node) const noexcept { return node <= 0 ? 0.0 : x_[node - 1]; }
-    double unknown(int k) const noexcept { return x_[k]; }
+    double voltage(int node) const noexcept { return node <= 0 ? 0.0 : x_[std::size_t(node)]; }
+    double unknown(int k) const noexcept { return x_[std::size_t(k) + 1]; }
     int lastIterations() const noexcept { return lastIter_; }
     std::int64_t failures() const noexcept { return failures_; }
     bool needsFallback() const noexcept { return consecutive_ >= 3; }
@@ -79,17 +79,38 @@ public:
     void setState(const double* in) noexcept;
 
 private:
+    // Performance layout (bit-identical to the original element loop): unknown k lives at padded
+    // index k+1 and padded index 0 is ground (always 0 in x buffers; a dump slot in F/J), so stamps
+    // need no ground branches. Per-element constants (1/R, C/h, n*Vt) are cached and refreshed by
+    // setElementParameter(). Element order, operation order and rounding are unchanged.
+    struct Op {
+        enum Kind : unsigned char { Res, Cap, Diode, ISrc, VSrc };
+        Kind kind = Res;
+        int a = 0, b = 0;       // padded indices (node numbers; 0 = ground)
+        int row = 0;            // VSrc: padded branch row
+        int slot = -1;          // Cap: charge slot
+        int elem = 0;           // index into el_
+        double p0 = 0;          // Res: 1/R; Cap: C; Diode: Is
+        double c1 = 0;          // Cap: C/h; Diode: n*Vt
+        double cap = 0;         // Diode: maxExpArg
+    };
     bool prepareInternal(const Netlist& net, double h, const Options& opt, std::string& error);
+    void buildOps() noexcept;
+    void refreshOp(int element) noexcept;
     bool newton(int maxIter, bool dc) noexcept;
-    bool luSolve(double* A, double* b) noexcept;
-    double scaledResidual(const double* F) const noexcept;
-    bool finiteSolution(const double* x) const noexcept;
+    bool luSolve(double* A, int ld, double* b) noexcept;
+    void evalPadded(const double* xp, double* Fp, double* Jp, bool dc) const noexcept;
+    double scaledResidual(const double* Fp) const noexcept;   // Fp padded (index k+1)
+    bool finiteSolution(const double* xp) const noexcept;     // xp padded
     void storeCharges() noexcept;
 
     std::vector<NetElement> el_;
+    std::vector<Op> ops_;
     std::vector<int> vsRow_;            // per element: branch unknown index or -1
     std::vector<int> capSlot_;          // per element: qOld_ index or -1
-    std::vector<double> qOld_, x_, xSave_, xTry_, F_, Ftry_, J_, dx_, rowScale_, unitScale_;
+    // x_, xSave_, xTry_, F_, Ftry_ are padded (m_+1); J_, Jtry_ are (m_+1)^2 row-major with ld m_+1.
+    std::vector<double> qOld_, x_, xSave_, xTry_, F_, Ftry_, J_, Jtry_, dx_, rowScale_, unitScale_;
+    std::vector<double> xEval_, FEval_, JEval_;   // scratch for the public evaluate()
     int n_ = 0, m_ = 0, maxNewton_ = 8, lastIter_ = 0, consecutive_ = 0;
     std::int64_t failures_ = 0;
     double h_ = 0, tol_ = 1e-7, vScale_ = 1, iScale_ = 1e-3, lastRes_ = 0;
