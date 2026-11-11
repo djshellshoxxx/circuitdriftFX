@@ -21,16 +21,15 @@ Codex is integration owner for the user-approved reconciliation and safety fixes
 
 The product is incomplete: modules are not yet composed into one processing graph; no JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model or measured CPU/memory compliance. See traceability for findings.
 
-## Resume packets (updated by checkpoint on PR #9)
+## Resume packets (PR #9, updated)
 
-Module writers this checkpoint (disjoint files; coordinator owns CMake/docs/integration): control (Macros/Dynamics/CreativeMotion), musical (TempoClock/ScaleQuantizer/PitchDetector/HarmonicTarget), state (RtQueue/TransactionQueue/SnapshotExchange/AbSlots/History), runtime (src/runtime, tests/support/RtTrap), blueprint (src/blueprint), community (src/community), repair (StateDocument/ThermalNetwork additive). Agree a writer before editing another module.
+Writers this checkpoint used disjoint files per module; the coordinator owns CMake, docs and integration. Agree a writer before editing another module.
 
-1. **Wire the engine**: Engine consumes TransactionQueue events (sample-accurate parameter changes), GenerationPool-installed blueprint `PreparedGraph`s with 20 ms graph crossfade, MacroSmoother/evaluate effective values, timeline/fault overlays, AbMixer over two Engine paths, and SnapshotExchange capture with a provider layout descriptor. Keep all audio paths under RtTrap with positive controls.
-2. **Temperature feedback**: MnaSolver needs a bounded parameter-update API and manifests need temperature laws before thermal state can affect the circuit (G01).
-3. **Quality transitions**: live quality change with 20 ms crossfade and the host latency handshake; phase-family changes staged to deactivation.
-4. **P12 LITE**: edition manifest + two-knob mapping (liteMappingVersion=1) over the same Engine; T05 peak ≤1e-6 versus the equivalent full configuration.
-5. **UX-09 completion**: mutex/OS-I/O traps and the one-hour integrated stress.
-6. **Adapters/UI (P08/P09/P18)** need G09 (JUCE pin/licence) and G11 decisions from the owner.
+1. **P17 performance** (in progress): callgrind-guided optimization of MnaSolver/oversampler hot paths with ≤1e-12 output equivalence; re-run `cd_bench`; resolve the mix-0 dry deviation (disabled soft-clip should be a pure equal-latency delay).
+2. **Engine taps**: post-input-trim tap and rail input for `cd_network`; Engine publishes `cd_analysis` TelemetryFrames; PitchDriftDelay state capture so snapshots work with pitch delay on.
+3. **View-model wiring** (in progress): gestures/history → TransactionQueue, telemetry binding, UX-08 labels.
+4. **Owner decisions needed**: G09 JUCE 8 pin + licence (GPLv3 vs commercial) and CLAP adapter revision to start P01/P08/P18 wrappers; G11 renderer; G07 encoder SDKs; G06 provider; G08 AAX access.
+5. **Calibration (G01)**: real device manifests, reference schematics and independent curves replace every synthetic fixture before any physical claim.
 
 ## Verification and gates
 
