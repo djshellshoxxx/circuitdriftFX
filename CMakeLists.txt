@@ -39,7 +39,7 @@ cd_module(cd_media media cd_analysis)
 # cd_uimodel: framework-independent view-model (UX-01/02/07, T07/T08 data); no JUCE/graphics.
 cd_module(cd_uimodel uimodel cd_runtime cd_analysis)
 # cd_network: instance broker, prepared IPC rings, deterministic co-render (P15/P16; G05 open).
-cd_module(cd_network network cd_runtime)
+cd_module(cd_network network cd_state cd_community)
 # cd_community: catalog client contract against a mock transport (P14, G06 open); never on audio.
 cd_module(cd_community community cd_state)
 # cd_edition: edition manifests / LITE two-knob mapping (P12).
