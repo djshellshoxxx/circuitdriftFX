@@ -25,9 +25,10 @@ The product is incomplete: modules are not yet composed into one processing grap
 
 Writers this checkpoint used disjoint files per module; the coordinator owns CMake, docs and integration. Agree a writer before editing another module.
 
-1. **P17 performance** (in progress): callgrind-guided optimization of MnaSolver/oversampler hot paths with ≤1e-12 output equivalence; re-run `cd_bench`; resolve the mix-0 dry deviation (disabled soft-clip should be a pure equal-latency delay).
+1. **P17 performance**: first pass merged (bit-identical, ~21% faster); Eco and 1x still miss. Next: profile solver Newton/LU and per-sample smoothers with callgrind; measure on reference hardware (G04).
+1a. **Unfixed review findings** (docs/REVIEW_FINDINGS_2026-11-04.md round 2): R2-M2 shm header double fetch, R2-M3 RtTrap missing clockwait/clocklock/pwrite/fsync/sleep wraps, R2-L2 snapshot restore validation, R2-L5 pin actions to SHAs.
 2. **Engine taps**: post-input-trim tap and rail input for `cd_network`; Engine publishes `cd_analysis` TelemetryFrames; PitchDriftDelay state capture so snapshots work with pitch delay on.
-3. **View-model wiring** (in progress): gestures/history → TransactionQueue, telemetry binding, UX-08 labels.
+3. **View-model wiring**: merged (gestures/undo → TransactionQueue bit-identical to direct host events; UX-08 labels). Remaining: Mod Slot routing in Engine, real Engine telemetry publication.
 4. **Owner decisions needed**: G09 JUCE 8 pin + licence (GPLv3 vs commercial) and CLAP adapter revision to start P01/P08/P18 wrappers; G11 renderer; G07 encoder SDKs; G06 provider; G08 AAX access.
 5. **Calibration (G01)**: real device manifests, reference schematics and independent curves replace every synthetic fixture before any physical claim.
 
