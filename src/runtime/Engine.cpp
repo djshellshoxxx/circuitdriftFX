@@ -231,11 +231,16 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
     o.motion.prepare(cfg.sampleRate, control::deriveSeed(ocfg.motionSeed, slot, "cd.runtime.engine.drift", control::StreamType::DelayMotion));
     if (p->bindings_.hasDrift) o.modQ = std::clamp(o.motion.q(), -1.0, 1.0);   // tempo drift is 0 at phase 0
     const double rate = cfg.sampleRate * double(spec.factor);
+    int applied = 0;
     for (int k = 0; k < kMaxFaultSlots; ++k) {
         const FaultSlotConfig& f = ocfg.faults[std::size_t(k)];
         p->faultAvail_[k] = false;
         p->faultUsed_[k] = f.used;
         p->faultReason_[k] = f.used ? "" : "slot unused";
+        p->faultPartial_[k] = "";
+        p->faultElement_[k] = f.used ? f.element : -1;
+        p->faultParam_[k] = -1;
+        p->faultNominal_[k] = 0;
         if (!f.used) continue;
         const auto& els = cfg.circuit.netlist.elements;
         if (f.element < 0 || f.element >= int(els.size()) || els[std::size_t(f.element)].kind != dsp::NetElement::Kind::Device ||
@@ -243,18 +248,76 @@ std::unique_ptr<PreparedEngine> Engine::buildPrepared(const EngineConfig& cfg, s
             err = "fault slot must name a device element of the circuit netlist";
             return nullptr;
         }
-        const auto eq = els[std::size_t(f.element)].model->equation;
+        const dsp::DeviceManifest& man = *els[std::size_t(f.element)].model;
+        const auto eq = man.equation;
         const char* why = "";
         if (!blueprint::faultAvailable(f.overlay.type, eq == dsp::DeviceEquation::Capacitor, eq == dsp::DeviceEquation::Resistor,
                                        false /* no tube equation family exists */, why)) {
             p->faultReason_[k] = why;   // unavailable with a reason; Apply events for it are rejected
             continue;
         }
+        // Parameter action target and manifest-derived bounds (synthetic placeholders: the fixture
+        // manifests declare no open/short equivalents, so the manifest range limits stand in).
+        blueprint::FaultBounds b = f.bounds;
+        int pk = -1;
+        double nom = 0, lo = 0, hi = 0;
+        switch (f.overlay.type) {
+            case blueprint::FaultType::CrackedResistor:
+                pk = man.paramIndex("resistanceOhm");
+                if (pk < 0 || !p->circuit_.parameterRange(f.element, pk, nom, lo, hi)) {
+                    p->faultReason_[k] = "resistor manifest exposes no resistanceOhm parameter";
+                    pk = -1;
+                    break;
+                }
+                if (!(nom < hi)) {
+                    p->faultReason_[k] = "resistor nominal is at the manifest maximum: no open-equivalent headroom";
+                    pk = -1;
+                    break;
+                }
+                b.nominalR = nom;
+                b.openR = hi;           // placeholder open equivalent: manifest max (never ideal infinity)
+                break;
+            case blueprint::FaultType::ElectrolyticOpen:
+                pk = man.paramIndex("capacitanceF");
+                if (pk < 0 || !p->circuit_.parameterRange(f.element, pk, nom, lo, hi)) {
+                    p->faultReason_[k] = "capacitor manifest exposes no capacitanceF parameter";
+                    pk = -1;
+                    break;
+                }
+                if (!(nom > lo)) {
+                    p->faultReason_[k] = "capacitor nominal is at the manifest minimum: no open-equivalent headroom";
+                    pk = -1;
+                    break;
+                }
+                b.nominalC = nom;
+                b.minC = lo;            // manifest minimum capacitance (never ideal zero)
+                p->faultPartial_[k] = "series-resistance rise unavailable: the capacitor manifest has no ESR parameter or series node";
+                break;
+            case blueprint::FaultType::ElectrolyticLeaky:
+                p->faultReason_[k] = "no leakage-resistance parameter or parallel-leakage topology in the capacitor manifest";
+                break;
+            case blueprint::FaultType::MicrophonicTube:
+                p->faultReason_[k] = "no validated tube topology or model is available (G01 open)";
+                break;
+        }
+        if (pk < 0) continue;
         std::string fe;
-        if (!o.faults[k].prepare(rate, f.bounds, f.overlay, fe)) { err = "fault slot: " + fe; return nullptr; }
+        if (!o.faults[k].prepare(rate, b, f.overlay, fe)) { err = "fault slot: " + fe; return nullptr; }
         p->faultAvail_[k] = true;
-        p->faultBounds_[k] = f.bounds;
+        p->faultBounds_[k] = b;
+        p->faultParam_[k] = pk;
+        p->faultNominal_[k] = nom;
         o.prm.faults[k] = f.overlay;
+        ++applied;
+    }
+    // Per-substep schedules for the built-in circuit's parameter tracks.
+    p->faultSched_.assign(std::size_t(applied) * std::size_t(cfg.maxBlock) * std::size_t(spec.factor), 0.0);
+    p->trackCount_ = 0;
+    for (int k = 0, j = 0; k < kMaxFaultSlots; ++k) {
+        p->faultTrack_[k] = nullptr;
+        if (!p->faultAvail_[k]) continue;
+        p->faultTrack_[k] = p->faultSched_.data() + std::size_t(j++) * std::size_t(cfg.maxBlock) * std::size_t(spec.factor);
+        p->tracks_[p->trackCount_++] = {p->faultElement_[k], p->faultParam_[k], p->faultTrack_[k]};
     }
     {
         const double v[5] = {p->macro_.last[0], p->macro_.last[1], p->macro_.last[2], p->macro_.last[3], p->macro_.last[4]};
@@ -454,7 +517,12 @@ void Engine::macroSlice(PreparedEngine& p, const double* const* gained, const Au
             for (int j = 0; j < nf; ++j) {
                 const int k = slots[j];
                 blueprint::FaultChannel& fc = o.faults[k];
-                for (int sub = 0; sub < F; ++sub) o.faultOut[k] = fc.tick(o.b);
+                double* sched = p.faultTrack_[k] + std::size_t(i) * std::size_t(F);
+                const bool res = o.prm.faults[k].type == blueprint::FaultType::CrackedResistor;
+                for (int sub = 0; sub < F; ++sub) {
+                    o.faultOut[k] = fc.tick(o.b);
+                    sched[sub] = res ? o.faultOut[k].resistanceOhm : o.faultOut[k].capacitanceF;
+                }
                 const control::FaultOverlay hk = faultHook(o.faultOut[k], p.faultBounds_[k], p.bindings_);
                 if (!fc.cleared() || hk.leakFracAdd != 0.0 || hk.biasOffsetAdd != 0.0) {
                     act = 1;
@@ -507,12 +575,15 @@ void Engine::runSlice(PreparedEngine& p, const AudioBuses& buses, int off, int n
     macroSlice(p, gainedC, buses, off, n, st);
     const double* drive = p.drive_.data();
     CircuitRuntime& cur = currentCircuit(p);
+    // Fault parameter tracks reach the built-in circuit only (graph paths map elements differently).
+    auto tracks = [&](const CircuitRuntime& c) { return &c == &p.circuit_ ? p.tracks_ : nullptr; };
+    auto ntracks = [&](const CircuitRuntime& c) { return &c == &p.circuit_ ? p.trackCount_ : 0; };
     if (!fading_) {
-        cur.process(gainedC, wet, dry, n, drive);
+        cur.process(gainedC, wet, dry, n, drive, tracks(cur), ntracks(cur));
     } else {
         CircuitRuntime& old = oldGraph_ ? oldGraph_->circuit() : p.circuit_;
-        old.process(gainedC, wet2, dry2, n, drive);
-        cur.process(gainedC, wet, dry, n, drive);
+        old.process(gainedC, wet2, dry2, n, drive, tracks(old), ntracks(old));
+        cur.process(gainedC, wet, dry, n, drive, tracks(cur), ntracks(cur));
         const double invLen = 1.0 / double(p.fadeLen_);
         for (int i = 0; i < n && fadePos_ < p.fadeLen_; ++i) {
             ++fadePos_;
@@ -1047,7 +1118,16 @@ EngineDiagnostics Engine::diagnostics() const noexcept {
             f.overlay = o.prm.faults[k];
             f.out = o.faultOut[k];
             f.transitions = p.faultAvail_[k] ? o.faults[k].contactTransitions() : 0;
+            f.partial = p.faultPartial_[k] ? p.faultPartial_[k] : "";
+            f.element = p.faultElement_[k];
+            f.parameter = p.faultParam_[k];
+            f.nominal = p.faultNominal_[k];
+            f.applied = p.faultParam_[k] >= 0 ? p.circuit_.parameter(0, p.faultElement_[k], p.faultParam_[k]) : 0.0;
         }
+        x.faultParamUpdates = p.circuit_.parameterUpdates();
+        x.faultParamRefused = p.circuit_.parameterRefusals();
+        if (curGraph_ && p.trackCount_ > 0)
+            x.faultPathReason = "graph path active: graph solvers map elements differently, faults apply to the built-in circuit only";
         x.faultActive = o.hookActive != 0;
         x.faultHook = o.hook;
         x.faultApplied = o.faultApplied; x.faultRejected = o.faultRejected; x.faultResets = o.faultResets;

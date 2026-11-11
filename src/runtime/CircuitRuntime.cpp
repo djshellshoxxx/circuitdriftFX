@@ -106,7 +106,27 @@ struct CircuitRuntime::Core {
     std::int64_t failed = 0, ticks = 0;
     std::uint64_t hash = 0;
     mutable std::vector<double> scratch;   // snapshot staging (sized at prepare)
+    std::vector<NetElement> elements;      // prepared netlist (models -> owned manifests): nominal params, bounds
+    std::int64_t paramUpdates = 0, paramRefused = 0;
 };
+
+namespace {
+
+void countUp(std::int64_t& c) noexcept { if (c < std::numeric_limits<std::int64_t>::max()) ++c; }
+
+// One bounded update on one channel's solver (value already clamped to the manifest range);
+// mapped resistor branches follow the new value. Template only so the private Core is deduced.
+template <class CoreT>
+void pushParameter(CoreT& k, dsp::MnaSolver& s, int element, int p, double v) noexcept {
+    if (!s.updateParameter(element, p, v)) { countUp(k.paramRefused); return; }
+    countUp(k.paramUpdates);
+    const auto& e = k.elements[std::size_t(element)];
+    if (e.model->equation == DeviceEquation::Resistor)
+        for (auto& m : k.mapped)
+            if (m.element == element && !m.diode) m.g = 1.0 / v;
+}
+
+}  // namespace
 
 CircuitRuntime::CircuitRuntime() = default;
 CircuitRuntime::~CircuitRuntime() = default;
@@ -218,18 +238,30 @@ bool CircuitRuntime::prepare(const CircuitConfig& cfg, std::string& err) {
     }
     for (const auto& m : core->mapped) { fnv.pod(m.a); fnv.pod(m.b); fnv.pod(m.node); }
     core->hash = fnv.h;
+    core->elements = net.elements;   // model pointers -> core-owned manifests
     core_ = std::move(core);  // install only after every step succeeded
     err.clear();
     return true;
 }
 
 void CircuitRuntime::process(const double* const* in, double* const* wet, double* const* dry, int n,
-                             const double* drive) noexcept {
+                             const double* drive, const ParamTrack* tracks, int trackCount) noexcept {
     Core* k = core_.get();
     if (!k || n <= 0 || n > k->maxBlock || !in || !wet || !dry) return;
     for (int c = 0; c < k->channels; ++c)
         if (!in[c] || !wet[c] || !dry[c]) return;
     const int F = k->factor;
+    // Validate the parameter tracks once per call (bounded: <= kMaxParamTracks).
+    struct Track { int element, p; double lo, hi; const double* v; };
+    Track tr[kMaxParamTracks];
+    int nt = 0;
+    if (tracks)
+        for (int t = 0; t < trackCount && t < kMaxParamTracks; ++t) {
+            const ParamTrack& x = tracks[t];
+            double nom = 0, lo = 0, hi = 0;
+            if (!x.values || !parameterRange(x.element, x.k, nom, lo, hi)) { countUp(k->paramRefused); continue; }
+            tr[nt++] = {x.element, x.k, lo, hi, x.values};
+        }
     for (int c = 0; c < k->channels; ++c) {
         auto& ch = k->ch[c];
         if (drive) {  // pre-stage drive on the circuit input only (ch.low is free until down())
@@ -247,6 +279,12 @@ void CircuitRuntime::process(const double* const* in, double* const* wet, double
             double* hs = ch.hi.data() + std::size_t(i) * std::size_t(F);
             std::fill(ch.powerSum.begin(), ch.powerSum.begin() + k->thermalNodes, 0.0);
             for (int s = 0; s < F; ++s) {
+                for (int t = 0; t < nt; ++t) {
+                    double v = tr[t].v[std::size_t(i) * std::size_t(F) + std::size_t(s)];
+                    if (!std::isfinite(v)) { countUp(k->paramRefused); continue; }
+                    v = std::clamp(v, tr[t].lo, tr[t].hi);   // manifest range first: updateParameter never sees out-of-range
+                    if (ch.solver.parameter(tr[t].element, tr[t].p) != v) pushParameter(*k, ch.solver, tr[t].element, tr[t].p, v);
+                }
                 ch.solver.setSource(k->io.sourceElement, ch.pad.process(hs[s]) * k->io.voltsPerUnit);
                 if (ch.solver.step()) {
                     ch.consecutive = 0;
@@ -309,6 +347,13 @@ void CircuitRuntime::reset() noexcept {
     if (!k) return;
     for (int c = 0; c < k->channels; ++c) {
         auto& ch = k->ch[c];
+        // Prepared (nominal) parameters first, so the DC state is consistent with them.
+        for (std::size_t e = 0; e < k->elements.size(); ++e) {
+            const auto& el = k->elements[e];
+            if (el.kind != NetElement::Kind::Device || !el.model) continue;
+            for (std::size_t q = 0; q < el.model->params.size() && q < 3; ++q)
+                if (ch.solver.parameter(int(e), int(q)) != el.param[q]) pushParameter(*k, ch.solver, int(e), int(q), el.param[q]);
+        }
         ch.solver.setState(ch.dcState.data());
         ch.os.reset(); ch.pad.reset(); ch.dry.reset();
         if (k->thermalOn) ch.thermal.setState(k->ambient.data());
@@ -395,6 +440,24 @@ int CircuitRuntime::channels() const noexcept { return core_ ? core_->channels :
 int CircuitRuntime::factor() const noexcept { return core_ ? core_->factor : 0; }
 int CircuitRuntime::maxBlock() const noexcept { return core_ ? core_->maxBlock : 0; }
 double CircuitRuntime::sampleRate() const noexcept { return core_ ? core_->fs : 0.0; }
+bool CircuitRuntime::parameterRange(int element, int k, double& nominal, double& min, double& max) const noexcept {
+    if (!core_ || element < 0 || element >= int(core_->elements.size())) return false;
+    const auto& e = core_->elements[std::size_t(element)];
+    if (e.kind != NetElement::Kind::Device || !e.model || k < 0 || k >= int(e.model->params.size()) || k >= 3) return false;
+    nominal = e.param[k];
+    min = e.model->params[std::size_t(k)].min;
+    max = e.model->params[std::size_t(k)].max;
+    return true;
+}
+
+double CircuitRuntime::parameter(int c, int element, int k) const noexcept {
+    if (!core_ || c < 0 || c >= core_->channels) return std::numeric_limits<double>::quiet_NaN();
+    return core_->ch[c].solver.parameter(element, k);
+}
+
+std::int64_t CircuitRuntime::parameterUpdates() const noexcept { return core_ ? core_->paramUpdates : 0; }
+std::int64_t CircuitRuntime::parameterRefusals() const noexcept { return core_ ? core_->paramRefused : 0; }
+
 int CircuitRuntime::ownedManifestCount() const noexcept { return core_ ? int(core_->manifests.size()) : 0; }
 
 CircuitRuntime::Diagnostics CircuitRuntime::diagnostics() const noexcept {

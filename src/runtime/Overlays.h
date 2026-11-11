@@ -22,11 +22,14 @@ inline constexpr int kMaxFaultSlots = 4;
 
 // One fault-capable component of the prepared built-in netlist. `element` indexes
 // CircuitConfig::netlist.elements; availability is decided by blueprint::faultAvailable from the
-// element's equation family (no tube family exists, so microphonic faults are always unavailable).
+// element's equation family (no tube family exists, so microphonic faults are always unavailable)
+// and from what the manifest exposes (ElectrolyticLeaky needs a leakage parameter: unavailable).
 struct FaultSlotConfig {
     bool used = false;
     int element = -1;
-    blueprint::FaultBounds bounds{};      // manifest-declared limits (fixture values are labelled synthetic)
+    // ESR/leakage/bias-span fields only: the R/C fields (nominalR/openR, nominalC/minC) are derived
+    // from the element's netlist value and manifest bounds at prepare (see Engine.h "Faults").
+    blueprint::FaultBounds bounds{};
     blueprint::FaultOverlay overlay{};    // initial overlay (default: disabled)
 };
 
