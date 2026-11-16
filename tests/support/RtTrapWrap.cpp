@@ -55,19 +55,19 @@ int __wrap_pthread_cond_timedwait(pthread_cond_t* c, pthread_mutex_t* m, const s
 int __wrap_open(const char* p, int flags, ...) {
     noteIo();
     mode_t mode = 0;
-    if (flags & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
+    if ((flags & O_CREAT) || (flags & __O_TMPFILE) == __O_TMPFILE) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
     return __real_open(p, flags, mode);
 }
 int __wrap_open64(const char* p, int flags, ...) {
     noteIo();
     mode_t mode = 0;
-    if (flags & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
+    if ((flags & O_CREAT) || (flags & __O_TMPFILE) == __O_TMPFILE) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
     return __real_open64(p, flags, mode);
 }
 int __wrap_openat(int dirfd, const char* p, int flags, ...) {
     noteIo();
     mode_t mode = 0;
-    if (flags & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
+    if ((flags & O_CREAT) || (flags & __O_TMPFILE) == __O_TMPFILE) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
     return __real_openat(dirfd, p, flags, mode);
 }
 ssize_t __wrap_read(int fd, void* b, size_t n) { noteIo(); return __real_read(fd, b, n); }
