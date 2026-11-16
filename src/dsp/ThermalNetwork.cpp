@@ -1,5 +1,6 @@
 #include "ThermalNetwork.h"
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace cd::dsp {
@@ -79,6 +80,7 @@ bool ThermalNetwork::prepare(const Config& cfg, double dt, double ambientK) noex
     }
     n_ = n;
     ambient_ = ambientK;
+    clearStepDiagnostics();
     for (std::size_t i = 0; i < n; ++i) {
         cOverDt_[i] = cOverDt[i];
         gAmb_[i] = cfg.toAmbient[i];
@@ -97,24 +99,45 @@ void ThermalNetwork::setState(const double* temperaturesK) noexcept {
     for (std::size_t i = 0; i < n_; ++i) t_[i] = temperaturesK[i];
 }
 
+void ThermalNetwork::clearStepDiagnostics() noexcept {
+    lastStatus_ = StepStatus::None;
+    accepted_ = rejected_ = consecutiveRejected_ = 0;
+}
+
 void ThermalNetwork::step(const double* powerW) noexcept {
-    if (!powerW) return;
+    constexpr std::uint64_t kMax = std::numeric_limits<std::uint64_t>::max();
+    lastStatus_ = integrate(powerW);
+    if (lastStatus_ == StepStatus::Accepted) {
+        if (accepted_ != kMax) ++accepted_;
+        consecutiveRejected_ = 0;
+    } else {
+        if (rejected_ != kMax) ++rejected_;
+        if (consecutiveRejected_ != kMax) ++consecutiveRejected_;
+    }
+}
+
+// Computes the full candidate before committing; any early return leaves t_ untouched.
+ThermalNetwork::StepStatus ThermalNetwork::integrate(const double* powerW) noexcept {
+    if (n_ == 0) return StepStatus::NotPrepared;
+    if (!powerW) return StepStatus::NullInput;
     std::array<double, kMaxNodes> rhs{}, candidate{};
     for (std::size_t i = 0; i < n_; ++i) {
-        if (!std::isfinite(powerW[i])) return;
+        if (!std::isfinite(powerW[i])) return StepStatus::NonFinitePower;
         rhs[i] = cOverDt_[i] * t_[i] + powerW[i] + gAmb_[i] * ambient_;
-        if (!std::isfinite(rhs[i])) return;
+        if (!std::isfinite(rhs[i])) return StepStatus::Overflow;
     }
     for (std::size_t i = 0; i < n_; ++i) {
         double s = 0.0;
         for (std::size_t j = 0; j < n_; ++j) {
             s += inv_[i][j] * rhs[j];
-            if (!std::isfinite(s)) return;
+            if (!std::isfinite(s)) return StepStatus::Overflow;
         }
-        if (!(s > 0.0) || !std::isfinite(cOverDt_[i] * s + gAmb_[i] * ambient_)) return;
+        if (!(s > 0.0)) return StepStatus::NonPositiveTemperature;
+        if (!std::isfinite(cOverDt_[i] * s + gAmb_[i] * ambient_)) return StepStatus::Overflow;  // next step unrepresentable
         candidate[i] = s;
     }
     for (std::size_t i = 0; i < n_; ++i) t_[i] = candidate[i];
+    return StepStatus::Accepted;
 }
 
 }  // namespace cd::dsp

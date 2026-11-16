@@ -96,11 +96,107 @@ double PolyphaseHalfband2x::down(const double* in2) noexcept {
     return dotEven(dnEven_, dnPos_) + 0.5 * odd;
 }
 
+void PolyphaseHalfband2x::dotEven4(const double* line, int base, double* acc4) const noexcept {
+    const double* e = even_.data();
+    const double* x0 = line + base;
+    const double* x1 = x0 - 1;
+    const double* x2 = x0 - 2;
+    const double* x3 = x0 - 3;
+    double a0 = 0, a1 = 0, a2 = 0, a3 = 0;
+    for (int j = 0, n = E_; j < n; ++j) {
+        const double c = e[j];
+        a0 += c * x0[j]; a1 += c * x1[j]; a2 += c * x2[j]; a3 += c * x3[j];
+    }
+    acc4[0] = a0; acc4[1] = a1; acc4[2] = a2; acc4[3] = a3;
+}
+
+// Ring invariant: line[p] == line[p + E] for every slot p, and the window for the sample written
+// at slot p is line[p .. p+E-1]. Writing four new samples at slots p..p-3 (no wrap) and deferring
+// their upper copies keeps every one of the four windows intact: window k only reaches upper copies
+// of samples written after it, whose old values (the oldest history) it still needs.
+void PolyphaseHalfband2x::upBlock(const double* in, double* out, int n) noexcept {
+    if (E_ == 0) { for (int i = 0; i < 2 * n; ++i) out[i] = 0; return; }
+    double* L = upLine_.data();
+    const int E = E_, d = (c_ - 1) / 2;
+    int i = 0;
+    while (i < n) {
+        if (n - i >= 4 && upPos_ >= 4) {
+            const int p = upPos_ - 1;
+            for (int k = 0; k < 4; ++k) L[p - k] = in[i + k];
+            double acc[4];
+            dotEven4(L, p, acc);
+            for (int k = 0; k < 4; ++k) {
+                out[2 * (i + k)] = 2.0 * acc[k];
+                out[2 * (i + k) + 1] = L[p - k + d];
+            }
+            for (int k = 0; k < 4; ++k) L[p - k + E] = in[i + k];
+            upPos_ = p - 3;
+            i += 4;
+        } else {
+            up(in[i], out + 2 * i);
+            ++i;
+        }
+    }
+}
+
+void PolyphaseHalfband2x::downBlock(const double* in, double* out, int n) noexcept {
+    if (E_ == 0) { for (int i = 0; i < n; ++i) out[i] = 0; return; }
+    double* L = dnEven_.data();
+    const int E = E_, d = (c_ + 1) / 2;
+    int i = 0;
+    while (i < n) {
+        if (n - i >= 4 && dnPos_ >= 4) {
+            const int p = dnPos_ - 1;
+            double ev[4], od[4];  // read all inputs first: safe even for out == in
+            for (int k = 0; k < 4; ++k) { ev[k] = in[2 * (i + k)]; od[k] = in[2 * (i + k) + 1]; }
+            for (int k = 0; k < 4; ++k) L[p - k] = ev[k];
+            double acc[4];
+            dotEven4(L, p, acc);
+            for (int k = 0; k < 4; ++k) {
+                const double odd = dnOdd_[std::size_t((oddPos_ + oddLen_ - d) % oddLen_)];
+                dnOdd_[std::size_t(oddPos_)] = od[k];
+                oddPos_ = (oddPos_ + 1) % oddLen_;
+                out[i + k] = acc[k] + 0.5 * odd;
+            }
+            for (int k = 0; k < 4; ++k) L[p - k + E] = ev[k];
+            dnPos_ = p - 3;
+            i += 4;
+        } else {
+            out[i] = down(in + 2 * i);
+            ++i;
+        }
+    }
+}
+
 void PolyphaseHalfband2x::reset() noexcept {
     std::fill(upLine_.begin(), upLine_.end(), 0.0);
     std::fill(dnEven_.begin(), dnEven_.end(), 0.0);
     std::fill(dnOdd_.begin(), dnOdd_.end(), 0.0);
     upPos_ = dnPos_ = oddPos_ = 0;
+}
+
+void PolyphaseHalfband2x::getState(double* out) const noexcept {
+    double* o = std::copy(upLine_.begin(), upLine_.end(), out);
+    o = std::copy(dnEven_.begin(), dnEven_.end(), o);
+    o = std::copy(dnOdd_.begin(), dnOdd_.end(), o);
+    o[0] = double(upPos_); o[1] = double(dnPos_); o[2] = double(oddPos_);
+}
+
+bool PolyphaseHalfband2x::stateValid(const double* in) const noexcept {
+    const double* pos = in + upLine_.size() + dnEven_.size() + dnOdd_.size();
+    auto okPos = [](double v, int limit) { return v >= 0 && v < double(limit > 0 ? limit : 1) && v == std::floor(v); };
+    return okPos(pos[0], E_) && okPos(pos[1], E_) && okPos(pos[2], oddLen_);
+}
+
+bool PolyphaseHalfband2x::setState(const double* in) noexcept {
+    if (!stateValid(in)) return false;
+    const std::size_t a = upLine_.size(), b = dnEven_.size(), c = dnOdd_.size();
+    const double* pos = in + a + b + c;
+    std::copy(in, in + a, upLine_.begin());
+    std::copy(in + a, in + a + b, dnEven_.begin());
+    std::copy(in + a + b, in + a + b + c, dnOdd_.begin());
+    upPos_ = int(pos[0]); dnPos_ = int(pos[1]); oddPos_ = int(pos[2]);
+    return true;
 }
 
 // ---- HalfbandIir2x ---------------------------------------------------------------------------
@@ -212,6 +308,16 @@ void HalfbandIir2x::reset() noexcept {
         for (int i = 0; i < kMaxCoefs / 2; ++i) bank[i].x1 = bank[i].y1 = 0;
 }
 
+void HalfbandIir2x::getState(double* out) const noexcept {
+    for (const Ap* bank : {upA_, upB_, dnA_, dnB_})
+        for (int i = 0; i < kMaxCoefs / 2; ++i) { *out++ = bank[i].x1; *out++ = bank[i].y1; }
+}
+
+void HalfbandIir2x::setState(const double* in) noexcept {
+    for (Ap* bank : {upA_, upB_, dnA_, dnB_})
+        for (int i = 0; i < kMaxCoefs / 2; ++i) { bank[i].x1 = *in++; bank[i].y1 = *in++; }
+}
+
 // ---- Oversampler -----------------------------------------------------------------------------
 
 bool Oversampler::prepare(const Spec& s, int maxBlock) {
@@ -251,10 +357,8 @@ void Oversampler::up(const double* in, double* out, int n) noexcept {
     int len = n;
     for (int s = 0; s < stages_; ++s) {
         double* dst = (s == stages_ - 1) ? out : ((s % 2) ? bufB_.data() : bufA_.data());
-        for (int i = 0; i < len; ++i) {
-            if (family_ == OsFamily::Fir) fir_[s].up(src[i], dst + 2 * i);
-            else iir_[s].up(src[i], dst + 2 * i);
-        }
+        if (family_ == OsFamily::Fir) fir_[s].upBlock(src, dst, len);
+        else for (int i = 0; i < len; ++i) iir_[s].up(src[i], dst + 2 * i);
         src = dst; len *= 2;
     }
 }
@@ -266,14 +370,46 @@ void Oversampler::down(const double* in, double* out, int n) noexcept {
     int len = n * factor_;
     for (int s = stages_ - 1, k = 0; s >= 0; --s, ++k) {
         double* dst = (s == 0) ? out : ((k % 2) ? bufB_.data() : bufA_.data());
-        for (int i = 0; i < len / 2; ++i)
-            dst[i] = (family_ == OsFamily::Fir) ? fir_[s].down(src + 2 * i) : iir_[s].down(src + 2 * i);
+        if (family_ == OsFamily::Fir) fir_[s].downBlock(src, dst, len / 2);
+        else for (int i = 0; i < len / 2; ++i) dst[i] = iir_[s].down(src + 2 * i);
         src = dst; len /= 2;
     }
 }
 
 void Oversampler::reset() noexcept {
     for (int s = 0; s < kMaxStages; ++s) { fir_[s].reset(); iir_[s].reset(); }
+}
+
+int Oversampler::stateSize() const noexcept {
+    int n = 0;
+    for (int s = 0; s < stages_; ++s) n += family_ == OsFamily::Fir ? fir_[s].stateSize() : HalfbandIir2x::stateSize();
+    return n;
+}
+
+void Oversampler::getState(double* out) const noexcept {
+    for (int s = 0; s < stages_; ++s) {
+        if (family_ == OsFamily::Fir) { fir_[s].getState(out); out += fir_[s].stateSize(); }
+        else { iir_[s].getState(out); out += HalfbandIir2x::stateSize(); }
+    }
+}
+
+bool Oversampler::stateValid(const double* in) const noexcept {
+    const double* p = in;
+    for (int s = 0; s < stages_ && family_ == OsFamily::Fir; ++s) {
+        if (!fir_[s].stateValid(p)) return false;
+        p += fir_[s].stateSize();
+    }
+    return true;
+}
+
+bool Oversampler::setState(const double* in) noexcept {
+    if (!stateValid(in)) return false;  // validate every stage first
+    const double* p = in;
+    for (int s = 0; s < stages_; ++s) {
+        if (family_ == OsFamily::Fir) { fir_[s].setState(p); p += fir_[s].stateSize(); }
+        else { iir_[s].setState(p); p += HalfbandIir2x::stateSize(); }
+    }
+    return true;
 }
 
 }  // namespace cd::dsp

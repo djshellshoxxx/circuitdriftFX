@@ -5,6 +5,10 @@
 // Oversampler: 2^k cascade (1x..64x; 32x/64x intended only for the offline T21 reference).
 // Threading: design/prepare allocate and run off the audio thread; process/reset are noexcept,
 // allocation-free, double precision. Coefficients are frozen at prepare for a given Spec.
+// Dynamic state (additive API for engine snapshots, P04/runtime): stateSize()/getState()/
+// setState() copy filter histories and ring positions as doubles (exact integers for positions)
+// into caller buffers; noexcept, allocation-free. setState requires the identical design (same
+// Spec/prepare) and ignores a buffer whose positions are out of range, leaving state unchanged.
 #pragma once
 #include <cstdint>
 #include <vector>
@@ -26,10 +30,22 @@ public:
     // Up: one base sample -> two high-rate samples (gain 2 applied). Down: two -> one.
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
+    // Block forms, bit-identical to n successive up()/down() calls (additive, P17): up writes 2n
+    // samples, down reads 2n and writes n. Four outputs are computed with interleaved but
+    // individually ordered accumulators (same summation order as the scalar path) for ILP.
+    // upBlock: in/out must not overlap; downBlock reads each group of inputs before writing.
+    void upBlock(const double* in, double* out, int n) noexcept;
+    void downBlock(const double* in, double* out, int n) noexcept;
     void reset() noexcept;
+    int stateSize() const noexcept { return int(upLine_.size() + dnEven_.size() + dnOdd_.size()) + 3; }
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;
+    bool stateValid(const double* in) const noexcept;
 private:
     void clear() noexcept;
     double dotEven(const std::vector<double>& line, int pos) const noexcept;
+    // Four dot products of even_ with line windows starting at base, base-1, base-2, base-3.
+    void dotEven4(const double* line, int base, double* acc4) const noexcept;
     std::vector<double> h_, even_;                          // even_ = h[0], h[2], ..., h[2c]
     std::vector<double> upLine_, dnEven_, dnOdd_;          // doubled ring buffers (len 2*E)
     int c_ = 0, E_ = 0, upPos_ = 0, dnPos_ = 0, oddPos_ = 0, oddLen_ = 0;
@@ -49,6 +65,9 @@ public:
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
     void reset() noexcept;
+    static constexpr int stateSize() noexcept { return 4 * (kMaxCoefs / 2) * 2; }
+    void getState(double* out) const noexcept;
+    void setState(const double* in) noexcept;
 private:
     struct Ap { double a = 0, x1 = 0, y1 = 0; };
     double path(Ap* s, int count, double x) noexcept;
@@ -82,6 +101,10 @@ public:
     void up(const double* in, double* out, int n) noexcept;
     void down(const double* in, double* out, int n) noexcept;
     void reset() noexcept;
+    int stateSize() const noexcept;
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;   // all stages or nothing
+    bool stateValid(const double* in) const noexcept;
 private:
     static constexpr int kMaxStages = 6;
     PolyphaseHalfband2x fir_[kMaxStages];

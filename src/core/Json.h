@@ -13,6 +13,9 @@
 namespace cd::core {
 
 struct JsonValue {
+    // Declared out of line (defaulted after the class) so clang+libstdc++ does not instantiate
+    // pair<string,JsonValue> while JsonValue is incomplete.
+    JsonValue() noexcept;
     enum class Type : unsigned char { Null, Bool, Number, String, Array, Object };
     Type type = Type::Null;
     bool boolean = false;
@@ -45,6 +48,8 @@ struct JsonValue {
     static JsonValue makeObject() { JsonValue v; v.type = Type::Object; return v; }
     static JsonValue makeArray() { JsonValue v; v.type = Type::Array; return v; }
 };
+
+inline JsonValue::JsonValue() noexcept = default;
 
 struct JsonLimits {
     std::size_t maxBytes = 2621440;  // 2.5 MiB (session bound)
