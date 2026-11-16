@@ -44,7 +44,7 @@ MediaError WavWriter::append(const float* in, std::uint32_t frames) {
     while (frames > 0) {
         const std::uint32_t n = frames < kChunkFrames ? frames : kChunkFrames;
         const std::size_t count = std::size_t(n) * std::size_t(ch_);
-        if (dataBytes_ + count * bytesPer > 0xFFFFFFF0ull) return MediaError::InvalidArgument;  // RIFF 4 GiB limit
+        if (dataBytes_ + count * bytesPer > 0xFFFFFFFFull - (dataOffset_ - 8) - 1) return MediaError::InvalidArgument;  // RIFF size field must not wrap
         scratch_.resize(count * bytesPer);  // capacity settles after first chunk
         std::uint8_t* o = scratch_.data();
         for (std::size_t i = 0; i < count; ++i) {
