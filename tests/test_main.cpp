@@ -531,9 +531,14 @@ static void p04_state() {
     // Atomic save.
     const auto path = (std::filesystem::temp_directory_path() / "cd_p04_atomic.circuitdrift.json").string();
     CHECK(state::saveStateFileAtomic(path, s1, e), "atomic save: %s", e.c_str());
-    std::ifstream f(path, std::ios::binary); std::string got((std::istreambuf_iterator<char>(f)), {});
+    std::string got;
+    {   // Close before removing: Windows refuses to delete a file with an open handle.
+        std::ifstream f(path, std::ios::binary);
+        got.assign(std::istreambuf_iterator<char>(f), {});
+    }
     CHECK(got == s1 && !std::filesystem::exists(path + ".tmp"), "atomic content");
-    std::filesystem::remove(path);
+    std::error_code removeError;
+    CHECK(std::filesystem::remove(path, removeError) && !removeError, "remove saved file: %s", removeError.message().c_str());
 }
 
 static void t22_hpf() {
