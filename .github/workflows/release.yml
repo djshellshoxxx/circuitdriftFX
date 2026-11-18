@@ -25,9 +25,9 @@ jobs:
       # pluginval is a GPLv3 CI tool: downloaded, verified and run here, never packaged.
       PLUGINVAL_VERSION: v1.0.4
       PLUGINVAL_URL: https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
-      # SHA-256 of pluginval_Windows.zip for PLUGINVAL_VERSION. Must be filled in (lower-case hex) by a
-      # maintainer who has downloaded and inspected the asset; the job refuses to run otherwise.
-      PLUGINVAL_SHA256: UNSET-compute-sha256-of-the-pinned-asset-before-first-release
+      # SHA-256 of pluginval_Windows.zip (v1.0.4, single pluginval.exe), computed 2026-11-18 from the
+      # release asset; the job refuses to run if the download differs.
+      PLUGINVAL_SHA256: c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab
     steps:
       - name: Validate tag and pins
         shell: bash

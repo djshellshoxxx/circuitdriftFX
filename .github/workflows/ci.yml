@@ -1,6 +1,8 @@
 name: ci
 on:
+  # Branch pushes are covered by their pull request run; push runs only on main (no duplicate jobs).
   push:
+    branches: [main]
     paths-ignore: ['**.md', '**.png', '**.jpg', '**.jpeg', '**.gif', '**.svg']
   pull_request:
     paths-ignore: ['**.md', '**.png', '**.jpg', '**.jpeg', '**.gif', '**.svg']
