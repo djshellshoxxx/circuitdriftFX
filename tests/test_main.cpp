@@ -20,6 +20,7 @@
 #include "dsp/Halfband2x.h"
 #include "dsp/ThermalNetwork.h"
 #include "state/StateDocument.h"
+#include <exception>
 #include <filesystem>
 #include <fstream>
 
@@ -31,7 +32,10 @@ using namespace cd;
 static void registry() {
     std::set<uint32_t> ids; std::set<std::string> names;
     for (const auto& p : core::kParams) {
-        CHECK(p.hostId >= 1000 && p.hostId <= 1999, "%s id %u", p.id, p.hostId);
+        // Extension IDs 1000-1999; base-engine (CD-F20) slot controls use the disjoint range 1-999.
+        const bool base = p.hostId >= 1 && p.hostId < 1000 && std::string(p.featureId) == "CD-F20" &&
+                          p.scope != core::ParamScope::Global;
+        CHECK(base || (p.hostId >= 1000 && p.hostId <= 1999), "%s id %u", p.id, p.hostId);
         CHECK(ids.insert(p.hostId).second, "dup hostId %u", p.hostId);
         CHECK(names.insert(p.id).second, "dup id %s", p.id);
         CHECK(p.min <= p.def && p.def <= p.max, "%s default range", p.id);
@@ -40,10 +44,17 @@ static void registry() {
         CHECK(std::fabs(core::toPlain(p, 0.0) - p.min) < 1e-9 && std::fabs(core::toPlain(p, 1.0) - p.max) < 1e-9, "%s endpoints", p.id);
         CHECK(core::toPlain(p, NAN) == p.def, "%s NaN", p.id);
     }
-    CHECK(core::kParamCount == 74, "count %zu", core::kParamCount);
+    CHECK(core::kParamCount == 116, "count %zu (74 extension + 2x21 base)", core::kParamCount);
+    const auto* driveA = core::findById("slot.a.stage.drive");
+    const auto* driveB = core::findById("slot.b.stage.drive");
+    CHECK(driveA && driveB && driveA->hostId == 12 && driveB->hostId == 62 &&
+          driveA->scope == core::ParamScope::SlotA && driveB->scope == core::ParamScope::SlotB, "base slot ids");
     const auto* h = core::findById("hpf.frequency");
     CHECK(h && h->def == 15.0 && h->mapping == core::ParamMapping::Log, "hpf spec");
     CHECK(core::findByHostId(1011) == h, "lookup");
+    static_assert(core::indexOf("hpf.frequency") < core::kParamCount && core::indexOf("nope") == core::kParamCount);
+    CHECK(&core::kParams[core::indexOf("hpf.frequency")] == h && core::defaultValues()[core::indexOf("hpf.frequency")] == 15.0,
+          "indexOf/defaultValues");
     CHECK(core::smoothingCoeff(48000, 0) == 0.0, "tau0");
     CHECK(std::fabs(core::smoothingCoeff(48000, 0.01) - std::exp(-1.0 / 480.0)) < 1e-15, "coeff");
 }
@@ -520,9 +531,14 @@ static void p04_state() {
     // Atomic save.
     const auto path = (std::filesystem::temp_directory_path() / "cd_p04_atomic.circuitdrift.json").string();
     CHECK(state::saveStateFileAtomic(path, s1, e), "atomic save: %s", e.c_str());
-    std::ifstream f(path, std::ios::binary); std::string got((std::istreambuf_iterator<char>(f)), {});
+    std::string got;
+    {   // Close before removing: Windows refuses to delete a file with an open handle.
+        std::ifstream f(path, std::ios::binary);
+        got.assign(std::istreambuf_iterator<char>(f), {});
+    }
     CHECK(got == s1 && !std::filesystem::exists(path + ".tmp"), "atomic content");
-    std::filesystem::remove(path);
+    std::error_code removeError;
+    CHECK(std::filesystem::remove(path, removeError) && !removeError, "remove saved file: %s", removeError.message().c_str());
 }
 
 static void t22_hpf() {
@@ -610,8 +626,22 @@ static void t21_halfband() {
     CHECK(std::fabs(20 * std::log10(peakOut / peakIn)) <= 0.01, "round trip %g dB", 20 * std::log10(peakOut / peakIn));
 }
 
+// Runs one section with progress on unbuffered stdout, so a fatal platform failure (e.g. a
+// fast-fail with no flushed output) still names the section; exceptions become test failures.
+template <class F>
+static void section(const char* name, F&& fn) {
+    std::printf("[section] %s\n", name);
+    try { fn(); }
+    catch (const std::exception& e) { ++g_fail; std::printf("FAIL %s threw: %s\n", name, e.what()); }
+    catch (...) { ++g_fail; std::printf("FAIL %s threw a non-standard exception\n", name); }
+}
+
 int main() {
-    registry(); t20_thermal(); t21_oversampling(); t21_halfband(); t22_hpf(); t23_clip_match(); p02_json(); p02_manifest(); p02_mna(); p04_state();
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    section("registry", registry); section("t20_thermal", t20_thermal); section("t21_oversampling", t21_oversampling);
+    section("t21_halfband", t21_halfband); section("t22_hpf", t22_hpf); section("t23_clip_match", t23_clip_match);
+    section("p02_json", p02_json); section("p02_manifest", p02_manifest); section("p02_mna", p02_mna);
+    section("p04_state", p04_state);
     std::printf(g_fail ? "FAILED (%d)\n" : "ALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }

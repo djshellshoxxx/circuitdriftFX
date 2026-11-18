@@ -99,7 +99,12 @@ need(len({p["id"] for p in registry}) == len(registry), "parameter string IDs")
 need(len({p["hostId"] for p in registry}) == len(registry), "parameter host IDs")
 for p in registry:
     need(p["featureId"] in expected, f'unknown feature {p["id"]}')
-    need(1000 <= p["hostId"] < 2000, f'ID range {p["id"]}')
+    if p.get("origin") == "base":
+        # Base-engine controls (PRODUCT_VISION): disjoint permanent range 1-999, slot scoped.
+        need(p["featureId"] == "CD-F20" and 1 <= p["hostId"] < 1000 and p["scope"] in ("a", "b"),
+             f'base ID range {p["id"]}')
+    else:
+        need(1000 <= p["hostId"] < 2000, f'ID range {p["id"]}')
     need(p["min"] <= p["default"] <= p["max"], f'default {p["id"]}')
     need(p["smoothingMs"] >= 0, f'smoothing {p["id"]}')
     if p["type"] == "enum":

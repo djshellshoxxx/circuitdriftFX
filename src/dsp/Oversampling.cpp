@@ -103,6 +103,27 @@ void PolyphaseHalfband2x::reset() noexcept {
     upPos_ = dnPos_ = oddPos_ = 0;
 }
 
+void PolyphaseHalfband2x::getState(double* out) const noexcept {
+    out = std::copy(upLine_.begin(), upLine_.end(), out);
+    out = std::copy(dnEven_.begin(), dnEven_.end(), out);
+    out = std::copy(dnOdd_.begin(), dnOdd_.end(), out);
+    out[0] = upPos_; out[1] = dnPos_; out[2] = oddPos_;
+}
+
+bool PolyphaseHalfband2x::setState(const double* in) noexcept {
+    const int n = stateSize();
+    for (int k = 0; k < n; ++k) if (!std::isfinite(in[k])) return false;
+    const double* pos = in + 4 * E_ + oddLen_;
+    const int up = int(pos[0]), dn = int(pos[1]), od = int(pos[2]);
+    if (double(up) != pos[0] || double(dn) != pos[1] || double(od) != pos[2] || up < 0 || up >= std::max(E_, 1) ||
+        dn < 0 || dn >= std::max(E_, 1) || od < 0 || od >= std::max(oddLen_, 1)) return false;
+    std::copy(in, in + 2 * E_, upLine_.begin());
+    std::copy(in + 2 * E_, in + 4 * E_, dnEven_.begin());
+    std::copy(in + 4 * E_, in + 4 * E_ + oddLen_, dnOdd_.begin());
+    upPos_ = up; dnPos_ = dn; oddPos_ = od;
+    return true;
+}
+
 // ---- HalfbandIir2x ---------------------------------------------------------------------------
 // Elliptic halfband allpass coefficients (Valenzuela/Constantinides form; series evaluation as in
 // public-domain hiir by L. de Soras). The response is verified numerically, not trusted.
@@ -207,6 +228,18 @@ double HalfbandIir2x::down(const double* in2) noexcept {
     return 0.5 * (path(dnA_, nA_, in2[1]) + path(dnB_, nB_, in2[0]));
 }
 
+void HalfbandIir2x::getState(double* out) const noexcept {
+    for (const Ap* bank : {upA_, upB_, dnA_, dnB_})
+        for (int i = 0; i < kMaxCoefs / 2; ++i) { *out++ = bank[i].x1; *out++ = bank[i].y1; }
+}
+
+bool HalfbandIir2x::setState(const double* in) noexcept {
+    for (int k = 0; k < kStateSize; ++k) if (!std::isfinite(in[k])) return false;
+    for (Ap* bank : {upA_, upB_, dnA_, dnB_})
+        for (int i = 0; i < kMaxCoefs / 2; ++i) { bank[i].x1 = *in++; bank[i].y1 = *in++; }
+    return true;
+}
+
 void HalfbandIir2x::reset() noexcept {
     for (Ap* bank : {upA_, upB_, dnA_, dnB_})
         for (int i = 0; i < kMaxCoefs / 2; ++i) bank[i].x1 = bank[i].y1 = 0;
@@ -270,6 +303,29 @@ void Oversampler::down(const double* in, double* out, int n) noexcept {
             dst[i] = (family_ == OsFamily::Fir) ? fir_[s].down(src + 2 * i) : iir_[s].down(src + 2 * i);
         src = dst; len /= 2;
     }
+}
+
+int Oversampler::stateSize() const noexcept {
+    int n = 0;
+    for (int s = 0; s < stages_; ++s) n += family_ == OsFamily::Fir ? fir_[s].stateSize() : HalfbandIir2x::kStateSize;
+    return n;
+}
+
+void Oversampler::getState(double* out) const noexcept {
+    for (int s = 0; s < stages_; ++s) {
+        if (family_ == OsFamily::Fir) { fir_[s].getState(out); out += fir_[s].stateSize(); }
+        else { iir_[s].getState(out); out += HalfbandIir2x::kStateSize; }
+    }
+}
+
+bool Oversampler::setState(const double* in) noexcept {
+    const int n = stateSize();
+    for (int k = 0; k < n; ++k) if (!std::isfinite(in[k])) return false;
+    for (int s = 0; s < stages_; ++s) {
+        if (family_ == OsFamily::Fir) { if (!fir_[s].setState(in)) return false; in += fir_[s].stateSize(); }
+        else { if (!iir_[s].setState(in)) return false; in += HalfbandIir2x::kStateSize; }
+    }
+    return true;
 }
 
 void Oversampler::reset() noexcept {

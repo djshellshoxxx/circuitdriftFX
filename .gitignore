@@ -1,1 +1,6 @@
 build/
+
+# Agent worktrees and local build trees
+.claude/worktrees/
+build*/
+.deps-cache/

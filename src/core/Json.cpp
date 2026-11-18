@@ -9,6 +9,14 @@
 
 namespace cd::core {
 
+JsonValue::JsonValue() = default;
+JsonValue::JsonValue(const JsonValue&) = default;
+JsonValue::JsonValue(JsonValue&&) noexcept = default;
+JsonValue& JsonValue::operator=(const JsonValue&) = default;
+JsonValue& JsonValue::operator=(JsonValue&&) noexcept = default;
+JsonValue::~JsonValue() = default;
+
+
 const JsonValue* JsonValue::get(std::string_view key) const noexcept {
     for (const auto& kv : object) if (kv.first == key) return &kv.second;
     return nullptr;
@@ -111,11 +119,11 @@ struct Parser {
                     case 'b': o += '\b'; break; case 'f': o += '\f'; break;  case 'n': o += '\n'; break;
                     case 'r': o += '\r'; break; case 't': o += '\t'; break;
                     case 'u': {
-                        unsigned cp;
+                        unsigned cp = 0;
                         if (!hex4(cp)) return false;
                         if (cp >= 0xDC00 && cp <= 0xDFFF) return fail("lone low surrogate");
                         if (cp >= 0xD800 && cp <= 0xDBFF) {
-                            unsigned lo;
+                            unsigned lo = 0;
                             if (s.substr(i, 2) != "\\u") return fail("lone high surrogate");
                             i += 2;
                             if (!hex4(lo)) return false;

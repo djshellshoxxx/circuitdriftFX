@@ -27,6 +27,10 @@ public:
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
     void reset() noexcept;
+    // Dynamic state (delay lines and ring positions) for checkpoints; positions stored as doubles.
+    int stateSize() const noexcept { return 4 * E_ + oddLen_ + 3; }
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;   // false (unchanged) on non-finite/out-of-range data
 private:
     void clear() noexcept;
     double dotEven(const std::vector<double>& line, int pos) const noexcept;
@@ -49,6 +53,9 @@ public:
     void up(double x, double* out2) noexcept;
     double down(const double* in2) noexcept;
     void reset() noexcept;
+    static constexpr int kStateSize = 4 * (kMaxCoefs / 2) * 2;
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;
 private:
     struct Ap { double a = 0, x1 = 0, y1 = 0; };
     double path(Ap* s, int count, double x) noexcept;
@@ -82,6 +89,11 @@ public:
     void up(const double* in, double* out, int n) noexcept;
     void down(const double* in, double* out, int n) noexcept;
     void reset() noexcept;
+    OsFamily family() const noexcept { return family_; }
+    // Dynamic state of every prepared stage (checkpoints, warm transfer between identical specs).
+    int stateSize() const noexcept;
+    void getState(double* out) const noexcept;
+    bool setState(const double* in) noexcept;
 private:
     static constexpr int kMaxStages = 6;
     PolyphaseHalfband2x fir_[kMaxStages];

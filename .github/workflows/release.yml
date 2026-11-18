@@ -1,0 +1,173 @@
+name: release
+# Windows-only release: build, test, validate (pluginval), package, publish a GitHub release.
+# Triggered by a version tag or manually for an existing tag. Never cancelled mid-flight.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (for example v0.1.0)'
+        required: true
+        type: string
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      CD_DEPS_CACHE_DIR: ${{ github.workspace }}/.deps-cache
+      # pluginval is a GPLv3 CI tool: downloaded, verified and run here, never packaged.
+      PLUGINVAL_VERSION: v1.0.4
+      PLUGINVAL_URL: https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+      # SHA-256 of pluginval_Windows.zip (v1.0.4, single pluginval.exe), computed 2026-11-18 from the
+      # release asset; the job refuses to run if the download differs.
+      PLUGINVAL_SHA256: c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab
+    steps:
+      - name: Validate tag and pins
+        shell: bash
+        run: |
+          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "error: '$RELEASE_TAG' is not a version tag like v1.2.3" >&2; exit 1
+          fi
+          if ! [[ "$PLUGINVAL_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "error: PLUGINVAL_SHA256 is not set to a real SHA-256; refusing to release unvalidated plugins" >&2; exit 1
+          fi
+          echo "VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 1
+      - name: Require licence decision and notes inputs
+        shell: bash
+        run: |
+          # ADR-0001 section 2: the owner picks AGPLv3 or the JUCE EULA and records it as LICENSE.
+          if [ ! -f LICENSE ]; then echo "error: LICENSE missing; owner licence decision pending (ADR-0001)" >&2; exit 1; fi
+          if [ ! -f THIRD-PARTY-NOTICES.md ]; then echo "error: THIRD-PARTY-NOTICES.md missing" >&2; exit 1; fi
+      - uses: actions/cache@v4
+        with:
+          path: .deps-cache
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake') }}
+      # Default generator = newest installed Visual Studio on the image (no hard-coded VS year).
+      - name: Toolchain info
+        shell: bash
+        run: |
+          cmake --version | head -1
+          "/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property displayName || true
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build-plugin -A x64
+          -DCD_BUILD_PLUGIN=ON
+          -DCD_DEPS_CACHE_DIR="$CD_DEPS_CACHE_DIR"
+          -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
+      - name: Build (Release)
+        shell: bash
+        run: cmake --build build-plugin --config Release --parallel 4
+      - name: Test
+        shell: bash
+        run: >
+          ctest --test-dir build-plugin -C Release --output-on-failure --parallel 4
+          -E "registry_codegen_fresh|docs_validation_only"
+      - name: Stage artefacts and smoke-check entry points
+        shell: bash
+        run: bash plugin/packaging/stage_windows.sh build-plugin stage Release
+      - name: Download and verify pluginval
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri $env:PLUGINVAL_URL -OutFile pluginval.zip
+          $actual = (Get-FileHash pluginval.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:PLUGINVAL_SHA256) { throw "pluginval hash mismatch: $actual" }
+          Expand-Archive pluginval.zip -DestinationPath pluginval-tool
+      # Strictness 5 on both VST3 bundles. pluginval does not host CLAP; CLAP gets the structural
+      # entry-point check in the staging step only (no pinned, verifiable CLAP validator yet).
+      - name: pluginval (VST3, strictness 5)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force pluginval-logs | Out-Null
+          $failed = $false
+          foreach ($bundle in Get-ChildItem stage/VST3 -Directory) {
+            & pluginval-tool/pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 120000 `
+              --output-dir pluginval-logs $bundle.FullName
+            if ($LASTEXITCODE -ne 0) { Write-Host "pluginval failed for $($bundle.Name)"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pluginval-logs
+          path: pluginval-logs
+          if-no-files-found: ignore
+      - name: Assemble release archive
+        shell: bash
+        run: |
+          name="CircuitDrift-${VERSION}-Windows-x64"
+          pkg="out/$name"
+          mkdir -p "$pkg/licenses" release-files
+          cp -R stage/VST3 stage/CLAP stage/Standalone "$pkg/"
+          cp plugin/packaging/README-WINDOWS.txt LICENSE THIRD-PARTY-NOTICES.md "$pkg/"
+          # Licence texts of the components compiled into the binaries (pinned sources in the deps cache).
+          copy_license() {  # copy_license <dest-name> <file...> (first existing file wins)
+            local dst=$1; shift
+            for f in "$@"; do
+              if [ -f "$f" ]; then cp "$f" "$pkg/licenses/$dst"; return 0; fi
+            done
+            echo "error: no licence file found for $dst" >&2; return 1
+          }
+          d="$CD_DEPS_CACHE_DIR"
+          copy_license JUCE-LICENSE.md "$d/juce-src/LICENSE.md"
+          copy_license JUCE-VST3_SDK-LICENSE.txt "$d/juce-src/modules/juce_audio_processors_headless/format_types/VST3_SDK/LICENSE.txt" "$d/juce-src/modules/juce_audio_processors/format_types/VST3_SDK/LICENSE.txt"
+          copy_license clap-juce-extensions-LICENSE "$d/clap_juce_extensions-src/LICENSE" "$d/clap_juce_extensions-src/LICENSE.md"
+          copy_license CLAP-LICENSE "$d/clap_juce_extensions-src/clap-libs/clap/LICENSE"
+          copy_license clap-helpers-LICENSE "$d/clap_juce_extensions-src/clap-libs/clap-helpers/LICENSE"
+          (cd "$pkg" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+      - name: Zip and checksum
+        shell: pwsh
+        run: |
+          $name = "CircuitDrift-$env:VERSION-Windows-x64"
+          Compress-Archive -Path "out/$name" -DestinationPath "release-files/$name.zip" -CompressionLevel Optimal
+          $hash = (Get-FileHash "release-files/$name.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "release-files/$name.zip.sha256" -Value "$hash  $name.zip" -Encoding ascii
+          if (Test-Path "docs/release/NOTES-$env:VERSION.md") {
+            Copy-Item "docs/release/NOTES-$env:VERSION.md" release-files/notes.md
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release-files
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release-files
+      - name: Create GitHub release
+        shell: bash
+        run: |
+          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "error: bad tag '$RELEASE_TAG'" >&2; exit 1
+          fi
+          args=(--verify-tag --title "CircuitDrift ${RELEASE_TAG#v} (Windows x64)")
+          if [[ "$RELEASE_TAG" == *-* ]]; then args+=(--prerelease); fi
+          if [ -f release-files/notes.md ]; then
+            args+=(--notes-file release-files/notes.md)
+          else
+            args+=(--generate-notes)
+          fi
+          gh release create "$RELEASE_TAG" "${args[@]}" release-files/*.zip release-files/*.zip.sha256
