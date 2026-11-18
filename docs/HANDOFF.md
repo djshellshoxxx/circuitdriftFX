@@ -17,6 +17,10 @@ Codex is integration owner for the user-approved reconciliation and safety fixes
 
 The product is incomplete. No JUCE wrapper, GUI, host-qualified plugin, release binary, calibrated hardware model, cross-platform runtime qualification or measured CPU/memory compliance is claimed. The T21 hot 4x synthetic stimulus misses its proposed target; see traceability.
 
+## Update (PR #14)
+
+Packets 1–3 now have first Partial implementations: `src/control` (queue/snapshot interface, tests), `tests/rt_trap` (trap harness, primitive smoke only) and `src/dsp/CircuitStage` (solver in oversampler, containment, latency). Remaining per packet: 1 = cd_state adapter, engine capture/restore wiring, layout-generation semantics; 2 = integrated process entry + one-hour stress, non-Linux; 3 = stereo/linked chain, T→electrical coupling, quality crossfade, hot 4x −62.43 dB miss stays visible. Packets below are the original text.
+
 ## Resume packets
 
 1. **P04 queue/snapshot interface**: resolve provider-owned runtime layout and generations with the solver owner. Define producer/consumer ownership, coherent configuration revision, bounded preallocated request/publish slots, sample index/clock remainder, off-audio reclamation and stopped-audio save fallback before implementation. Acceptance: partitioned blocks including zero frames, queue pressure, concurrent save/restore, old-generation rejection and no audio allocation/lock/I/O. Configuration persistence must work when a dynamic checkpoint is unavailable. Do not replace the existing registry or JSON implementation.
