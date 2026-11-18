@@ -83,7 +83,6 @@ private:
     std::vector<double> loadBuf_, transBuf_, mono_;
     std::atomic<double> budgetA_{0.0};
     std::atomic<double> a4_{440.0};
-    double cachedTau_ = 0;
     ControlStatus status_{};
     int lastKeySource_ = 0;
     TempoOutput lastTempo_{};

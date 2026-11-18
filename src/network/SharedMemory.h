@@ -41,8 +41,11 @@ private:
     SharedLayout* layout_ = nullptr;
     std::string name_;
     bool owner_ = false;
-    void* handle_ = nullptr;  // Windows HANDLE
+#if defined(_WIN32)
+    void* handle_ = nullptr;  // Windows file-mapping HANDLE
+#else
     int fd_ = -1;
+#endif
 };
 
 }  // namespace cd::network

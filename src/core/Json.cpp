@@ -9,6 +9,14 @@
 
 namespace cd::core {
 
+JsonValue::JsonValue() = default;
+JsonValue::JsonValue(const JsonValue&) = default;
+JsonValue::JsonValue(JsonValue&&) noexcept = default;
+JsonValue& JsonValue::operator=(const JsonValue&) = default;
+JsonValue& JsonValue::operator=(JsonValue&&) noexcept = default;
+JsonValue::~JsonValue() = default;
+
+
 const JsonValue* JsonValue::get(std::string_view key) const noexcept {
     for (const auto& kv : object) if (kv.first == key) return &kv.second;
     return nullptr;
