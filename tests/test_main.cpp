@@ -51,6 +51,9 @@ static void registry() {
     const auto* h = core::findById("hpf.frequency");
     CHECK(h && h->def == 15.0 && h->mapping == core::ParamMapping::Log, "hpf spec");
     CHECK(core::findByHostId(1011) == h, "lookup");
+    static_assert(core::indexOf("hpf.frequency") < core::kParamCount && core::indexOf("nope") == core::kParamCount);
+    CHECK(&core::kParams[core::indexOf("hpf.frequency")] == h && core::defaultValues()[core::indexOf("hpf.frequency")] == 15.0,
+          "indexOf/defaultValues");
     CHECK(core::smoothingCoeff(48000, 0) == 0.0, "tau0");
     CHECK(std::fabs(core::smoothingCoeff(48000, 0.01) - std::exp(-1.0 / 480.0)) < 1e-15, "coeff");
 }
