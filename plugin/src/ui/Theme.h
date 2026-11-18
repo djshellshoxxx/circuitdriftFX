@@ -53,8 +53,8 @@ inline const Theme& lightTheme() {
         x.panelRaised = juce::Colour(0xffffffff); x.inset = juce::Colour(0xffdfe3e8);
         x.border = juce::Colour(0xff5d6670);
         x.text = juce::Colour(0xff15181c); x.textDim = juce::Colour(0xff444c55); x.textInverse = juce::Colour(0xfff7f8fa);
-        x.accent = juce::Colour(0xffa05f00); x.accentDim = juce::Colour(0xffd9b98a); x.focus = juce::Colour(0xff005fb8);
-        x.warning = juce::Colour(0xff8a6200); x.danger = juce::Colour(0xffb3261e); x.ok = juce::Colour(0xff1e7a3a);
+        x.accent = juce::Colour(0xff8a5000); x.accentDim = juce::Colour(0xffd9b98a); x.focus = juce::Colour(0xff005fb8);
+        x.warning = juce::Colour(0xff7a5700); x.danger = juce::Colour(0xffb3261e); x.ok = juce::Colour(0xff136a30);
         x.thermalCold = juce::Colour(0xff1f5fbf); x.thermalNormal = juce::Colour(0xffb36b00); x.thermalHot = juce::Colour(0xffc62828);
         x.voltageNeg = juce::Colour(0xff1565c0); x.voltagePos = juce::Colour(0xffc2410c); x.signal = juce::Colour(0xff00796b);
         x.grid = juce::Colour(0xffc4cbd3); x.slotA = juce::Colour(0xff005fb8); x.slotB = juce::Colour(0xff7b1fa2);
