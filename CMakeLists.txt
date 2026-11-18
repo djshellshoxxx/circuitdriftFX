@@ -44,3 +44,6 @@ target_compile_options(cd_control PRIVATE -Wall -Wextra -Wpedantic)
 add_executable(cd_control_queue_tests tests/test_control_queue.cpp)
 target_link_libraries(cd_control_queue_tests PRIVATE cd_control cd_state)
 add_test(NAME control_queue COMMAND cd_control_queue_tests)
+
+# Test-only audio-thread trap harness (own non-sanitized suite, Linux only).
+add_subdirectory(tests/rt_trap)
