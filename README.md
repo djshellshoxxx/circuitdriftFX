@@ -36,3 +36,7 @@ python3 tools/validate_planned_features.py
 ```
 
 That command checks specification consistency and example data. It does not build or test a plugin.
+
+## License
+
+CircuitDrift is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later); see [LICENSE](LICENSE). Plugin binaries link JUCE 8 under its AGPLv3 option. Third-party components and their licences are listed in THIRD-PARTY-NOTICES.md.
