@@ -29,12 +29,25 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/Dependencies.cmake")
 # consumer, so a STATIC wrapper would compile JUCE twice (ODR/duplicate symbols, non-PIC objects).
 # Each product and the test app therefore compile these adapter sources and JUCE exactly once.
 add_library(cd_plugin_shared INTERFACE)
+# Adapter + UI sources. UI areas (shell, workbench, analysis, panels, platform) are globbed so each
+# area owner adds files without editing this list; CONFIGURE_DEPENDS re-globs on build.
+file(GLOB_RECURSE CD_PLUGIN_UI_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/*.cpp)
 target_sources(cd_plugin_shared INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ParameterLayout.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.cpp
+  ${CD_PLUGIN_UI_SOURCES})
 target_include_directories(cd_plugin_shared INTERFACE src)
+# Framework-independent core libraries that exist in this tree (dependency direction per CLAUDE.md).
+set(CD_PLUGIN_CORE_LIBS cd_core cd_dsp cd_state)
+foreach(lib cd_engine cd_control cd_blueprint cd_media cd_network cd_community cd_runtime)
+  if(TARGET ${lib})
+    list(APPEND CD_PLUGIN_CORE_LIBS ${lib})
+  endif()
+endforeach()
 target_link_libraries(cd_plugin_shared INTERFACE
-  cd_core cd_dsp cd_state
+  ${CD_PLUGIN_CORE_LIBS}
   juce::juce_audio_utils)
 target_compile_features(cd_plugin_shared INTERFACE cxx_std_20)
 target_compile_definitions(cd_plugin_shared INTERFACE
@@ -88,3 +101,15 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME plugin_tables_fresh
            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_plugin_tables.py" --check)
 endif()
+
+# UI snapshot apps: each plugin/tests/ui/snap_<area>.cpp renders its views headlessly (both themes,
+# several scales) to PNG under the build tree and checks layout invariants. Registered with CTest.
+file(GLOB CD_UI_SNAPSHOT_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui/snap_*.cpp)
+foreach(src ${CD_UI_SNAPSHOT_SOURCES})
+  get_filename_component(area ${src} NAME_WE)
+  juce_add_console_app(cd_ui_${area} PRODUCT_NAME "cd_ui_${area}")
+  target_sources(cd_ui_${area} PRIVATE ${src})
+  target_include_directories(cd_ui_${area} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui)
+  target_link_libraries(cd_ui_${area} PRIVATE cd_plugin_shared juce::juce_recommended_config_flags)
+  add_test(NAME ui_${area} COMMAND cd_ui_${area} ${CMAKE_CURRENT_BINARY_DIR}/ui-snapshots)
+endforeach()
