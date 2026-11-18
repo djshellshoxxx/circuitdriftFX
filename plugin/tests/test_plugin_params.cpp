@@ -51,7 +51,10 @@ void testGoldenTable() {
         const auto& p = cd::core::kParams[i];
         CHECK(std::strcmp(g.id, p.id) == 0, "row %zu: golden id %s vs registry %s", i, g.id, p.id);
         CHECK(g.hostId == p.hostId, "%s: golden hostId %u vs registry %u", g.id, g.hostId, p.hostId);
-        CHECK(p.hostId >= 1000 && p.hostId <= 1999, "%s: hostId %u outside 1000-1999", p.id, p.hostId);
+        // Extension IDs 1000-1999; base-engine slot controls (CD-F20) use the disjoint range 1-999.
+        const bool baseRange = p.hostId >= 1 && p.hostId < 1000 && std::strcmp(p.featureId, "CD-F20") == 0;
+        CHECK(baseRange || (p.hostId >= 1000 && p.hostId <= 1999), "%s: hostId %u outside permanent ranges",
+              p.id, p.hostId);
         // The host id the VST3/CLAP wrappers derive from the string id (ADR-0001) must not drift.
         const auto hash = static_cast<std::uint32_t>(juce::String(p.id).hashCode());
         CHECK(hash == g.hash, "%s: juce hash 0x%08X vs golden 0x%08X", p.id, hash, g.hash);

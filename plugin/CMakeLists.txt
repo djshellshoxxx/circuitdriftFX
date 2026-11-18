@@ -25,19 +25,19 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/Dependencies.cmake")
 
 # Shared adapter code: parameter layout built from the core registry and the processor shell.
-add_library(cd_plugin_shared STATIC
-  src/ParameterLayout.cpp
-  src/PluginProcessor.cpp)
-target_include_directories(cd_plugin_shared PUBLIC src)
-target_link_libraries(cd_plugin_shared
-  PUBLIC
-    cd_core cd_dsp cd_state
-    juce::juce_audio_utils
-    juce::juce_recommended_config_flags
-  PRIVATE
-    juce::juce_recommended_warning_flags)
-target_compile_features(cd_plugin_shared PUBLIC cxx_std_20)
-target_compile_definitions(cd_plugin_shared PUBLIC
+# INTERFACE library: JUCE modules are themselves INTERFACE targets whose sources compile into each
+# consumer, so a STATIC wrapper would compile JUCE twice (ODR/duplicate symbols, non-PIC objects).
+# Each product and the test app therefore compile these adapter sources and JUCE exactly once.
+add_library(cd_plugin_shared INTERFACE)
+target_sources(cd_plugin_shared INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ParameterLayout.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/PluginProcessor.cpp)
+target_include_directories(cd_plugin_shared INTERFACE src)
+target_link_libraries(cd_plugin_shared INTERFACE
+  cd_core cd_dsp cd_state
+  juce::juce_audio_utils)
+target_compile_features(cd_plugin_shared INTERFACE cxx_std_20)
+target_compile_definitions(cd_plugin_shared INTERFACE
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
   JUCE_DISPLAY_SPLASH_SCREEN=0
@@ -64,7 +64,7 @@ function(cd_add_product target product_name plugin_code bundle_id clap_id entry_
     DESCRIPTION "${product_name} - analog circuit drift distortion")
   target_sources(${target} PRIVATE ${entry_source})
   target_link_libraries(${target}
-    PRIVATE cd_plugin_shared
+    PRIVATE cd_plugin_shared juce::juce_recommended_warning_flags
     PUBLIC juce::juce_recommended_config_flags)
   clap_juce_extensions_plugin(TARGET ${target}
     CLAP_ID "${clap_id}"
@@ -80,7 +80,8 @@ cd_add_product(CircuitDriftLite "CircuitDrift LITE" Cdlt
 # Consistency tests: JUCE parameter tree vs core registry, golden host-id table, bus layouts.
 juce_add_console_app(cd_plugin_consistency_tests PRODUCT_NAME "cd_plugin_consistency_tests")
 target_sources(cd_plugin_consistency_tests PRIVATE tests/test_plugin_params.cpp)
-target_link_libraries(cd_plugin_consistency_tests PRIVATE cd_plugin_shared)
+target_link_libraries(cd_plugin_consistency_tests PRIVATE cd_plugin_shared
+  juce::juce_recommended_config_flags)
 add_test(NAME plugin_param_consistency COMMAND cd_plugin_consistency_tests)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
