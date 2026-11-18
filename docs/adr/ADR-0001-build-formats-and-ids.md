@@ -24,22 +24,15 @@ written; if a tarball based fetch is preferred later, compute the hashes from th
 Updating a pin is a deliberate change: edit `cmake/Dependencies.cmake`, update this ADR and
 `THIRD-PARTY-NOTICES.md`, re-run the id audit (section 3) and the plugin consistency test.
 
-## 2. Licence options (owner decision required)
+## 2. Licence (decided 2026-11-18)
 
-JUCE 8 is dual licensed. The project owner must choose one and record it here before any binary is published:
-
-1. **AGPLv3.** Distributed binaries (including the free LITE edition) must be offered with complete corresponding
-   source under AGPLv3, and the whole combined work is AGPLv3. Compatible with the MIT/BSD components listed in
-   `THIRD-PARTY-NOTICES.md`. The repository would need a matching licence file and source offer.
-2. **JUCE 8 EULA (commercial).** Permits closed-source distribution subject to the EULA tier and its revenue
-   conditions and the "Made with JUCE" / splash-screen terms of that tier. Confirm the current terms with Raw Material
-   Software before release; this ADR does not assert them.
-
-Until the owner chooses, release workflows may build prerelease artifacts for review, but `release.yml` publishes a
-GitHub release only for a tag the owner has created, and the release notes must state the chosen licence. This ADR
-makes no licence choice on the owner's behalf. The VST3 SDK bundled in JUCE has its own licence; see
-`THIRD-PARTY-NOTICES.md` (verify it against `modules/juce_audio_processors/format_types/VST3_SDK/LICENSE.txt` in the
-pinned tree on first fetch).
+The owner chose **AGPL-3.0-or-later** for CircuitDrift (root `LICENSE`), and JUCE 8 is used under its AGPLv3
+option. Distributed binaries (full and LITE) are offered with complete corresponding source in the public
+repository at the release tag. Components compiled into the binaries are permissive and AGPL-compatible:
+clap-juce-extensions, CLAP and clap-helpers (MIT) and the Steinberg VST3 SDK bundled in the pinned JUCE tree
+(`modules/juce_audio_processors_headless/format_types/VST3_SDK/LICENSE.txt`: MIT, Steinberg 2025). pluginval (GPLv3)
+is a CI tool only and is never distributed. A closed-source distribution would require a JUCE commercial licence and
+a new decision recorded here.
 
 ## 3. Host parameter id audit
 
@@ -58,9 +51,11 @@ Why this matters: `parameters.json` states that wrapper ids must use an explicit
 
 ### 3.2 How the pinned wrappers derive host ids
 
-Findings below describe the JUCE 8 / clap-juce-extensions code paths as understood when this scaffold was written.
-The sources could not be fetched in that session, so they are **to be confirmed** by reading the pinned tree;
-`cmake/Dependencies.cmake` prints a configure-time audit line for the VST3 wrapper, and
+Audited against the pinned tree (JUCE 8.0.17-security `dabd5ad`, clap-juce-extensions `3837f4a`) on 2026-11-18:
+`juce_audio_plugin_client_VST3.cpp` maps each parameter with
+`VST3ClientExtensions::convertJuceParameterId(juceParamID, JUCE_USE_STUDIO_ONE_COMPATIBLE_PARAMETERS)` (default 1:
+`String::hashCode() & 0x7fffffff`), or the index when `JUCE_FORCE_USE_LEGACY_PARAM_IDS=1` (default 0, not enabled);
+`clap-juce-wrapper.cpp` uses `static_cast<uint32_t>(LegacyAudioParameter::getParamID(param, false).hashCode())`.
 `plugin/tests/test_plugin_params.cpp` freezes the consequences (golden table) so any drift is detected.
 
 * **VST3.** `juce_VST3_Wrapper.cpp` derives `Vst::ParamID` from the JUCE parameter id string with

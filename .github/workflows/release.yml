@@ -121,7 +121,7 @@ jobs:
           }
           d="$CD_DEPS_CACHE_DIR"
           copy_license JUCE-LICENSE.md "$d/juce-src/LICENSE.md"
-          copy_license JUCE-VST3_SDK-LICENSE.txt "$d/juce-src/modules/juce_audio_processors/format_types/VST3_SDK/LICENSE.txt"
+          copy_license JUCE-VST3_SDK-LICENSE.txt "$d/juce-src/modules/juce_audio_processors_headless/format_types/VST3_SDK/LICENSE.txt" "$d/juce-src/modules/juce_audio_processors/format_types/VST3_SDK/LICENSE.txt"
           copy_license clap-juce-extensions-LICENSE "$d/clap_juce_extensions-src/LICENSE" "$d/clap_juce_extensions-src/LICENSE.md"
           copy_license CLAP-LICENSE "$d/clap_juce_extensions-src/clap-libs/clap/LICENSE"
           copy_license clap-helpers-LICENSE "$d/clap_juce_extensions-src/clap-libs/clap-helpers/LICENSE"
