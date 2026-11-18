@@ -56,3 +56,16 @@ Existing `StateDocument` load/save/migrate stays the persistence format. New: SP
 ## Build and release
 
 JUCE 8.0.17-security (commit dabd5ad13cd869cba41046947fffc8e5ce5cd662) and clap-juce-extensions 3837f4a6ed2ab0ba46aba69ae5b7041c7c64ce74, fetched by pinned commit (cmake/Dependencies.cmake). Release scope: **Windows x64 only** — VST3, CLAP, Standalone for CircuitDrift and CircuitDrift LITE. AU (macOS) and AAX (G08 signing) are excluded from this release. Windows builds run on GitHub-hosted windows runners with MSVC; Linux runs the fast core gate.
+
+## Wave-2 ownership (runtime, blueprint, UI)
+
+| Paths | Owner |
+|---|---|
+| src/runtime/**, tests/runtime/**, plugin/src/PluginProcessor.*, plugin/src/PluginEntry*.cpp, plugin/src/runtime/**, plugin/src/platform/**, plugin/CMakeLists.txt, plugin/tests/test_plugin_params.cpp | runtime agent |
+| src/blueprint/**, tests/blueprint/**, src/engine/**, src/dsp/**, tests/engine/**, src/state/StateDocument.*, docs/planned-features/schemas/**, docs/planned-features/examples/** | blueprint agent |
+| plugin/src/ui/PluginEditor.cpp, plugin/src/ui/Education.cpp, plugin/src/ui/shell/**, plugin/tests/ui/snap_shell.cpp | UI shell agent |
+| plugin/src/ui/workbench/**, plugin/src/ui/analysis/**, plugin/tests/ui/snap_workbench.cpp | UI workbench agent |
+| plugin/src/ui/panels/**, plugin/tests/ui/snap_panels.cpp | UI panels agent |
+| plugin/src/ui/EditorBridge.h, Theme.h (names), Education.h, PluginEditor.h, workbench/WorkbenchView.h, panels/Panels.h, plugin/tests/ui/FakeBridge.h | coordinator (contracts) |
+
+UI code talks to the processor only through `EditorBridge`; UI snapshot apps (`plugin/tests/ui/snap_<area>.cpp`, auto-registered) render headlessly against `FakeBridge` to PNG under `build*/plugin/ui-snapshots/`.
