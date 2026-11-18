@@ -31,7 +31,10 @@ using namespace cd;
 static void registry() {
     std::set<uint32_t> ids; std::set<std::string> names;
     for (const auto& p : core::kParams) {
-        CHECK(p.hostId >= 1000 && p.hostId <= 1999, "%s id %u", p.id, p.hostId);
+        // Extension IDs 1000-1999; base-engine (CD-F20) slot controls use the disjoint range 1-999.
+        const bool base = p.hostId >= 1 && p.hostId < 1000 && std::string(p.featureId) == "CD-F20" &&
+                          p.scope != core::ParamScope::Global;
+        CHECK(base || (p.hostId >= 1000 && p.hostId <= 1999), "%s id %u", p.id, p.hostId);
         CHECK(ids.insert(p.hostId).second, "dup hostId %u", p.hostId);
         CHECK(names.insert(p.id).second, "dup id %s", p.id);
         CHECK(p.min <= p.def && p.def <= p.max, "%s default range", p.id);
@@ -40,7 +43,11 @@ static void registry() {
         CHECK(std::fabs(core::toPlain(p, 0.0) - p.min) < 1e-9 && std::fabs(core::toPlain(p, 1.0) - p.max) < 1e-9, "%s endpoints", p.id);
         CHECK(core::toPlain(p, NAN) == p.def, "%s NaN", p.id);
     }
-    CHECK(core::kParamCount == 74, "count %zu", core::kParamCount);
+    CHECK(core::kParamCount == 116, "count %zu (74 extension + 2x21 base)", core::kParamCount);
+    const auto* driveA = core::findById("slot.a.stage.drive");
+    const auto* driveB = core::findById("slot.b.stage.drive");
+    CHECK(driveA && driveB && driveA->hostId == 12 && driveB->hostId == 62 &&
+          driveA->scope == core::ParamScope::SlotA && driveB->scope == core::ParamScope::SlotB, "base slot ids");
     const auto* h = core::findById("hpf.frequency");
     CHECK(h && h->def == 15.0 && h->mapping == core::ParamMapping::Log, "hpf spec");
     CHECK(core::findByHostId(1011) == h, "lookup");
