@@ -10,7 +10,7 @@
 namespace engine = cd::engine;
 namespace cd::plugin::test {
 
-class FakeBridge final : public EditorBridge {
+class FakeBridge : public EditorBridge {
 public:
     explicit FakeBridge(Edition edition = Edition::Full)
         : processor_(edition, edition == Edition::Full ? "CircuitDrift" : "CircuitDrift LITE") {

@@ -11,9 +11,7 @@
 #include <numbers>
 #include "PluginProcessor.h"
 #include "ui/EditorBridge.h"
-#define final  // FakeBridge is final; the status-badge test derives from it to inject flags
 #include "FakeBridge.h"
-#undef final
 #include "core/ParameterRegistry.h"
 #include "ui/Education.h"
 #include "ui/PluginEditor.h"
