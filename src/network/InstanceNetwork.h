@@ -158,6 +158,7 @@ public:
 
 private:
     friend class Group;
+    friend class Registry;
     SharedLayout* L_ = nullptr;
     std::shared_ptr<void> keepAlive_;
     unsigned slot_ = 0;

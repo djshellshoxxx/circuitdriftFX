@@ -52,10 +52,10 @@ double bleedRowWeights(unsigned self, const Uuid128* ids, std::uint32_t mask, st
         double v = topology ? double(topology[j]) : base * double(bleedSign(seed, ids[j]));
         if (!std::isfinite(v)) v = 0.0;
         w[j] = float(v);
-        sum += std::abs(v);
+        sum += std::abs(double(w[j]));  // sum of the stored float weights, so the bound is exact
     }
-    if (sum > g) {  // topology rows may never exceed the configured gain
-        const double k = g / sum;
+    if (sum > g) {  // topology rows (and float rounding) may never push the row above the configured gain
+        const double k = (g / sum) * (1.0 - 1.0e-6);  // margin >> float rounding error (6e-8)
         sum = 0.0;
         for (unsigned j = 0; j < kMaxMembers; ++j) { w[j] = float(double(w[j]) * k); sum += std::abs(double(w[j])); }
     }
