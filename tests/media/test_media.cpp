@@ -211,14 +211,22 @@ void testQueue() {
         }
     });
     Bytes frame(4096);
-    const auto t0 = std::chrono::steady_clock::now();
-    for (int i = 0; i < 20000; ++i) { std::fill(frame.begin(), frame.end(), std::uint8_t(i)); tq.push(frame.data(), frame.size(), 64, 16, i); }
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    // Time only push() itself (not frame preparation), so build type/instrumentation speed does
+    // not masquerade as producer blocking.
+    std::chrono::steady_clock::duration inPush{};
+    for (int i = 0; i < 20000; ++i) {
+        std::fill(frame.begin(), frame.end(), std::uint8_t(i));
+        const auto t0 = std::chrono::steady_clock::now();
+        tq.push(frame.data(), frame.size(), 64, 16, i);
+        inPush += std::chrono::steady_clock::now() - t0;
+    }
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(inPush).count();
     done = true; consumer.join();
     CHECK(torn == 0 && disorder == 0 && got > 0);
     CHECK(tq.stats().pushed + tq.stats().refusedFull == 20000);
     CHECK(ms < 5000);  // producer was never gated by the 200 us/frame consumer (would be 4 s+ if blocking)
-    std::printf("  queue: producer 20000 pushes in %lld ms, consumed %d, dropped %llu\n", static_cast<long long>(ms), got.load(),
+    std::printf("  queue: producer 20000 pushes in %lld ms, consumed %d, torn %d, disorder %d, dropped %llu\n",
+                static_cast<long long>(ms), got.load(), torn.load(), disorder.load(),
                 static_cast<unsigned long long>(tq.stats().droppedOldest));
 
     // Audio ring.

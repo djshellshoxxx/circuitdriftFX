@@ -20,6 +20,7 @@
 #include "dsp/Halfband2x.h"
 #include "dsp/ThermalNetwork.h"
 #include "state/StateDocument.h"
+#include <exception>
 #include <filesystem>
 #include <fstream>
 
@@ -620,8 +621,22 @@ static void t21_halfband() {
     CHECK(std::fabs(20 * std::log10(peakOut / peakIn)) <= 0.01, "round trip %g dB", 20 * std::log10(peakOut / peakIn));
 }
 
+// Runs one section with progress on unbuffered stdout, so a fatal platform failure (e.g. a
+// fast-fail with no flushed output) still names the section; exceptions become test failures.
+template <class F>
+static void section(const char* name, F&& fn) {
+    std::printf("[section] %s\n", name);
+    try { fn(); }
+    catch (const std::exception& e) { ++g_fail; std::printf("FAIL %s threw: %s\n", name, e.what()); }
+    catch (...) { ++g_fail; std::printf("FAIL %s threw a non-standard exception\n", name); }
+}
+
 int main() {
-    registry(); t20_thermal(); t21_oversampling(); t21_halfband(); t22_hpf(); t23_clip_match(); p02_json(); p02_manifest(); p02_mna(); p04_state();
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    section("registry", registry); section("t20_thermal", t20_thermal); section("t21_oversampling", t21_oversampling);
+    section("t21_halfband", t21_halfband); section("t22_hpf", t22_hpf); section("t23_clip_match", t23_clip_match);
+    section("p02_json", p02_json); section("p02_manifest", p02_manifest); section("p02_mna", p02_mna);
+    section("p04_state", p04_state);
     std::printf(g_fail ? "FAILED (%d)\n" : "ALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }

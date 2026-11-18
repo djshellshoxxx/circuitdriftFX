@@ -72,6 +72,25 @@ bool CaptureQueue::acquire(CaptureFrame& out) noexcept {
         if (oldest == cfg_.slotCount) return false;
         std::uint32_t expect = kReady;
         if (!slots_[oldest].state.compare_exchange_strong(expect, kReading, std::memory_order_acquire)) continue;  // evicted
+        // ABA guard: between the scan and the claim the producer may have evicted this slot and
+        // published a newer frame into it. Claiming it would deliver frames out of order (an older
+        // frame still waits elsewhere), so hand it back untouched and rescan.
+        if (slots_[oldest].seq.load(std::memory_order_relaxed) != oldestSeq) {
+            slots_[oldest].state.store(kReady, std::memory_order_release);
+            continue;
+        }
+        // The scan is not atomic: a slot skipped while being written can become ready with an
+        // older sequence before the slot we claimed. The single producer publishes sequences in
+        // order, so every older frame is already visible now (acquire on our claim); if one is
+        // ready, return our claim and take the older frame first.
+        bool olderReady = false;
+        for (std::uint32_t i = 0; i < cfg_.slotCount && !olderReady; ++i)
+            olderReady = i != oldest && slots_[i].state.load(std::memory_order_acquire) == kReady &&
+                         slots_[i].seq.load(std::memory_order_relaxed) < oldestSeq;
+        if (olderReady) {
+            slots_[oldest].state.store(kReady, std::memory_order_release);
+            continue;
+        }
         const Slot& s = slots_[oldest];
         out.data = storage_.get() + std::size_t(oldest) * cfg_.slotBytes;
         out.bytes = s.bytes; out.width = s.width; out.height = s.height; out.ptsSamples = s.pts;
