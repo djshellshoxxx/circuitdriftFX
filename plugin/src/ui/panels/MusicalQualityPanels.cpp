@@ -193,7 +193,7 @@ public:
           phase_(b, "Filter phase", "FIR is linear phase with more latency; IIR has low latency"),
           zero_(b, "Zero latency", "Report no latency: 1x Draft antialiasing, no pitch drift"),
           soft_(b, "Output soft clip", "Smooth output ceiling just below full scale; separate from emergency containment"),
-          hpf_(b, "Input high-pass", "Remove subsonic content before the circuit") {
+          hpf_(b, "Output DC high-pass", "Removes DC and subsonic drift from the final output (after blend and trim); off allows DC through") {
         setTitle("Quality");
         heading("Quality and latency");
         mode_.bind("quality.mode");
@@ -244,7 +244,7 @@ public:
                                 : "Pending: none, active settings match the selection.",
                             (differs || s.reprepareRequired) ? Tone::Warn : Tone::Dim);
         ch |= latency_->set("Reported latency: " + lat(s.latencySamples) + (s.qualityTransition ? ". Quality transition in progress." : ""), Tone::Normal);
-        juce::String p = juce::String("Soft clip: ") + (soft_.getToggleState() ? "on" : "off (unclipped float output)") + ". Input high-pass: " + (hpf_.getToggleState() ? "on" : "off") + ".";
+        juce::String p = juce::String("Soft clip: ") + (soft_.getToggleState() ? "on" : "off (unclipped float output)") + ". Output DC high-pass: " + (hpf_.getToggleState() ? "on" : "off") + ".";
         p += s.containmentActive ? " Emergency containment is ACTIVE." : " Emergency containment idle (always armed).";
         if (s.solverFallback) p += " Solver fallback engaged.";
         if (s.needsReset) p += " A reset is recommended.";
