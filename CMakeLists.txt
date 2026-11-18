@@ -36,3 +36,5 @@ endforeach()
 target_link_libraries(cd_state_safety_tests PRIVATE Threads::Threads)
 add_test(NAME registry_codegen_fresh COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/gen_param_registry.py --check)
 add_test(NAME docs_validation_only COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/validate_planned_features.py)
+# Test-only audio-thread trap harness (own non-sanitized suite, Linux only).
+add_subdirectory(tests/rt_trap)
