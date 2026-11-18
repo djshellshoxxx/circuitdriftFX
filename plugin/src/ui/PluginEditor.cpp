@@ -8,9 +8,13 @@
 namespace cd::plugin::ui {
 
 struct CircuitDriftEditor::Impl {
-    Impl(CircuitDriftEditor& editor, EditorBridge& bridge) : core(editor, bridge, constrainer) {}
+    Impl(CircuitDriftEditor& editor, EditorBridge& bridge)
+        : core(editor, bridge, constrainer), tooltips(&editor, 450) {}
     juce::ComponentBoundsConstrainer constrainer;
     shell::EditorCore core;
+    // Hosts standard juce::SettableTooltipClient tooltips used by the workbench and panels
+    // (450 ms delay, CD-F08); the shell's own educational help overlay is separate.
+    juce::TooltipWindow tooltips;
 };
 
 CircuitDriftEditor::CircuitDriftEditor(juce::AudioProcessor& processor, EditorBridge& bridge)

@@ -25,6 +25,7 @@ struct UiSettings {
     bool lowFrameRate = false;   // 30 FPS battery/low-motion option
     int overlay = 1;             // PCB overlay: 0 Off, 1 Thermal, 2 Voltage, 3 Signal
     bool xray = false;
+    int pcbView = 0;             // Workbench board: 0 2D, 1 oblique 3D, 2 schematic fallback
     int lastWidth = 1000, lastHeight = 720;  // logical size
 };
 
@@ -83,6 +84,7 @@ struct CaptureStatus {
 // Aggregated read-only status for badges/labels (cheap; poll at UI rate).
 struct StatusInfo {
     bool lite = false;
+    int channels = 2;            // active main-bus channel count (1 = mono: stereo displays show N/A)
     int latencySamples = 0;
     double sampleRate = 0;
     int activeOversampling = 0, pendingOversampling = 0;
