@@ -40,10 +40,16 @@ jobs:
         with:
           path: .deps-cache
           key: deps-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake') }}
+      # Default generator = newest installed Visual Studio on the image (no hard-coded VS year).
+      - name: Toolchain info
+        shell: bash
+        run: |
+          cmake --version | head -1
+          "/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property displayName || true
       - name: Configure
         shell: bash
         run: >
-          cmake -S . -B build-plugin -G "Visual Studio 17 2022" -A x64
+          cmake -S . -B build-plugin -A x64
           -DCD_BUILD_PLUGIN=ON
           -DCD_DEPS_CACHE_DIR="$CD_DEPS_CACHE_DIR"
           -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
