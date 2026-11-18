@@ -45,33 +45,7 @@ A `ParamValues` snapshot is `std::array<double, core::kParamCount>` of **plain**
 - Exposes `TelemetryFrame` (per component temperature K, rail volts, currents, levels, generation, fallback flags) via a lock-free single-writer snapshot for the UI (read-only).
 - Component identities: stable string IDs (e.g. `C_res`, `V1`, `R_load`, `T_out`) used by inspector, tooltips, faults, timeline and blueprints.
 
-```cpp
-namespace cd::engine {
-struct SlotModulation {             // block-rate targets from cd_control; identity defaults
-  double ageYearsMin = 0;           // effective age = max(base age, ageYearsMin)       (Age: 60a)
-  double toleranceSigmaAdd = 0;     // fraction, added to tolerance sigma               (Age: 0.08a)
-  double leakageAdd = 0;            // fraction of manifest safe leakage range          (Age: 0.1a^2)
-  double hfShelfDb = 0;             // creative 6 kHz shelf                             (Age: -6a)
-  double ageNoiseDbfs = -200;       // Age noise target; <= -200 means none (gated by analogNoise.enabled)
-  double reservoirCapDivisor = 1;   // C_eff = max(C_min, C_base / divisor)             (Sag: 1+3s)
-  double sagMacro = 0;              // s; main-load augmentation 3*s*I_dyn
-  double driveOffsetDb = 0;         // Warmth 18w + harmonic-targeting delta (bounded ±6 dB for targeting)
-  double biasOffset = 0;            // fraction of bias span (Warmth 0.08w + targeting)
-  double fluxDriveFactor = 1;       // Warmth 1+0.5w
-  double thermalSensitivityScale = 1; // Drift 1+4d
-  double creativeCutoffOct = 0;     // Drift ±0.15 d q, tempo breathing, key-quantized offset (octaves)
-  double creativeDelayMs = 0;       // pitch-drift deviation around base 1.5 ms; 0 = stage idle
-  bool creativeDelayActive = false; // pitchDrift.enabled and not zero-latency
-  double recoveryTauS = 0;          // tempo-synced supply recovery tau; 0 = natural
-  int sidechainMode = 0;            // 0 Main, 1 External, 2 Blend
-};
-struct ModulationBlock {
-  SlotModulation slot[2];
-  const double* externalLoadA = nullptr;     // per-sample I_ext [A] (len frames) or null = 0
-  const double* transientPreserve = nullptr; // per-sample P in [0,1] or null = 0
-};
-}
-```
+The modulation contract is `src/core/Modulation.h` (`cd::core::SlotModulation`, `cd::core::ModulationBlock`): block-rate per-slot targets plus per-sample external load current and transient preservation arrays. Both cd_control (producer) and cd_engine (consumer) include it; only the coordinator edits it.
 
 Condition/fault overlays (timeline CD-F18, faults CD-F19) are per-component `ComponentCondition` records defined by cd_engine and produced by cd_blueprint; identity defaults change nothing.
 
