@@ -36,3 +36,11 @@ endforeach()
 target_link_libraries(cd_state_safety_tests PRIVATE Threads::Threads)
 add_test(NAME registry_codegen_fresh COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/gen_param_registry.py --check)
 add_test(NAME docs_validation_only COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/validate_planned_features.py)
+
+# cd_control: lock-free control/snapshot slots (P04). Depends on cd_core only; engine never depends on cd_state/UI.
+add_library(cd_control STATIC src/control/ControlHub.cpp)
+target_link_libraries(cd_control PUBLIC cd_core Threads::Threads)
+target_compile_options(cd_control PRIVATE -Wall -Wextra -Wpedantic)
+add_executable(cd_control_queue_tests tests/test_control_queue.cpp)
+target_link_libraries(cd_control_queue_tests PRIVATE cd_control cd_state)
+add_test(NAME control_queue COMMAND cd_control_queue_tests)
