@@ -1,20 +1,65 @@
 name: ci
 on:
   push:
-    paths-ignore: ['**.md', 'docs/**/*.md']
+    paths-ignore: ['**.md', '**.png', '**.jpg', '**.jpeg', '**.gif', '**.svg']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**/*.md']
+    paths-ignore: ['**.md', '**.png', '**.jpg', '**.jpeg', '**.gif', '**.svg']
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
 jobs:
+  # Fast gate: portable core with ASan/UBSan, registry freshness and documentation validation.
   linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 1 }
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON
       - run: cmake --build build --parallel 4
       - run: ctest --test-dir build --output-on-failure --parallel 4
+      - name: Plugin generated tables are fresh
+        run: python3 plugin/tools/gen_plugin_tables.py --check
+
+  # Windows: MSVC build of the core, the plugin products (VST3, CLAP, Standalone x2) and their tests.
+  windows:
+    needs: linux
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      CD_DEPS_CACHE_DIR: ${{ github.workspace }}/.deps-cache
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      # Dependency sources only (JUCE, clap-juce-extensions + submodules); never build trees.
+      - uses: actions/cache@v4
+        with:
+          path: .deps-cache
+          key: deps-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake') }}
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build-plugin -G "Visual Studio 17 2022" -A x64
+          -DCD_BUILD_PLUGIN=ON
+          -DCD_DEPS_CACHE_DIR="$CD_DEPS_CACHE_DIR"
+          -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
+      - name: Build core, tests and plugins (Release)
+        shell: bash
+        run: cmake --build build-plugin --config Release --parallel 4
+      # Python-based registry/docs checks already run in the Linux gate.
+      - name: Test
+        shell: bash
+        run: >
+          ctest --test-dir build-plugin -C Release --output-on-failure --parallel 4
+          -E "registry_codegen_fresh|docs_validation_only"
+      - name: Stage artefacts and smoke-check entry points
+        shell: bash
+        run: bash plugin/packaging/stage_windows.sh build-plugin dist Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circuitdrift-windows-x64-${{ github.sha }}
+          path: dist
+          retention-days: 14
+          if-no-files-found: error
