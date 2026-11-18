@@ -79,12 +79,64 @@ bool ThermalNetwork::prepare(const Config& cfg, double dt, double ambientK) noex
     }
     n_ = n;
     ambient_ = ambientK;
+    scale_ = 1.0;
     for (std::size_t i = 0; i < n; ++i) {
-        cOverDt_[i] = cOverDt[i];
+        cOverDt_[i] = baseCOverDt_[i] = cOverDt[i];
         gAmb_[i] = cfg.toAmbient[i];
         t_[i] = ambientK;
-        for (std::size_t j = 0; j < n; ++j) inv_[i][j] = m[i][n + j];
+        for (std::size_t j = 0; j < n; ++j) {
+            inv_[i][j] = m[i][n + j];
+            gPart_[i][j] = i == j ? 0.0 : -cfg.coupling[i][j];
+        }
+        double diag = cfg.toAmbient[i];
+        for (std::size_t j = 0; j < n; ++j) diag += cfg.coupling[i][j];
+        gPart_[i][i] = diag;
     }
+    return true;
+}
+
+bool ThermalNetwork::setAmbient(double ambientK) noexcept {
+    if (!(ambientK > 0.0) || !std::isfinite(ambientK)) return false;
+    for (std::size_t i = 0; i < n_; ++i)
+        if (!std::isfinite(gAmb_[i] * ambientK) || !std::isfinite(cOverDt_[i] * t_[i] + gAmb_[i] * ambientK)) return false;
+    ambient_ = ambientK;
+    return true;
+}
+
+bool ThermalNetwork::setCapacityScale(double s) noexcept {
+    if (n_ == 0 || !(s > 0.0) || !std::isfinite(s)) return false;
+    if (s == scale_) return true;
+    const std::size_t n = n_;
+    std::array<double, kMaxNodes> cdt{};
+    for (std::size_t i = 0; i < n; ++i) {
+        cdt[i] = baseCOverDt_[i] * s;
+        if (!(cdt[i] > 0.0) || !std::isfinite(cdt[i])) return false;
+        for (std::size_t j = 0; j < n; ++j) work_[i][j] = gPart_[i][j];
+        work_[i][i] += cdt[i];
+        if (!std::isfinite(work_[i][i])) return false;
+    }
+    // In-place Gauss-Jordan inversion without pivoting (strict diagonal dominance).
+    for (std::size_t k = 0; k < n; ++k) {
+        const double piv = work_[k][k];
+        if (!(piv > 1e-300) || !std::isfinite(piv)) return false;
+        work_[k][k] = 1.0;
+        for (std::size_t j = 0; j < n; ++j) work_[k][j] /= piv;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (i == k) continue;
+            const double f = work_[i][k];
+            if (f == 0.0) continue;
+            work_[i][k] = 0.0;
+            for (std::size_t j = 0; j < n; ++j) work_[i][j] -= f * work_[k][j];
+        }
+    }
+    for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j)
+            if (!std::isfinite(work_[i][j])) return false;
+    for (std::size_t i = 0; i < n; ++i) {
+        cOverDt_[i] = cdt[i];
+        for (std::size_t j = 0; j < n; ++j) inv_[i][j] = work_[i][j];
+    }
+    scale_ = s;
     return true;
 }
 
