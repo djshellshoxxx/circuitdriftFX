@@ -45,7 +45,8 @@ constexpr unsigned kQuantumFrames = 128, kRingQuanta = 64, kAudioChannels = 2;
 constexpr unsigned kLiveLatencyQuanta = 8;           // 1024 samples
 constexpr double kHeartbeatTimeoutMs = 500.0, kDecayTauMs = 100.0, kRampMs = 50.0;
 constexpr double kBleedMinDb = -90.0, kBleedMaxDb = -24.0;
-constexpr float kMaxDemandA = 1.0e4f, kMaxAudioAbs = 16.0f;  // sanitising bounds for peer data
+constexpr float kMaxDemandA = 1.0e4f, kMaxAudioAbs = 16.0f;
+constexpr float kMaxNominalRailV = 10000.0f;  // shared and in-process header admission bound  // sanitising bounds for peer data
 
 struct Uuid128 {
     std::uint64_t hi = 0, lo = 0;

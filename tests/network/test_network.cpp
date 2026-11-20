@@ -97,6 +97,55 @@ void testJoinRules() {
     CHECK(keep[0]->removed() && !keep[0]->publish(0, MemberFrameIn{}));
 }
 
+
+// In-process registry admission must match mapped-header create/open, including
+// numeric bounds, before an invalid candidate can evict a reusable broker group.
+void testGroupSpecAdmission() {
+    GroupSpec valid = specFor(901);
+    Registry reg;
+    std::unique_ptr<Member> member;
+    std::string why;
+    auto reject = [&](const GroupSpec& bad) {
+        CHECK(reg.join(bad, mid(0), member, &why) == JoinResult::InvalidArgument);
+        CHECK(!member && !why.empty() && reg.groupCount() == 0);
+    };
+    auto bad = valid;
+    bad.sampleRate = std::numeric_limits<double>::quiet_NaN(); reject(bad);
+    bad = valid; bad.sampleRate = std::numeric_limits<double>::infinity(); reject(bad);
+    bad = valid; bad.sampleRate = 7999.0; reject(bad);
+    bad = valid; bad.sampleRate = 384001.0; reject(bad);
+    bad = valid; bad.nominalRailV = std::numeric_limits<float>::quiet_NaN(); reject(bad);
+    bad = valid; bad.nominalRailV = std::numeric_limits<float>::infinity(); reject(bad);
+    bad = valid; bad.nominalRailV = kMaxNominalRailV + 0.125f; reject(bad);
+    bad = valid; bad.nominalRailV = -kMaxNominalRailV - 0.125f; reject(bad);
+    bad = valid; bad.channels = 0; reject(bad);
+    bad = valid; bad.channels = kAudioChannels + 1; reject(bad);
+
+    // Both inclusive boundary values produce layouts that the open validator accepts.
+    for (float rail : {kMaxNominalRailV, -kMaxNominalRailV}) {
+        auto atLimit = valid;
+        atLimit.nominalRailV = rail;
+        auto layout = std::make_unique<SharedLayout>();
+        fillHeader(*layout, atLimit);
+        CHECK(validateLayout(layout.get(), sizeof(SharedLayout), why));
+        Registry atLimitRegistry;
+        std::unique_ptr<Member> m;
+        CHECK(atLimitRegistry.join(atLimit, mid(0), m, &why) == JoinResult::Ok && m);
+        CHECK(atLimitRegistry.groupCount() == 1);
+    }
+    CHECK(reg.join(valid, mid(0), member, &why) == JoinResult::Ok && member);
+    CHECK(reg.groupCount() == 1);
+
+    // Direct Group joins must reject rails that cannot be admitted by a mapped header.
+    auto layout = std::make_unique<SharedLayout>();
+    fillHeader(*layout, valid);
+    Group group(layout.get());
+    std::unique_ptr<Member> direct;
+    CHECK(group.join(mid(1), valid.sampleRate, valid.railModelId, kMaxNominalRailV + 0.125f, direct, &why) ==
+          JoinResult::InvalidArgument);
+    CHECK(!direct && group.memberCount() == 0);
+}
+
 void testIsolation() {
     Registry reg;
     auto a = joinN(reg, specFor(3, /*session*/ 1), 2);
@@ -647,6 +696,7 @@ void testBundleValidation() {
 int main() {
     testNoexceptContract();
     testJoinRules();
+    testGroupSpecAdmission();
     testIsolation();
     testAggregationOrderIndependence(2);
     testAggregationOrderIndependence(32);
