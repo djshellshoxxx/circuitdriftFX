@@ -33,11 +33,28 @@ struct QuantizedFrame {
 };
 QuantizedFrame quantizeRgba(const std::uint8_t* rgba, std::size_t pixelCount, unsigned maxColors = 256);
 
+// Conservative encoder working-storage admission bound: one reserved output buffer,
+// peak quantizer scratch and 128 KiB for fixed tables/bookkeeping. Caller-owned RGBA,
+// queue/render buffers, allocator overhead and platform/thread storage are excluded.
+// Returns SIZE_MAX for unsupported dimensions, byte capacity or arithmetic overflow.
+// The bound applies to one active writer; finish transfers, rather than copies, output.
+std::size_t gifEncodingMemoryBound(std::uint32_t width, std::uint32_t height, std::size_t outputBytes) noexcept;
+
 class GifWriter {
 public:
+    GifWriter() = default;
+    // One owner preserves the pre-reserved capacity and encoded-frame offsets.
+    GifWriter(const GifWriter&) = delete;
+    GifWriter& operator=(const GifWriter&) = delete;
+    // Reserves the complete maxBytes output budget once. Subsequent writes cannot
+    // geometrically grow output storage; every emitted byte is admitted first.
     bool begin(std::uint32_t width, std::uint32_t height, const GifOptions& opt, const GifLimits& lim, std::string& error);
     bool addFrame(const std::uint8_t* rgba, std::size_t rgbaBytes, std::string& error);
-    // Appends the trailer; the finished file is moved to `out`. Requires >= 1 frame.
+    // Reuses the last encoded image block, including its palette and selected delay,
+    // without retaining RGBA or quantizing again. Counts toward both output/frame caps.
+    bool repeatLastFrame(std::string& error);
+    // Appends the trailer within maxBytes; moves the file to `out` only on success.
+    // Requires >= 1 frame. Failure leaves caller-owned `out` unchanged.
     bool finish(std::vector<std::uint8_t>& out, std::string& error);
     std::uint32_t frameCount() const noexcept { return frames_; }
     std::size_t bytesSoFar() const noexcept { return buf_.size(); }
@@ -50,6 +67,7 @@ private:
     std::vector<std::uint8_t> buf_;
     std::vector<std::uint8_t> global_;  // padded global table (RGB)
     unsigned globalBits_ = 1;
+    std::size_t lastFrameOffset_ = 0, lastFrameBytes_ = 0;
 };
 
 }  // namespace cd::media

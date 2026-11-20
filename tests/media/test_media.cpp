@@ -3,7 +3,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <thread>
+#include <type_traits>
 #include "MediaDecoders.h"
 #include "media/AvSync.h"
 #include "media/CaptureQueue.h"
@@ -160,6 +162,154 @@ void testGif() {
     mediatest::DecodedGif d7; CHECK(mediatest::decodeGif(g7, d7) && d7.frames[0].rgba.size() == tiny.size() && d7.frames[0].rgba[0] == 9);
 }
 
+void testGifByteLimits() {
+    static_assert(!std::is_copy_constructible_v<GifWriter> && !std::is_move_constructible_v<GifWriter>);
+    std::string error;
+    const Bytes pixels = makeImage(4, 4, 2, 42, false);
+    GifLimits limits; limits.maxBytes = 4096;
+    GifWriter reference;
+    CHECK(reference.begin(4, 4, {}, limits, error));
+    CHECK(reference.addFrame(pixels.data(), pixels.size(), error));
+    Bytes expected;
+    CHECK(reference.finish(expected, error));
+    CHECK(!expected.empty());
+    CHECK(expected.capacity() == limits.maxBytes);  // The reserved output is moved, not copied.
+    if (expected.empty()) return;
+
+    // Every boundary of this small file exercises header, palettes, extensions,
+    // image descriptor, LZW subblocks and the trailer. Exact total size succeeds.
+    const Bytes sentinel{0x13, 0x37};
+    for (std::size_t cap = 1; cap <= expected.size(); ++cap) {
+        limits.maxBytes = cap;
+        GifWriter bounded;
+        CHECK(bounded.begin(4, 4, {}, limits, error));
+        const bool added = bounded.addFrame(pixels.data(), pixels.size(), error);
+        CHECK(added == (cap >= expected.size() - 1));
+        CHECK(bounded.bytesSoFar() <= cap);
+        CHECK(bounded.frameCount() == (added ? 1u : 0u));
+        Bytes out = sentinel;
+        const bool finished = bounded.finish(out, error);
+        CHECK(finished == (cap == expected.size()));
+        CHECK(out == (finished ? expected : sentinel));
+        if (finished) {
+            CHECK(out.capacity() == cap);
+            mediatest::DecodedGif decoded;
+            CHECK(mediatest::decodeGif(out, decoded) && decoded.trailer && decoded.frames.size() == 1);
+            if (decoded.frames.size() == 1) CHECK(decoded.frames[0].rgba == pixels);
+        } else CHECK(!error.empty());
+    }
+
+    // A larger LZW payload must stop within its cap, including full 255-byte blocks.
+    const Bytes noisy = makeImage(32, 32, 256, 77, false);
+    limits.maxBytes = 8192;
+    GifWriter large;
+    CHECK(large.begin(32, 32, {}, limits, error) && large.addFrame(noisy.data(), noisy.size(), error));
+    Bytes largeFile;
+    CHECK(large.finish(largeFile, error));
+    CHECK(largeFile.size() > 1024);
+    if (largeFile.size() <= 1024) return;
+    for (const std::size_t cap : {std::size_t(1024), largeFile.size() - 2, largeFile.size() - 1, largeFile.size()}) {
+        limits.maxBytes = cap;
+        GifWriter bounded;
+        CHECK(bounded.begin(32, 32, {}, limits, error));
+        const bool added = bounded.addFrame(noisy.data(), noisy.size(), error);
+        CHECK(added == (cap >= largeFile.size() - 1));
+        CHECK(bounded.bytesSoFar() <= cap);
+        Bytes out = sentinel;
+        const bool finished = bounded.finish(out, error);
+        CHECK(finished == (cap == largeFile.size()));
+        CHECK(out == (finished ? largeFile : sentinel));
+    }
+
+    // Impossible capacities fail before allocation; the writer remains reusable.
+    GifWriter invalid;
+    limits.maxBytes = std::numeric_limits<std::size_t>::max();
+    CHECK(!invalid.begin(4, 4, {}, limits, error));
+    limits.maxBytes = 0;
+    CHECK(!invalid.begin(4, 4, {}, limits, error));
+    limits.maxBytes = expected.size();
+    CHECK(invalid.begin(4, 4, {}, limits, error) && error.empty());
+    CHECK(invalid.addFrame(pixels.data(), pixels.size(), error));
+    Bytes exact;
+    CHECK(invalid.finish(exact, error) && exact == expected);
+
+    constexpr auto unavailable = std::numeric_limits<std::size_t>::max();
+    constexpr std::size_t outputCap = 32u * 1024u * 1024u;
+    constexpr std::size_t maxPixels = 540u * 960u;
+    const auto admitted = gifEncodingMemoryBound(540, 960, outputCap);
+    CHECK(admitted == outputCap + maxPixels * std::max(std::size_t(12), std::size_t(10) + sizeof(std::size_t)) + 128u * 1024u);
+    CHECK(admitted == gifEncodingMemoryBound(960, 540, outputCap));
+    CHECK(admitted + maxPixels * 4 * 8 < 64u * 1024u * 1024u);
+    CHECK(gifEncodingMemoryBound(0, 960, outputCap) == unavailable);
+    CHECK(gifEncodingMemoryBound(540, 0, outputCap) == unavailable);
+    CHECK(gifEncodingMemoryBound(65536, 1, outputCap) == unavailable);
+    CHECK(gifEncodingMemoryBound(1, 65536, outputCap) == unavailable);
+    CHECK(gifEncodingMemoryBound(1, 1, 0) == unavailable);
+    CHECK(gifEncodingMemoryBound(1, 1, unavailable) == unavailable);
+}
+
+void testGifRepeatedFrames() {
+    std::string error;
+    constexpr unsigned width = 32, height = 24;
+    const auto first = makeImage(width, height, 7, 1, false);
+    const auto local = makeImage(width, height, 13, 99, false);
+    const auto rich = makeImage(width, height, 1000, 17, false);
+    GifLimits limits; limits.maxFrames = 8; limits.maxBytes = 64 * 1024;
+    for (bool loop : {false, true}) {
+        GifOptions options; options.loop = loop;
+        GifWriter writer;
+        CHECK(!writer.repeatLastFrame(error));
+        CHECK(writer.begin(width, height, options, limits, error));
+        CHECK(!writer.repeatLastFrame(error));
+        Bytes producer = first;
+        CHECK(writer.addFrame(producer.data(), producer.size(), error));
+        // Repeating depends only on encoded bytes, even after producer storage changes.
+        producer.assign(producer.size(), 0);
+        CHECK(writer.repeatLastFrame(error) && writer.repeatLastFrame(error));
+        CHECK(writer.addFrame(local.data(), local.size(), error));
+        CHECK(writer.repeatLastFrame(error) && writer.repeatLastFrame(error));
+        CHECK(writer.addFrame(rich.data(), rich.size(), error) && writer.repeatLastFrame(error));
+        CHECK(writer.frameCount() == limits.maxFrames);
+        CHECK(!writer.repeatLastFrame(error) && error.find("cap") != std::string::npos);
+        Bytes gif;
+        CHECK(writer.finish(gif, error));
+        CHECK(!writer.repeatLastFrame(error));
+        mediatest::DecodedGif decoded;
+        CHECK(mediatest::decodeGif(gif, decoded));
+        CHECK(decoded.trailer && decoded.hasLoopExt == loop && decoded.frames.size() == 8);
+        if (decoded.frames.size() == 8) {
+            for (const auto& frame : decoded.frames) CHECK(frame.delayCs == 5);
+            for (std::size_t i = 0; i < 3; ++i) CHECK(decoded.frames[i].rgba == first);
+            for (std::size_t i = 3; i < 6; ++i) CHECK(decoded.frames[i].rgba == local);
+            CHECK(decoded.frames[6].rgba == decoded.frames[7].rgba);
+        }
+    }
+
+    GifWriter reference;
+    CHECK(reference.begin(width, height, {}, limits, error));
+    CHECK(reference.addFrame(first.data(), first.size(), error) && reference.repeatLastFrame(error));
+    Bytes expected;
+    CHECK(reference.finish(expected, error));
+    CHECK(expected.size() > 2);
+    if (expected.size() <= 2) return;
+    for (std::size_t cap = expected.size() - 2; cap <= expected.size(); ++cap) {
+        limits.maxBytes = cap;
+        GifWriter writer;
+        CHECK(writer.begin(width, height, {}, limits, error));
+        CHECK(writer.addFrame(first.data(), first.size(), error));
+        const auto before = writer.bytesSoFar();
+        const bool repeated = writer.repeatLastFrame(error);
+        CHECK(repeated == (cap >= expected.size() - 1));
+        CHECK(writer.bytesSoFar() <= cap);
+        if (!repeated) CHECK(writer.bytesSoFar() == before && writer.frameCount() == 1);
+        const Bytes sentinel{0x42};
+        Bytes out = sentinel;
+        const bool finished = writer.finish(out, error);
+        CHECK(finished == (cap == expected.size()));
+        CHECK(out == (finished ? expected : sentinel));
+    }
+}
+
 void testQueue() {
     CaptureQueueConfig cfg; cfg.slotCount = 3; cfg.slotBytes = 64; cfg.memoryCapBytes = 1000;
     CaptureQueue q(cfg); CHECK(q.valid());
@@ -305,7 +455,7 @@ void testAv() {
 }  // namespace
 
 int main() {
-    testChecksums(); testInflateFixed(); testPng(); testGif(); testQueue(); testMp4(); testAv();
+    testChecksums(); testInflateFixed(); testPng(); testGif(); testGifByteLimits(); testGifRepeatedFrames(); testQueue(); testMp4(); testAv();
     if (failures) { std::printf("%d media check(s) FAILED\n", failures); return 1; }
     std::printf("media tests passed\n");
     return 0;

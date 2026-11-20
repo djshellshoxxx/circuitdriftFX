@@ -88,6 +88,11 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
 // the old file; successful return does not promise directory durability after power loss.
 // POSIX and Windows local-file replacement are supported; never call from audio.
 bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error);
+// Non-owning binary counterpart: embedded NUL bytes are preserved and the payload
+// is never copied into a second full-size buffer. The view must remain valid until
+// this synchronous operation returns. Same atomic replacement constraints as above;
+// no state/JSON validation is performed by either file-writing entry point.
+bool saveBytesFileAtomic(const std::string& path, std::string_view bytes, std::string& error);
 // Exclusively installs a new file without ever replacing an existing target, including
 // a dangling symlink. The existence decision is made atomically at installation,
 // not by a prior filesystem check; suitable for no-overwrite preset imports.

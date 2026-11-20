@@ -751,6 +751,24 @@ void atomicFiles() {
     CHECK(!state::saveStateFileAtomic(destination.string() + std::string("\0suffix", 7), "invalid", error));
     CHECK(readFile(destination) == "second");
 
+    // Binary views need no full-size string copy and must honor their exact
+    // bounds, embedded NUL/high bytes, empty payloads and multi-chunk writes.
+    const auto binaryDestination = directory / "capture.bin";
+    std::string binaryStorage(1024 * 1024 + 5, '\0');
+    binaryStorage.front() = 'x'; binaryStorage.back() = 'y';
+    binaryStorage[1] = 'G'; binaryStorage[2] = char(0xFF);
+    binaryStorage[binaryStorage.size() - 2] = 'F';
+    const std::string_view binary(binaryStorage.data() + 1, binaryStorage.size() - 2);
+    error = "stale error";
+    CHECK(state::saveBytesFileAtomic(binaryDestination.string(), binary, error) && error.empty());
+    CHECK(readFile(binaryDestination) == binary);
+    CHECK(!state::saveBytesFileAtomic(blocked.string(), binary, error));
+    CHECK(readFile(blocked / "keep") == "keep");
+    CHECK(!state::saveBytesFileAtomic(binaryDestination.string() + std::string("\0suffix", 7), binary, error));
+    CHECK(readFile(binaryDestination) == binary);
+    CHECK(state::saveBytesFileAtomic(binaryDestination.string(), {}, error) && error.empty());
+    CHECK(readFile(binaryDestination).empty());
+
     const std::string a(32768, 'a'), b(32768, 'b');
     CHECK(state::saveStateFileAtomic(destination.string(), a, error));
     std::atomic<int> pending{2}, errors{0};

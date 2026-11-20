@@ -576,7 +576,7 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
 }
 
 namespace {
-bool writeStateFileAtomicImpl(const std::string& path, const std::string& text,
+bool writeStateFileAtomicImpl(const std::string& path, std::string_view text,
                               bool allowReplace, std::string& error) {
     if (path.empty() || path.find('\0') != std::string::npos) { error = "invalid destination path"; return false; }
 #if defined(_WIN32)
@@ -664,6 +664,10 @@ bool writeStateFileAtomicImpl(const std::string& path, const std::string& text,
 
 bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error) {
     return writeStateFileAtomicImpl(path, text, true, error);
+}
+
+bool saveBytesFileAtomic(const std::string& path, std::string_view bytes, std::string& error) {
+    return writeStateFileAtomicImpl(path, bytes, true, error);
 }
 
 bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& text, std::string& error) {
