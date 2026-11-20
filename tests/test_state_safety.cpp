@@ -202,6 +202,27 @@ void exactIdentitiesAndFeatures() {
     CHECK(error.find("invalid checkpoint") != std::string::npos);
     doc.checkpoint->electrical = {0.25};
     CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::Restore);
+    // In-memory checkpoints bypass the JSON parser's 4096/64 element limits.
+    // Even a matching (but forged) prepared layout must not authorize restore.
+    doc.checkpoint->electrical.assign(4097, 0.25);
+    exact.electricalSize = doc.checkpoint->electrical.size();
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
+    CHECK(error.find("bounds") != std::string::npos);
+    doc.checkpoint->electrical = {0.25};
+    exact.electricalSize = 1;
+    doc.checkpoint->thermal.assign(4097, 0.125);
+    exact.thermalSize = doc.checkpoint->thermal.size();
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
+    CHECK(error.find("bounds") != std::string::npos);
+    doc.checkpoint->thermal.clear();
+    exact.thermalSize = 0;
+    doc.checkpoint->rng.assign(65, 42);
+    exact.rngSize = doc.checkpoint->rng.size();
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
+    CHECK(error.find("bounds") != std::string::npos);
+    doc.checkpoint->rng = {42};
+    exact.rngSize = 1;
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::Restore);
     doc.checkpoint->sampleIndex = 9007199254740993ULL;
     CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
     doc.checkpoint->sampleIndex = 9007199254740992ULL;

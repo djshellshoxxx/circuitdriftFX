@@ -471,5 +471,25 @@
     "review_workers": "unavailable in GitHub connector runtime",
     "not_done": "No dynamic runtime/control/seed capture, serialized host-state session or stopped-audio apply; G12 remains open",
     "next": "Qualify exact source, review compatibility and independently audit; implement audio-owner checkpoint handoff, host-thread capture and safe stopped-audio restore"
+  },
+  "session_restore_ci_followup_20261120": {
+    "parent_pr": 21,
+    "parent_head": "0487a63d07e58a228a32705f03272efacc8fdba9",
+    "parent_run_id": 44731856158,
+    "parent_linux": "failed_acceptance_core_rng_fixture_29_of_30",
+    "parent_state_safety": "passed",
+    "parent_windows": "skipped",
+    "qualified_pr20_run": 44722397474,
+    "qualified_pr20_result": "linux_and_windows_pluginval_passed",
+    "scope": "isolated child branch; original PR heads unchanged",
+    "changes": [
+      "Declare expected synthetic two-word RNG layout and add negative acceptance mismatch",
+      "Reject forged matching-but-oversized in-memory electrical/thermal/RNG checkpoint vectors",
+      "Add three bounded state_safety regression scenarios"
+    ],
+    "verification": "source check and JSON parse only; exact-child-head CI pending",
+    "independent_workers": "not available in connector context",
+    "audit": "docs/audits/SESSION_RESTORE_CI_FOLLOWUP_2026-11-20.md",
+    "still_open": "G12 runtime/control/seed capture, host state serialization, stopped-audio install and migration"
   }
 }

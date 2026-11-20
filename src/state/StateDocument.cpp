@@ -461,6 +461,8 @@ RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& r
     else if (c.modelRevision != rt.modelRevision) reason = "model revision differs";
     else if (c.sampleRate != rt.sampleRate) reason = "sample rate differs";
     else if (c.oversampling != rt.oversampling) reason = "oversampling differs";
+    else if (c.electrical.size() > 4096 || c.thermal.size() > 4096 || c.rng.size() > 64)
+        reason = "checkpoint dynamic state exceeds schema-v1 vector bounds";
     else if (c.electrical.size() != rt.electricalSize || c.thermal.size() != rt.thermalSize ||
              c.rng.size() != rt.rngSize) reason = "state layout differs (including rng)";
     else if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||

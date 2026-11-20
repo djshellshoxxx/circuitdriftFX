@@ -389,3 +389,11 @@ snapshot publication, host persistence and stopped-audio restore transactions
 remain unimplemented. Fresh review workers were unavailable in this runtime.
 Next owner: check exact-head Linux state_safety/Windows pluginval, review caller
 RNG size and state integrity, then integrate only after a guarded live-ref check.
+
+## Exact-head restore CI repair and forged-vector admission — 2026-11-20
+
+[PR #21 run #44731856158](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44731856158) at `0487a63d07e58a228a32705f03272efacc8fdba9` **failed Linux CTest (29/30)**: `acceptance_core` at `tests/test_main.cpp:515` expected Restore despite an omitted prepared `rngSize`. The new guard correctly rejected two synthetic checkpoint RNG words against the default expected zero. `state_safety` and the other 28 tests passed; Windows was skipped. Parent PR #20 completed both platforms including pluginval.
+
+An isolated child corrects the synthetic prepared identity to declare its two RNG words and asserts incompatible RNG layouts fail closed. Production `decideRestore` now also rejects matching-but-oversized *programmatically constructed* electrical, thermal and RNG vectors (4096/4096/64) before installing an exact checkpoint. These are the existing parser limits, not relaxed acceptance criteria. Three new `state_safety` regressions exercise oversized identities and clean restoration. See [focused audit](../audits/SESSION_RESTORE_CI_FOLLOWUP_2026-11-20.md).
+
+This child requires its **own exact-head Linux/Windows/pluginval result**. Native testing is unavailable locally because GitHub DNS is inaccessible from the container. Independent reviewers cannot be spawned through this connector; code, bug-hunt and defensive-security review remain pending. Keep PR #16/#19/#20/#21 and `main` intact. Full runtime/seed/session capture, state migration and stopped-audio restoration are still open G12 work.

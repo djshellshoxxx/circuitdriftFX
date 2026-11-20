@@ -510,7 +510,9 @@ static void p04_state() {
     state::StateDocument back; CHECK(state::loadState(state::saveState(sess), back, e), "cp load: %s", e.c_str());
     CHECK(back.checkpoint && back.checkpoint->electrical == cp.electrical && back.checkpoint->rng == cp.rng
           && back.checkpoint->sampleIndex == 100, "checkpoint exact roundtrip");
-    state::RuntimeIdentity rt{"0.0.1-dev", "fixture-v1", 48000, 4, std::size_t(a.stateSize()), 0};
+    // The synthetic session includes two RNG words. Exact continuation requires
+    // the prepared identity to declare that layout, not default it to zero.
+    state::RuntimeIdentity rt{"0.0.1-dev", "fixture-v1", 48000, 4, std::size_t(a.stateSize()), 0, cp.rng.size()};
     std::string why;
     CHECK(state::decideRestore(back, rt, why) == state::RestoreDecision::Restore, "restore: %s", why.c_str());
     dsp::MnaSolver b; b.prepare(n, h, {}, e); b.setState(back.checkpoint->electrical.data());
@@ -519,7 +521,8 @@ static void p04_state() {
     CHECK(worst <= 1e-6, "continuation %g", worst);
     std::printf("P04 checkpoint continuation peak error %.3g V (T24 limit 1e-6)\n", worst);
     for (auto mutate : {+[](state::RuntimeIdentity& r) { r.sampleRate = 44100; }, +[](state::RuntimeIdentity& r) { r.oversampling = 16; },
-                        +[](state::RuntimeIdentity& r) { r.modelRevision = "fixture-v2"; }, +[](state::RuntimeIdentity& r) { r.electricalSize += 1; }}) {
+                        +[](state::RuntimeIdentity& r) { r.modelRevision = "fixture-v2"; }, +[](state::RuntimeIdentity& r) { r.electricalSize += 1; },
+                        +[](state::RuntimeIdentity& r) { r.rngSize += 1; }}) {
         state::RuntimeIdentity r2 = rt; mutate(r2);
         CHECK(state::decideRestore(back, r2, why) == state::RestoreDecision::ResetWarm && !why.empty(), "incompatible restore");
     }
