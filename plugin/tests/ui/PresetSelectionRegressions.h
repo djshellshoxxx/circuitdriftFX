@@ -20,8 +20,15 @@ public:
     juce::StringArray loaded;
     juce::String catalogMessage;
     std::uint64_t catalogGeneration = 0;
+    bool publishOnNextList = false;
 
     std::vector<PresetEntry> listPresets(const juce::String& query) override {
+        // The live bridge may accept a completed scan during this call, after
+        // the panel's previous status observation but before it rebuilds rows.
+        if (publishOnNextList) {
+            ++catalogGeneration;
+            publishOnNextList = false;
+        }
         std::vector<PresetEntry> result;
         for (const auto& entry : catalog)
             if (query.isEmpty() || entry.name.containsIgnoreCase(query)) result.push_back(entry);
@@ -169,9 +176,10 @@ inline int run() {
     panel->refresh(bridge->status());
     check(noSelection(), "a new snapshot clears a retained identity even when rows are unchanged");
     factory->selectRow(0);
-    ++bridge->catalogGeneration;
+    bridge->publishOnNextList = true;
     filter("Warm");
-    check(noSelection(), "a query consuming a new snapshot cannot retain the old action target");
+    check(!bridge->publishOnNextList && noSelection(),
+          "a query consuming a new snapshot cannot retain the old action target");
     factory->selectRow(0);
     refresh->onClick();
     check(noSelection(), "explicit refresh clears selection while the previous rows remain visible");
