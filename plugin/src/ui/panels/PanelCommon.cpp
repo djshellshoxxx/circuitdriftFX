@@ -312,6 +312,15 @@ void FlowContent::setTheme(const Theme& t) {
     theme_ = t;
     applyTheme(laf_, t);
     sendLookAndFeelChange();
+    // JUCE keeps the colour of existing TextEditor glyphs separately from
+    // LookAndFeel. Update plain-text contents too, so switching themes does
+    // not leave a dark blueprint or search query on a dark background.
+    const auto updateText = [&](auto&& self, juce::Component& component) -> void {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(&component))
+            editor->applyColourToAllText(t.text, false);
+        for (auto* child : component.getChildren()) self(self, *child);
+    };
+    updateText(updateText, *this);
     repaint();
 }
 void FlowContent::paint(juce::Graphics& g) { g.fillAll(theme_.panel); }
