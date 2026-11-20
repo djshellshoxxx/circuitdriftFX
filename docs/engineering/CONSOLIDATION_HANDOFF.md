@@ -202,3 +202,73 @@ any genuine validator failures, then pursue real EditorBridge transactions and
 versioned runtime/seed/session persistence. Separate security, bug and code
 review workers were not available in this tool context; the saved reviews are
 not new independent signoffs.
+
+## 2026-11-20 continuation: real editor bridge, isolated until plugin CI
+
+### Ownership and exact source
+
+At entry, draft PR #16 was still at `cb53cd812700e5edbcf7323653b84e470da77cfc`.
+The renewed exact-head run [44674618903](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903)
+completed Linux successfully; the Windows job `136103454565` remained **queued**
+at the latest read. No pluginval result exists yet for that SHA. To avoid aborting
+or making those results obsolete, the coordinator **did not move PR #16's head**.
+A separate branch `codex/cdfx-live-editor-bridge-20261120` was created from
+that precise commit. It does not overlap the previous seek-epoch worker branch.
+
+### Actual feature implementation (on isolated branch)
+
+- `plugin/src/ui/ProcessorEditorBridge.{h,cpp}` now implements the production
+  UI contract against the real processor APVTS, with grouped message-thread
+  gestures, bounded 20-step undo/redo, host-value conflict rejection, A/B slot
+  copy/swap, mirrored crossfade, and read-only status/telemetry. Local history
+  clears when the host loads a validated state blob.
+- The processor now owns this bridge and uses `ui::CircuitDriftEditor` for
+  `createEditor()`, replacing the generic host editor. Runtime telemetry reads
+  are gated while non-audio-thread prepare/release waits for existing UI readers.
+  This is **not** a live service implementation for every editor panel.
+- Presets, fault insertion, blueprint compile/apply, GIF/MP4 capture and
+  restoration seeds are still unavailable: operations with error outputs report
+  an explicit failure rather than returning success with fabricated state.
+  The live lifecycle panel disables restoration commit and indicates gate G12.
+  PNG rendering and bounded UI preferences are wired; per-instance settings
+  are **not** persisted in the host session yet. `resetEngine()` remains
+  unwired rather than changing active worker state unsafely.
+- Added `plugin/tests/ui/snap_live_bridge.cpp`, registered by the current
+  `snap_*.cpp` build glob. It covers live parameter mutation, one-step
+  gesture/copy/swap undo/redo, crossfade, host-conflict rejection, session-load
+  invalidation, 20-step retention, LITE limitations and unimplemented-service
+  failures, plus construction of the custom editor. **Test source is published
+  but the new branch has not been compiled or run.** Previous 30/30 and PR #16
+  Linux passes are evidence for their old source heads only.
+
+### Reconciliation checkpoint (older PRs retained)
+
+- PR #10's graph/compiler/lifecycle/fault primitives had already been imported;
+  no copy was repeated in this run.
+- PRs #9/#10 contain `src/analysis/ScopeMath.*` and related telemetry/rail
+  display suites absent from the current candidate. The old `ScopeMath` code
+  depends on an older `analysis/Telemetry.h` contract and cannot be copied as
+  a drop-in replacement for the new `engine::TelemetryFrame`/JUCE panel path.
+- PR #14's `ControlHub`, `LatestSlot`, `SampleClock`, `SpscRing` and RT-trap
+  harness are absent by path. Their semantics and test harness must be mapped
+  against the newer control queue and worker pipeline individually before
+  porting; no equivalence or acceptance is asserted from filenames.
+- Previous reference branches remain unmodified and open for further review.
+
+### Verification, independent reviewers, and next owner
+
+The current tool context has GitHub read/write access but neither a local
+CircuitDriftFX checkout with pinned JUCE nor a separate agent-worker launcher.
+Source/interface inventory and versioned regression **source** were completed;
+linked Windows, GUI and host validation of this branch, independent code/bug/
+security review, and audio-thread allocation profiling remain **pending**.
+Prior workers' notes are retained, not misrepresented as new reviews.
+
+Next owner: read PR #16's queued Windows/pluginval run before moving its ref.
+Perform native JUCE compiler/build and run `ui_snap_live_bridge` on the exact
+isolated SHA, fix any defects, and obtain independent review. Integrate only
+with a checked non-force fast-forward after checking the live head. Then attach
+real preset, blueprint, fault, reset and capture services, define a versioned
+runtime/control/seed/session checkpoint with safe host-thread coordination, and
+continue item-level old branch reconciliation. Existing G01–G12 gates, synthetic
+model caveats, releases and deployments remain unchanged.
