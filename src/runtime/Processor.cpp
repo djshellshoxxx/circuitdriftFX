@@ -89,6 +89,14 @@ void Processor::reset(engine::ResetKind kind) noexcept {
     control_.reset();
     engine_.reset(kind);
     haveEpoch_ = false;
+    midiOverflowed_ = false;
+}
+void Processor::resetRealtime(engine::ResetKind kind) noexcept {
+    if (!prepared_) return;
+    control_.resetRealtime();
+    engine_.reset(kind);
+    haveEpoch_ = false;
+    midiOverflowed_ = false;
 }
 bool Processor::needsReprepare(const core::ParamValues& values) const noexcept {
     return !prepared_ || engine_.needsReprepare(mapped(values));

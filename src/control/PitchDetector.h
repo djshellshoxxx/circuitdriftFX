@@ -10,7 +10,8 @@
 //
 // Threading: prepare()/reset() on a non-audio thread while idle (allocate). push() is the audio-thread
 // producer of a preallocated lock-free SPSC ring (noexcept, no allocation, no locks; overload drops the
-// incoming block and counts it). run() is the single worker consumer; it may be called from any one
+// incoming block, invalidates pre-gap pitch and counts it). run() is the single worker consumer;
+// it discards the pre-gap queue before reacquiring and may be called from any one
 // thread at a time and never blocks. latest() is a bounded-retry lock-free seqlock read (any thread).
 // If the worker falls behind by more than 8 windows the oldest input is dropped (counted).
 // Timestamps are in accepted-input-sample units (the stream that push() fed); results older than 250 ms
@@ -91,9 +92,9 @@ private:
     std::size_t mask_ = 0;
     alignas(64) std::atomic<uint64_t> wr_{0};
     alignas(64) std::atomic<uint64_t> rd_{0};
-    std::atomic<uint64_t> droppedSamples_{0}, droppedWindows_{0}, gaps_{0};
+    std::atomic<uint64_t> droppedSamples_{0}, droppedWindows_{0};
     std::atomic<uint64_t> generation_{0}, seekBoundary_{0};
-    uint64_t seenGaps_ = 0, workerGeneration_ = 0;
+    uint64_t workerGeneration_ = 0;
 
     // Worker analysis state.
     std::vector<double> chunk_, in_;

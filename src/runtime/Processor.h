@@ -25,6 +25,9 @@ public:
                  bool lite, std::string& error);
     void release() noexcept;
     void reset(engine::ResetKind kind) noexcept;
+    // Audio owner only, between process calls. Bounded, allocation-free and
+    // safe while the single pitch worker runs; never joins or resets its buffers.
+    void resetRealtime(engine::ResetKind kind) noexcept;
     bool isPrepared() const noexcept { return prepared_; }
     int latencySamples() const noexcept { return prepared_ ? engine_.latencySamples() : 0; }
     bool needsReprepare(const core::ParamValues& values) const noexcept;
@@ -51,6 +54,9 @@ public:
     }
     // Audio thread diagnostics (adapters publish a separate UI snapshot).
     const control::ControlStatus& controlStatus() const noexcept { return control_.status(); }
+    engine::EffectiveTargets effectiveTargets(int slot) const noexcept {
+        return prepared_ ? engine_.effectiveTargets(slot) : engine::EffectiveTargets{};
+    }
     bool midiOverflowed() const noexcept { return midiOverflowed_; }
 
 private:

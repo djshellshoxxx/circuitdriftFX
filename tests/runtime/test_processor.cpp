@@ -1,10 +1,12 @@
 // Host integration regressions, synthetic fixtures only. No hardware/host claim.
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <new>
+#include <thread>
 #include <vector>
 #include "runtime/Processor.h"
 
@@ -245,6 +247,77 @@ void pendingLatencyModePreservesActiveControl() {
     CHECK(pending.processor.latencySamples() == 0);
     CHECK(!pending.processor.needsReprepare(pending.parameters));
 }
+
+void realtimeResetMatchesQuiescentReset() {
+    for (auto kind : {engine::ResetKind::Warm, engine::ResetKind::Cold}) {
+        Rig realtime, idle;
+        set(realtime.parameters, "macro.drift", 1);
+        set(realtime.parameters, "analogNoise.enabled", 1);
+        set(realtime.parameters, "pitchDrift.enabled", 1);
+        set(realtime.parameters, "tempo.enabled", 1);
+        set(realtime.parameters, "tempo.depth", 0.5);
+        set(realtime.parameters, "key.enabled", 1);
+        set(realtime.parameters, "key.source", 1);
+        idle.parameters = realtime.parameters;
+        CHECK(realtime.prepare());
+        CHECK(idle.prepare());
+        std::vector<double> input(1024);
+        for (std::size_t i = 0; i < input.size(); ++i) input[i] = 0.1 * std::sin(double(i) * 0.09);
+        const control::MidiEvent note{0, 0x90, 72, 100};
+        realtime.cc.midi = idle.cc.midi = {&note, 1};
+        (void)realtime.render(input);
+        (void)idle.render(input);
+        realtime.cc.midi = idle.cc.midi = {};
+        allocations = 0;
+        countAllocations = true;
+        realtime.processor.resetRealtime(kind);
+        countAllocations = false;
+        CHECK(allocations == 0);
+        idle.processor.reset(kind);
+        const auto actual = realtime.render(input);
+        const auto expected = idle.render(input);
+        CHECK(actual == expected);
+        CHECK(realtime.processor.controlStatus().keyState == control::KeyState::ManualReference);
+        CHECK(realtime.processor.controlStatus().tempoPhase == idle.processor.controlStatus().tempoPhase);
+        CHECK(realtime.processor.latencySamples() == idle.processor.latencySamples());
+    }
+}
+
+void realtimeResetWithPitchWorker() {
+    Rig rig;
+    set(rig.parameters, "key.enabled", 1);
+    set(rig.parameters, "key.source", 2);
+    CHECK(rig.prepare());
+    std::vector<double> tone(12000);
+    for (std::size_t i = 0; i < tone.size(); ++i)
+        tone[i] = 0.3 * std::sin(2.0 * 3.141592653589793 * 220.0 * double(i) / 48000.0);
+    (void)rig.render(tone);
+    rig.processor.runPitchWorker();
+    rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
+    CHECK(rig.processor.controlStatus().pitchState == control::PitchState::Acquired);
+    std::atomic<bool> done{false};
+    std::thread worker([&] {
+        while (!done.load(std::memory_order_acquire)) {
+            rig.processor.runPitchWorker();
+            std::this_thread::yield();
+        }
+    });
+    allocations = 0;
+    countAllocations = true;
+    for (int i = 0; i < 16; ++i) {
+        rig.processor.resetRealtime(i % 2 ? engine::ResetKind::Cold : engine::ResetKind::Warm);
+        rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
+        CHECK(rig.processor.controlStatus().pitchState == control::PitchState::None);
+    }
+    countAllocations = false;
+    CHECK(allocations == 0);
+    done.store(true, std::memory_order_release);
+    worker.join();
+    (void)rig.render(tone);
+    rig.processor.runPitchWorker();
+    rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
+    CHECK(rig.processor.controlStatus().pitchState == control::PitchState::Acquired);
+}
 }
 
 void* operator new(std::size_t size) {
@@ -262,6 +335,8 @@ int main() {
     midiChunkingAndZeroFrames();
     pendingLatencyModePreservesActiveControl();
     seekInvalidatesPitchWithoutResettingWorkerFromAudio();
+    realtimeResetMatchesQuiescentReset();
+    realtimeResetWithPitchWorker();
     std::printf("runtime_processor: %s (%d failures)\n", failures ? "FAILED" : "PASS", failures);
     return failures ? 1 : 0;
 }

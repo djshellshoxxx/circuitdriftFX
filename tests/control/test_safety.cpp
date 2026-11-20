@@ -301,6 +301,47 @@ void zeroFrameMidi() {
           phase == cp.status().tempoPhase, "zero-frame events advance neither RNG nor tempo clocks");
 }
 
+void audioPitchActivation() {
+    ControlProcessor cp;
+    cp.prepare(48000, 480, 17);
+    auto p = core::defaultValues();
+    p[core::indexOf("key.enabled")] = 1;
+    p[core::indexOf("key.source")] = 2;
+    const auto tone = th::sine(220, 0.3, 48000, 24000);
+    ControlContext ctx;
+    core::ModulationBlock out;
+    auto acquire = [&] {
+        ctx.frames = 480;
+        for (std::size_t i = 0; i < tone.size(); i += 480) {
+            const double* channels[] = {tone.data() + i};
+            cp.processBlock(p, ctx, {channels, 1}, nullptr, out);
+            cp.runPitchWorker();
+        }
+        ctx.frames = 0;
+        cp.processBlock(p, ctx, {}, nullptr, out);
+        CHECK(cp.status().pitchState == PitchState::Acquired, "audio key tone acquired before transition");
+    };
+    acquire();
+    const auto beforeDisable = cp.pitchDetector().latest();
+    p[core::indexOf("key.enabled")] = 0;
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(!cp.pitchDetector().isFresh(beforeDisable), "disabling audio key tracking invalidates its retained pitch");
+    p[core::indexOf("key.enabled")] = 1;
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(cp.status().pitchState == PitchState::None && cp.status().pitchHz == 0,
+          "re-enabling audio tracking requires new audio even on a zero-frame call");
+    acquire();
+    const auto beforeSwitch = cp.pitchDetector().latest();
+    p[core::indexOf("key.source")] = 0;
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(!cp.pitchDetector().isFresh(beforeSwitch), "changing away from audio invalidates the old pitch");
+    p[core::indexOf("key.source")] = 2;
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(cp.status().pitchState == PitchState::None && cp.status().pitchHz == 0,
+          "returning to audio tracking cannot revive a prior detector result");
+    acquire();
+}
+
 void transportBoundary() {
     constexpr double nan = std::numeric_limits<double>::quiet_NaN();
     constexpr double inf = std::numeric_limits<double>::infinity();
@@ -350,6 +391,7 @@ int main() {
     referenceTuningBoundary();
     transportBoundary();
     zeroFrameMidi();
+    audioPitchActivation();
     if (g_fail) { std::printf("control safety: %d failure(s)\n", g_fail); return 1; }
     std::printf("control safety: all passed\n");
     return 0;

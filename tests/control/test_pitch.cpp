@@ -184,6 +184,28 @@ static void seekDiscontinuity() {
           "post-seek worker discards queued pre-seek audio: %g", changed.frequencyHz);
 }
 
+static void droppedInputInvalidatesPitch() {
+    constexpr double fs = 48000.0;
+    PitchDetector d;
+    d.prepare(fs, 8192);
+    const auto tone = th::sine(220.0, 0.3, fs, 24000);
+    const auto acquired = feedAll(d, tone);
+    CHECK(acquired.state == PitchState::Acquired && d.isFresh(acquired), "tone acquired before input gap");
+    // Queue less than the freshness interval, then drop one ordinary host block.
+    d.push(tone.data(), 8192);
+    d.push(tone.data(), 480);
+    CHECK(d.droppedSamples() == 480, "one dropped input block counted");
+    CHECK(!d.isFresh(acquired) && d.latest().state == PitchState::None,
+          "a dropped input block immediately invalidates pre-gap pitch");
+    d.run();
+    CHECK(d.latest().state == PitchState::None,
+          "worker does not reacquire from queued audio that predates the gap");
+    const auto changed = feedAll(d, th::sine(523.25, 0.3, fs, 12000));
+    CHECK(changed.state == PitchState::Acquired && d.isFresh(changed) &&
+          std::fabs(th::cents(changed.frequencyHz, 523.25)) < 15,
+          "detector recovers using post-gap audio");
+}
+
 static void threadedSpsc() {
     constexpr double fs = 48000.0;
     PitchDetector d;
@@ -214,6 +236,7 @@ int main() {
     hopStateMachine();
     stalenessAndOverload();
     seekDiscontinuity();
+    droppedInputInvalidatesPitch();
     threadedSpsc();
     if (g_fail) { std::printf("pitch: %d failure(s)\n", g_fail); return 1; }
     std::printf("pitch: all passed\n");

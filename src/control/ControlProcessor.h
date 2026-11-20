@@ -14,6 +14,8 @@
 //    (sample-zero MIDI and parameters still apply). frames > maxBlock is clamped and
 //    flagged in status().blockClamped.
 //  - runPitchWorker() : worker thread (single), drains the pitch ring and analyses windows.
+//  - resetRealtime() : audio owner between processBlock calls; resets only audio-owned state
+//    and requests a worker-owned pitch flush through an atomic generation change.
 //  - status() : audio thread (same thread as processBlock); the runtime may copy it for the UI.
 // Output pointers in ModulationBlock refer to processor-owned buffers valid until the next processBlock.
 #pragma once
@@ -43,6 +45,9 @@ public:
     // Unsupported/nonfinite sample rates use 48000 Hz (supported range 8000..768000 Hz).
     void prepare(double sampleRate, int maxBlock, uint64_t instanceSeed);
     void reset();  // restart modulation from the last prepare's seed and clock origin
+    // Audio owner only: restart control state without touching worker-owned pitch
+    // buffers. The pitch worker observes an epoch change and flushes itself.
+    void resetRealtime() noexcept;
 
     void processBlock(const core::ParamValues& params, const ControlContext& ctx, const AudioView& mainIn,
                       const AudioView* sidechainIn, core::ModulationBlock& out) noexcept;
@@ -63,6 +68,7 @@ public:
     CreativeDrift& drift(int slot) noexcept { return drift_[slot & 1]; }
 
 private:
+    void resetAudioState() noexcept;
     struct SlotState {
         ResonanceQuantizer quant;
         HarmonicTargeting harmonic;
@@ -77,8 +83,8 @@ private:
     bool prepared_ = false;
     double fs_ = 48000.0;
     int maxBlock_ = 0;
-    uint64_t instanceSeed_ = 0;
     CreativeDrift drift_[2];
+    CreativeDrift::State initialDrift_[2]{};
     TempoBreathing tempo_;
     KeyTracker key_;
     PitchDetector pitch_;
@@ -90,6 +96,7 @@ private:
     std::atomic<double> a4_{440.0};
     ControlStatus status_{};
     int lastKeySource_ = 0;
+    bool audioPitchActive_ = false;
     TempoOutput lastTempo_{};
 };
 

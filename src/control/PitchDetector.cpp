@@ -106,8 +106,6 @@ void PitchDetector::reset() {
     rd_.store(0);
     droppedSamples_.store(0);
     droppedWindows_.store(0);
-    gaps_.store(0);
-    seenGaps_ = 0;
     generation_.store(0, std::memory_order_relaxed);
     seekBoundary_.store(0, std::memory_order_relaxed);
     workerGeneration_ = 0;
@@ -119,7 +117,9 @@ void PitchDetector::reset() {
 void PitchDetector::markDiscontinuity() noexcept {
     // The producer publishes its last pre-seek write index before the epoch.
     // Neither ring consumer position nor worker-owned filters are touched here.
-    seekBoundary_.store(wr_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    // Release/acquire on the boundary also orders its write index if a worker
+    // observes this boundary before it observes the corresponding generation.
+    seekBoundary_.store(wr_.load(std::memory_order_relaxed), std::memory_order_release);
     generation_.fetch_add(1, std::memory_order_release);
 }
 
@@ -140,7 +140,7 @@ void PitchDetector::push(const double* x, int n) noexcept {
     const uint64_t r = rd_.load(std::memory_order_acquire);
     if (w - r + uint64_t(n) > ring_.size()) {  // overload: drop the incoming block, flag a gap
         droppedSamples_.fetch_add(uint64_t(n), std::memory_order_relaxed);
-        gaps_.fetch_add(1, std::memory_order_release);
+        markDiscontinuity();
         return;
     }
     for (int i = 0; i < n; ++i) ring_[std::size_t(w + uint64_t(i)) & mask_] = x[i];
@@ -246,14 +246,9 @@ void PitchDetector::run() noexcept {
         workerGeneration_ = generation;
         // Discard only the pre-seek ring prefix. A worker already consuming an
         // old chunk cannot publish a usable result: latest() checks its epoch.
-        const uint64_t boundary = seekBoundary_.load(std::memory_order_relaxed);
+        const uint64_t boundary = seekBoundary_.load(std::memory_order_acquire);
         const uint64_t read = rd_.load(std::memory_order_relaxed);
         if (read < boundary) rd_.store(boundary, std::memory_order_release);
-        resetAnalysis();
-    }
-    const uint64_t g = gaps_.load(std::memory_order_acquire);
-    if (g != seenGaps_) {
-        seenGaps_ = g;
         resetAnalysis();
     }
     uint64_t rd = rd_.load(std::memory_order_relaxed);

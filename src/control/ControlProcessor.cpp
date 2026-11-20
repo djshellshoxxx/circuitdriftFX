@@ -50,12 +50,14 @@ double approach(double cur, double target, double maxStep) noexcept {
 void ControlProcessor::prepare(double sampleRate, int maxBlock, uint64_t instanceSeed) {
     prepared_ = false;
     fs_ = std::isfinite(sampleRate) && sampleRate >= 8000.0 && sampleRate <= 768000.0 ? sampleRate : 48000.0;
-    instanceSeed_ = instanceSeed;
     maxBlock_ = std::max(0, maxBlock);
     loadBuf_.assign(std::size_t(maxBlock_) + 1, 0.0);
     transBuf_.assign(std::size_t(maxBlock_) + 1, 0.0);
     mono_.assign(std::size_t(maxBlock_) + 1, 0.0);
-    for (uint32_t s = 0; s < 2; ++s) drift_[s].prepare(fs_, instanceSeed, s);
+    for (uint32_t s = 0; s < 2; ++s) {
+        drift_[s].prepare(fs_, instanceSeed, s);
+        initialDrift_[s] = drift_[s].save();
+    }
     tempo_.prepare(fs_);
     key_.prepare(fs_);
     pitch_.prepare(fs_);
@@ -70,18 +72,30 @@ void ControlProcessor::prepare(double sampleRate, int maxBlock, uint64_t instanc
     }
     status_ = ControlStatus{};
     lastKeySource_ = 0;
+    audioPitchActive_ = false;
     lastTempo_ = TempoOutput{};
     prepared_ = true;
 }
 
 void ControlProcessor::reset() {
     if (!prepared_) return;
-    for (uint32_t s = 0; s < 2; ++s) drift_[s].prepare(fs_, instanceSeed_, s);
+    resetAudioState();
+    pitch_.reset();
+}
+
+void ControlProcessor::resetRealtime() noexcept {
+    if (!prepared_) return;
+    resetAudioState();
+    pitch_.markDiscontinuity();
+}
+
+void ControlProcessor::resetAudioState() noexcept {
+    // The prepared initial snapshots avoid coefficient/seed preparation here.
+    for (uint32_t s = 0; s < 2; ++s) drift_[s].restore(initialDrift_[s]);
     key_.reset();
     tempo_.reset();
     transient_.reset();
     sidechain_.reset();
-    pitch_.reset();
     for (auto& st : slot_) {
         st.quant.reset();
         st.harmonic.reset();
@@ -91,6 +105,7 @@ void ControlProcessor::reset() {
     }
     status_ = ControlStatus{};
     lastKeySource_ = 0;
+    audioPitchActive_ = false;
     lastTempo_ = TempoOutput{};
 }
 
@@ -140,8 +155,15 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
         key_.reset();
         lastKeySource_ = keySource;
     }
+    const bool audioPitchActive = keySource == int(KeySource::Audio) && keyEnabled;
+    if (audioPitchActive != audioPitchActive_) {
+        // The accepted-input clock pauses while audio tracking is inactive.
+        // Invalidate its old result/history instead of treating it as fresh on return.
+        pitch_.markDiscontinuity();
+        audioPitchActive_ = audioPitchActive;
+    }
     PitchResult pr{};
-    if (keySource == int(KeySource::Audio) && keyEnabled) {
+    if (audioPitchActive) {
         if (frames > 0) {
             for (int i = 0; i < frames; ++i) mono_[std::size_t(i)] = 0.0;
             int nch = 0;
