@@ -1,0 +1,100 @@
+Start testing: Nov 20 08:28 PST
+----------------------------------------------------------
+37/37 Testing: ui_snap_workbench
+37/37 Test: ui_snap_workbench
+Command: "<build-clang>/plugin/cd_ui_snap_workbench_artefacts/Custom/cd_ui_snap_workbench" "<build-clang>/plugin/ui-snapshots"
+Directory: <build-clang>/plugin
+"ui_snap_workbench" start time: Nov 20 08:28 PST
+Output:
+----------------------------------------------------------
+Workbench snapshot passed
+<end of output>
+Test time =  12.92 sec
+----------------------------------------------------------
+Test Passed.
+"ui_snap_workbench" end time: Nov 20 08:28 PST
+"ui_snap_workbench" time elapsed: 00:00:12
+----------------------------------------------------------
+
+36/37 Testing: ui_snap_shell
+36/37 Test: ui_snap_shell
+Command: "<build-clang>/plugin/cd_ui_snap_shell_artefacts/Custom/cd_ui_snap_shell" "<build-clang>/plugin/ui-snapshots"
+Directory: <build-clang>/plugin
+"ui_snap_shell" start time: Nov 20 08:28 PST
+Output:
+----------------------------------------------------------
+UI shell snapshot passed
+<end of output>
+Test time =  19.15 sec
+----------------------------------------------------------
+Test Passed.
+"ui_snap_shell" end time: Nov 20 08:28 PST
+"ui_snap_shell" time elapsed: 00:00:19
+----------------------------------------------------------
+
+31/37 Testing: plugin_param_consistency
+31/37 Test: plugin_param_consistency
+Command: "<build-clang>/plugin/cd_plugin_consistency_tests_artefacts/Custom/cd_plugin_consistency_tests"
+Directory: <build-clang>/plugin
+"plugin_param_consistency" start time: Nov 20 08:28 PST
+Output:
+----------------------------------------------------------
+UI host-gesture regressions passed
+plugin parameter consistency: all checks passed (116 registry params)
+<end of output>
+Test time =   4.20 sec
+----------------------------------------------------------
+Test Passed.
+"plugin_param_consistency" end time: Nov 20 08:28 PST
+"plugin_param_consistency" time elapsed: 00:00:04
+----------------------------------------------------------
+
+35/37 Testing: ui_snap_panels
+35/37 Test: ui_snap_panels
+Command: "<build-clang>/plugin/cd_ui_snap_panels_artefacts/Custom/cd_ui_snap_panels" "<build-clang>/plugin/ui-snapshots"
+Directory: <build-clang>/plugin
+"ui_snap_panels" start time: Nov 20 08:28 PST
+Output:
+----------------------------------------------------------
+UI panels snapshot passed
+<end of output>
+Test time =  11.31 sec
+----------------------------------------------------------
+Test Passed.
+"ui_snap_panels" end time: Nov 20 08:28 PST
+"ui_snap_panels" time elapsed: 00:00:11
+----------------------------------------------------------
+
+34/37 Testing: ui_snap_live_bridge
+34/37 Test: ui_snap_live_bridge
+Command: "<build-clang>/plugin/cd_ui_snap_live_bridge_artefacts/Custom/cd_ui_snap_live_bridge" "<build-clang>/plugin/ui-snapshots"
+Directory: <build-clang>/plugin
+"ui_snap_live_bridge" start time: Nov 20 08:28 PST
+Output:
+----------------------------------------------------------
+live EditorBridge: PASS (0 failures)
+<end of output>
+Test time =   1.54 sec
+----------------------------------------------------------
+Test Passed.
+"ui_snap_live_bridge" end time: Nov 20 08:28 PST
+"ui_snap_live_bridge" time elapsed: 00:00:01
+----------------------------------------------------------
+
+33/37 Testing: ui_snap_contract
+33/37 Test: ui_snap_contract
+Command: "<build-clang>/plugin/cd_ui_snap_contract_artefacts/Custom/cd_ui_snap_contract" "<build-clang>/plugin/ui-snapshots"
+Directory: <build-clang>/plugin
+"ui_snap_contract" start time: Nov 20 08:28 PST
+Output:
+----------------------------------------------------------
+UI contract snapshot passed
+<end of output>
+Test time =   1.00 sec
+----------------------------------------------------------
+Test Passed.
+"ui_snap_contract" end time: Nov 20 08:28 PST
+"ui_snap_contract" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 20 08:28 PST

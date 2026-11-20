@@ -1,40 +1,39 @@
 # CircuitDriftFX consolidation handoff — 2026-11-20
 
-## Current checkpoint
+## Current checkpoint — R14
 
-The live plugin now constructs the custom editor, supports prepared Full-edition
-Warm/Cold reset requests, publishes persistent editor snapshots, and saves bounded
-UI preferences in host state. An already-open editor applies restored settings;
-Workbench projection changes persist. These features have advanced beyond the
-isolated-editor checkpoint at `3f122dfa0f56706e26329eaa3fd31a3199145ce3`.
+R14 integrates the nine-branch continuation chain through
+`c6ebb22daab9c46edffa761b21f3fd45320e5074`, repairs fresh preset/state defects, and
+connects the Full edition Blueprint panel to real asynchronous compiler validation.
+The separate pitch-preparation branch was already imported byte-identically.
+Original refs and older PRs remain preserved. The
+[integration audit](../audits/R14_INTEGRATION_REVIEW_2026-11-20.md) records the lineage.
 
-The reviewed implementation checkpoint is
-`d6d20df93bfc13eeb98874b3489b8030f5aaef23`, with tree
-`9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51`. It is identical to local
-`9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b` on
-`codex/cdfx-continuation-20261120`; the [commit mapping](../evidence/commit-map-2026-11-20.json)
-preserves the individual repair history. The containing checkpoint adds evidence
-and documentation after those production/test changes.
+Final production/test source is remote
+`e2d91a45d6a45ab8987622a00a19fbed1049e7e6`, identical to local
+`b78430cd941201be382a09809ca40be997e959c1`, tree
+`8bad08aa4a5bca5b2ef796536cd1ceff3806d797`. The containing checkpoint adds evidence
+and handoff documentation. The [R14 commit map](../evidence/commit-map-2026-11-20-r14.json)
+preserves all eleven new commits with verified tree equality.
 
 Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
-`codex/cdfx-consolidation-20261119`, is the publication and CI authority. **New
-exact-head Linux/Windows CI and pluginval are required.** Read its live head and
-checks before continuing; the prior Windows pass cannot qualify this new source.
+`codex/cdfx-consolidation-20261119`, remains the publication and CI authority.
+Read its live head and checks: **R14 requires its own exact-head Linux/Windows and
+pluginval run.** Historical child-branch ownership holds below are superseded by
+this integrated checkpoint; those sections remain provenance.
 
-| Evidence | Current result and exact boundary |
+| Evidence | Result and exact boundary |
 | --- | --- |
-| Previous PR #16 exact source `cb53cd812700e5edbcf7323653b84e470da77cfc` | **PASSED Linux and Windows, including pluginval**, in [run 44674618903](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903). [Linux job 136083378151](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903/job/136083378151) and [Windows job 136103454565](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903/job/136103454565) both passed. This qualifies that prior source only. |
-| Current combined core | **30/30 PASSED in 127.89 seconds** on production source `1f21fe95a2d495be8abe797437730577575f9d58`, GCC 14.2, `-O1`, ASan/UBSan/float-cast-overflow. Leak detection was disabled under the tracer. Generated-table freshness checks passed separately. |
-| Current native plugin tests | **6/6 PASSED**, Clang 19, Custom `-O0`: processor consistency 4.03 s, live bridge 0.22 s, shell 19.69 s, Workbench 12.34 s, panels 10.57 s and contract 0.83 s. All executables linked against pinned JUCE. These are offscreen console-test applications, not a DAW qualification. |
-| New-source remote qualification | Required on the containing published commit; read the live PR checks. The earlier `cb53cd8` result applies only to that prior source. |
+| Combined portable core | **30/30 passed, 335.45 s**, GCC 14.2 `-O1`, ASan/UBSan/float-cast-overflow. The only later source change is Blueprint text recoloring; portable source/build inputs are identical. Leak detection was disabled under the tracer. |
+| Final native processor/editor | **6/6 passed, 25.23 s**, Clang 19 Custom `-O0`, pinned JUCE, after the visual theme repair. Offscreen console applications, not DAW qualification. |
+| Generated registry/plugin tables | **Passed** separately. |
+| Previous PR16 source `b3e05b6` | **Linux, Windows and pluginval passed**, [run 44690495993](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44690495993). |
+| Inherited chain source `c6ebb22` | **Linux, Windows and pluginval passed**, [run 44764678463](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44764678463). |
+| New R14 remote qualification | Required on the containing publication. Earlier source results do not qualify new code. |
 
-Read [the current validation record](VALIDATION_2026-11-20.md) for evidence and
-subsequent coordinator updates. The first combined run of this continuation was
-29/30: `state_queue` exposed an ordering race while the other suites passed.
-The repaired queue passed 25 targeted sanitized repetitions in 4.52 seconds,
-received an independent ownership/memory-order review without a blocking finding,
-and then passed the full 30-suite rerun above. The original assertion and
-acceptance thresholds remain intact.
+Read [the R14 validation record](VALIDATION_2026-11-20_R14.md) for source hashes,
+commands, full logs, build recoveries, independent review scope and limits. The
+[earlier validation record](VALIDATION_2026-11-20.md) remains historical evidence.
 
 ## Goal, authority and release scope
 
@@ -50,6 +49,26 @@ Read this file, the live refs/PRs, [the source inventory](consolidation-state.js
 with active workers; repository state may advance after any saved prompt.
 
 ## Implemented feature and repair state
+
+### R14 live validation and local file services
+
+- Full-edition Blueprint drafts now use the real compiler on one cancellable
+  worker. Reports identify synthetic models, actual Fs/OS, diagnostic locations,
+  arithmetic estimates and storage estimates. Example RC creates an editable
+  synthetic draft. Validation changes no audio, parameters, preferences or history.
+- Replaced or cancelled jobs cannot publish stale results. Edits, reload, slot
+  changes during validation and panel destruction cancel obsolete work; host-state
+  or observed audio-configuration changes invalidate pending reports. Apply remains
+  disabled because the runtime graph transaction is not implemented.
+- Factory/user catalog lookup, search, import/export, user deletion and atomic
+  PNG output are integrated. Complete sound preset load/save still requires
+  blueprint/seed/runtime transactions. Scans count examined directory entries
+  before filtering and surface partial/error status. Selection follows stable IDs.
+- Scene publication rejects duplicate parameter identities. State writers admit
+  retained JSON depth and encoded size before copying; publication skips private
+  fields. Earlier checkpoint layout, cardinality, whole-envelope and exclusive
+  preset-creation guards are retained. These are state API improvements, not full
+  plugin dynamic-session persistence.
 
 ### Live editor, reset and host preferences
 
@@ -128,15 +147,16 @@ with active workers; repository state may advance after any saved prompt.
    changes parameters and creates one local undo record. APVTS still publishes
    individual values; it is not an atomic multi-parameter/audio-state transaction,
    and same-parameter concurrent host writes remain a coordination boundary.
-4. Connect live preset operations, blueprint compile/apply, fault insertion,
-   component restoration seeds, GIF/MP4 capture and community/provider services.
-   Core primitives exist, but the production editor still reports unavailable
-   operations explicitly and disables restoration commit. PNG export is wired.
+4. Implement live Blueprint graph application and complete sound-preset load/save
+   transactions, then fault insertion, component restoration seeds, GIF/MP4 and
+   configured community/provider services. Blueprint validation and local preset
+   catalog/import/export/delete now work; unavailable actions remain explicit.
+   PNG export is wired.
 5. Continue native host/window/transport tests, audio-thread profiling, worst-case
    reset and sustained performance measurements, detector-corpus/confidence
    qualification, and measured sidechain budgets. Keep the zero external-load
-   budget until a model supplies evidence. The direct detector preparation API's
-   finite/rate/capacity bounds remain a recorded follow-up.
+   budget until a model supplies evidence. Direct detector preparation bounds
+   are integrated; detector corpus and confidence qualification remain open.
 6. Reconcile older PRs item by item, retaining their branches and test contracts.
    Older snapshot acknowledgement/stopped-audio handoffs, LITE upgrade/export,
    analysis/rail telemetry and RT-trap semantics are not resolved by similar

@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-20",
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "base_commit": "c6ebb22daab9c46edffa761b21f3fd45320e5074",
+  "local_branch": "codex/cdfx-integration-r14-20261120",
+  "publication_branch": "codex/cdfx-consolidation-20261119",
+  "source_head": "e2d91a45d6a45ab8987622a00a19fbed1049e7e6",
+  "scope": "Each remote commit reproduces the exact local tree. Git metadata changes commit IDs. The later evidence/handoff commit is intentionally outside this source mapping.",
+  "commits": [
+    {
+      "local_sha": "2d1aa6848ad0d4d1a2306e5d93305d6a0d1737a4",
+      "remote_sha": "f87ac8bc26bd5e6346d459d550b491d0c23731e4",
+      "tree_sha": "8e803e0ff35171cddcf3fe6eee92c7e450d2405c",
+      "parent_remote_sha": "c6ebb22daab9c46edffa761b21f3fd45320e5074",
+      "subject": "fix(ui): retain preset selection by stable identity"
+    },
+    {
+      "local_sha": "9a99c9db98296598b84f5afa47283d8e5644f5f8",
+      "remote_sha": "844f185618fc999d8212cf1b3d184a1b159548d9",
+      "tree_sha": "9631791d326b2c57a29497dd10d01c85104bccdf",
+      "parent_remote_sha": "f87ac8bc26bd5e6346d459d550b491d0c23731e4",
+      "subject": "fix(state): bound preset catalog scans before query filtering"
+    },
+    {
+      "local_sha": "65792c92e3f5f8853b11d7cd9bd093ffc09b6401",
+      "remote_sha": "ebbaa97506c57815fa173db1798a585026003c56",
+      "tree_sha": "b8b616ea215a11d1a24bffe4ea9ca0febd246db0",
+      "parent_remote_sha": "844f185618fc999d8212cf1b3d184a1b159548d9",
+      "subject": "fix(state): reject duplicate parameters before scene publication"
+    },
+    {
+      "local_sha": "5a9a7d99f46c8d863f5940568ec4fad676770c63",
+      "remote_sha": "dc7e2885dc7cad57b4ed4cd58c2044cbe3fbe08a",
+      "tree_sha": "ecf8346e94dc864489188125044723e8a8223523",
+      "parent_remote_sha": "ebbaa97506c57815fa173db1798a585026003c56",
+      "subject": "docs(state): record catalog and publication guard evidence"
+    },
+    {
+      "local_sha": "2254d9e99e7dbc5c6046c348a965a284afbc4f44",
+      "remote_sha": "8a038a4012a80a2994a12fa19df20eb30c35ad53",
+      "tree_sha": "40a010380fecf467cc01b2710f0ba19c860046e8",
+      "parent_remote_sha": "dc7e2885dc7cad57b4ed4cd58c2044cbe3fbe08a",
+      "subject": "Support cooperative cancellation of blueprint compilation"
+    },
+    {
+      "local_sha": "e5d98e0ceb708ff01e9aae32e7f6581f0eff4e2e",
+      "remote_sha": "3c6074d971743dcca63a8a70ae6984cdf16cd5ac",
+      "tree_sha": "5f990432ab517871bf10826f0cd2f26eecd00f74",
+      "parent_remote_sha": "8a038a4012a80a2994a12fa19df20eb30c35ad53",
+      "subject": "Record blueprint cancellation evidence and worker lifetime review"
+    },
+    {
+      "local_sha": "ba8f0a40645978a97516863d40409fa803abba1d",
+      "remote_sha": "798c209d248df4ca47cb1d112546e70b32ad8f5a",
+      "tree_sha": "b4f275198862209157c0bfbf0407dcb4d9ff3c8c",
+      "parent_remote_sha": "3c6074d971743dcca63a8a70ae6984cdf16cd5ac",
+      "subject": "feat(ui): expose blueprint validation previews and capabilities"
+    },
+    {
+      "local_sha": "2aece64169e0e9070392dbbe6b654c7d3d6b7123",
+      "remote_sha": "6fc3bbd551c1c42ac7b8d4953c10e6e3ac3191b1",
+      "tree_sha": "479769d5d02e822af7be0db00009398d54151aa4",
+      "parent_remote_sha": "798c209d248df4ca47cb1d112546e70b32ad8f5a",
+      "subject": "feat(editor): validate blueprint drafts on a cancellable worker"
+    },
+    {
+      "local_sha": "d7ebf6faebca72640dd03e2615f9c2ef4c64d9cc",
+      "remote_sha": "a4aeab6ea0ead8653c9ae866c996ecf4fe80a30b",
+      "tree_sha": "a473c1c5fa23b94bbd1622d9bca1fe4ee450ef41",
+      "parent_remote_sha": "6fc3bbd551c1c42ac7b8d4953c10e6e3ac3191b1",
+      "subject": "fix(state): admit retained JSON resources before serialization copies"
+    },
+    {
+      "local_sha": "4ae50007c512f02202b966f239fbdfbc25c2c2ce",
+      "remote_sha": "5fd0a291f831bc05a39a3ac9f2eef45be32df93f",
+      "tree_sha": "8225a21e93550fbb4ee47f6a73a84fcac2d1c32d",
+      "parent_remote_sha": "a4aeab6ea0ead8653c9ae866c996ecf4fe80a30b",
+      "subject": "test(ui): use supported JUCE string array indexing"
+    },
+    {
+      "local_sha": "b78430cd941201be382a09809ca40be997e959c1",
+      "remote_sha": "e2d91a45d6a45ab8987622a00a19fbed1049e7e6",
+      "tree_sha": "8bad08aa4a5bca5b2ef796536cd1ceff3806d797",
+      "parent_remote_sha": "5fd0a291f831bc05a39a3ac9f2eef45be32df93f",
+      "subject": "fix(ui): recolour blueprint text when switching themes"
+    }
+  ]
+}

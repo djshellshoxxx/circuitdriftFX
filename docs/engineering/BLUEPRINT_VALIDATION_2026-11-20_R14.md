@@ -53,8 +53,9 @@ invalidation, unchanged host state/history, production-panel integration, LITE
 rejection and worker destruction. Panel tracking tests cover draft and capability
 behavior; they are explicitly synthetic UI fixtures.
 
-Native build/test and combined-core results must be read from the R14 validation
-record once executed. Source inspection and tracking fixtures alone do not
-qualify the native worker or a host. Runtime graph swaps, complete sound-preset
+The [R14 validation record](VALIDATION_2026-11-20_R14.md) records the completed
+30-suite core and six-suite native passes, source identities and execution limits.
+Source inspection and tracking fixtures alone do not qualify a native worker or
+a host. Runtime graph swaps, complete sound-preset
 transactions, dynamic session continuity, physical models and measured CPU
 budgets remain separate work.
