@@ -1,10 +1,13 @@
 #include "PluginProcessor.h"
 
 #include "ParameterLayout.h"
+#include "ui/PluginEditor.h"
+#include "ui/ProcessorEditorBridge.h"
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <limits>
+#include <thread>
 
 namespace cd::plugin {
 namespace {
@@ -55,6 +58,20 @@ void CircuitDriftProcessor::run() {
     }
 }
 
+bool CircuitDriftProcessor::readEditorTelemetry(engine::TelemetryFrame& out) noexcept {
+    if (!editorReadsEnabled_.load(std::memory_order_acquire)) return false;
+    editorReaders_.fetch_add(1, std::memory_order_acq_rel);
+    const bool ok = editorReadsEnabled_.load(std::memory_order_acquire) && runtime_.readTelemetry(out);
+    editorReaders_.fetch_sub(1, std::memory_order_release);
+    return ok;
+}
+
+void CircuitDriftProcessor::suspendEditorReaders() noexcept {
+    editorReadsEnabled_.store(false, std::memory_order_release);
+    // Host preparation/release is non-audio; wait for the bounded UI snapshot copy.
+    while (editorReaders_.load(std::memory_order_acquire) != 0) std::this_thread::yield();
+}
+
 void CircuitDriftProcessor::stopPitchWorker() {
     signalThreadShouldExit();
     notify();
@@ -97,14 +114,22 @@ void CircuitDriftProcessor::prepareToPlay(double sampleRate, int maximumExpected
         sampleRate_ = 0;
         maxBlock_ = 0;
         setLatencySamples(0);
+    } else {
+        editorSampleRate_.store(sampleRate, std::memory_order_release);
+        editorChannels_.store(config.channels, std::memory_order_release);
+        editorLatency_.store(runtime_.latencySamples(), std::memory_order_release);
+        editorReadsEnabled_.store(true, std::memory_order_release);
     }
 }
 
 void CircuitDriftProcessor::releaseResources() {
+    suspendEditorReaders();
     stopPitchWorker();
     runtime_.release();
     sampleRate_ = 0.0;
     maxBlock_ = 0;
+    editorSampleRate_.store(0.0, std::memory_order_release);
+    editorLatency_.store(0, std::memory_order_release);
     setLatencySamples(0);
 }
 
@@ -245,7 +270,8 @@ juce::AudioProcessorParameter* CircuitDriftProcessor::getBypassParameter() const
 }
 
 juce::AudioProcessorEditor* CircuitDriftProcessor::createEditor() {
-    return new juce::GenericAudioProcessorEditor(*this);
+    if (!editorBridge_) editorBridge_ = std::make_unique<ProcessorEditorBridge>(*this);
+    return new ui::CircuitDriftEditor(*this, *editorBridge_);
 }
 
 void CircuitDriftProcessor::getStateInformation(juce::MemoryBlock& destData) {
@@ -286,6 +312,7 @@ void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInByte
     }
     if (count == 0) return;
     apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+    editorStateEpoch_.fetch_add(1, std::memory_order_release);
 }
 
 }  // namespace cd::plugin
