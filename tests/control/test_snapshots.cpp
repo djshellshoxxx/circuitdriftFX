@@ -69,7 +69,8 @@ static_assert(snapshotContract<SidechainLoad>());
 // Compare fields rather than padding. Double comparisons are exact because the
 // replay has identical future operations, including callback partitioning.
 bool same(const CreativeDrift::State& a, const CreativeDrift::State& b) {
-    if (a.samples != b.samples || a.ticks != b.ticks || a.q != b.q || a.delayUnitMs != b.delayUnitMs) return false;
+    if (a.sampleRate != b.sampleRate || a.samples != b.samples || a.ticks != b.ticks ||
+        a.q != b.q || a.delayUnitMs != b.delayUnitMs) return false;
     for (int j = 0; j < 3; ++j) {
         if (a.u[j] != b.u[j] || a.rng[j].spare != b.rng[j].spare || a.rng[j].hasSpare != b.rng[j].hasSpare) return false;
         for (int k = 0; k < 4; ++k) if (a.rng[j].s[k] != b.rng[j].s[k]) return false;
@@ -159,6 +160,9 @@ void driftSnapshots() {
     CreativeDrift a, donor; a.prepare(kFs, 357, 0); donor.prepare(kFs, 891, 1);
     a.advance(12345); donor.advance(7003);
     const auto good = a.save(); auto bad = good;
+    for (double invalid : {kNan, kInf, -kInf, 0.0, 44100.0}) {
+        bad = good; bad.sampleRate = invalid; reject(a, bad, "drift clock identity", driftFuture);
+    }
     for (double invalid : {kNan, kInf, -kInf, 1.01, -1.01}) {
         bad = good; bad.q = invalid; reject(a, bad, "drift q nonfinite/bound", driftFuture);
     }

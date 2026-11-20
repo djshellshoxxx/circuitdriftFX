@@ -93,6 +93,7 @@ void ControlProcessor::prepare(double sampleRate, int maxBlock, uint64_t instanc
     lastKeySource_ = 0;
     audioPitchActive_ = false;
     lastTempo_ = TempoOutput{};
+    instanceSeed_ = instanceSeed;
     prepared_ = true;
 }
 

@@ -21,6 +21,7 @@ void CreativeDrift::prepare(double sampleRate, uint64_t instanceSeed, uint32_t s
     clockStep_ = step / divisor;
     samplePhase_ = 0;
     st_ = State{};
+    st_.sampleRate = fs;
     for (uint32_t j = 0; j < 3; ++j) {
         rng_[j].seed(deriveSeed(instanceSeed, slot, j));
         st_.u[j] = rng_[j].gaussian();  // stationary start: u ~ N(0,1)
@@ -29,7 +30,8 @@ void CreativeDrift::prepare(double sampleRate, uint64_t instanceSeed, uint32_t s
 }
 
 bool CreativeDrift::validateState(const State& s, uint64_t& phase) const noexcept {
-    if (!std::isfinite(s.q) || std::fabs(s.q) > 1.0 || !std::isfinite(s.delayUnitMs) ||
+    // Equal historical tick counts do not imply equal future clock boundaries.
+    if (s.sampleRate != st_.sampleRate || !std::isfinite(s.q) || std::fabs(s.q) > 1.0 || !std::isfinite(s.delayUnitMs) ||
         std::fabs(s.delayUnitMs) > kMaxDelayMs) return false;
     double sum = 0;
     for (int j = 0; j < 3; ++j) {
