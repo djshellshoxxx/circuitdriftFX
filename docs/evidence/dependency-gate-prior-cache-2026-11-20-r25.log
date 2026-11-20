@@ -1,0 +1,16 @@
+test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache (__main__.DependencyGateTests.test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache) ... FAIL
+
+======================================================================
+FAIL: test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache (__main__.DependencyGateTests.test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/cdfx-dependency-prior-dodjn209/tests/cmake/test_dependency_gate.py", line 183, in test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache
+    self.assertEqual({p.name for p in self.cache.iterdir()}, {"juce-src", "clap_juce_extensions-src"})
+AssertionError: Items in the first set but not the second:
+'clap_juce_extensions-tmp'
+'juce-tmp'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.542s
+
+FAILED (failures=1)

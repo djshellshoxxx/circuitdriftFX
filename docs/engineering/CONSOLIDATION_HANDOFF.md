@@ -1,17 +1,21 @@
 # CircuitDriftFX consolidation handoff — 2026-11-20
 
-## Current checkpoint — GIF integration through round 24
+## Current checkpoint — GIF and build-gate repairs
 
 Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
 `codex/cdfx-consolidation-20261119`, is the integration and CI authority.
 Read its live head before a guarded forward update. Original source branches
 and `main` at `44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6` are preserved.
 
-Current tested production/native source is local
+Current tested application/native source is local
 `b84d2ba119c03f079cd74886cbd066a2da6013f6`, corresponding remote source
 `7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20`, tree
-`0c2e17c0ec416991c8a69b130015b1e0aa727780`. The containing publication adds
-review, execution and handoff evidence. Silent GIF is now integrated with the
+`0c2e17c0ec416991c8a69b130015b1e0aa727780`. Build/workflow repairs follow in
+local `51029e0cf8f1e62f42fab11999923ab076f57ab5`, remote
+`0c425f815320ebbc2568af8e6428d536fa6e76c4`, tree
+`57c2368dc5cb4e2bd8540c54a2ab3dbd7a0b5431`. Application C++ inputs are unchanged;
+real native reconfiguration and the 24-case dependency gate passed. The containing
+publication adds review, execution and handoff evidence. Silent GIF is now integrated with the
 consolidated runtime/editor/validation/preset work. Final local verification
 passed **6/6 native applications**, scoped **3/3 sanitized media/state tests**,
 a later **1/1 strict-decoder suite**, and independent decoding of **63 frames**.
@@ -27,8 +31,9 @@ reread at ecae510 and remains intact.
 
 The preceding publication 338e952 has separate 31/31 sanitized core and 6/6 native
 baseline evidence. Those results are not relabeled as a new full-core GIF run.
-Fresh R25 workers now own dependency/release-gate repairs and a G12 feature bug
-hunt; avoid parallel competing implementations of those changes.
+All R25 workers completed. Fresh R26 code and defensive reviewers found no new
+actionable issue in the build-gate changes. The R26 host_restore_fix_r26 worker
+owns a separate coherent host-parameter restore repair; avoid competing edits.
 
 ## Consolidated sources and ownership
 
@@ -168,7 +173,8 @@ prior consolidation findings. [Rounds 19–24](../audits/GIF_INTEGRATION_2026-11
 record the original GIF review, backend/UI/resource repairs, strict decoder,
 registry/destination/warning fixes, three clean R23 source reviews, first-error
 layout repair and independent R24 decoding. R24 also found two build-gate defects;
-fresh R25 owners are repairing them before any release qualification.
+R25 owners repaired them and fresh R26 code/defensive review found no new
+actionable defect. Actual Windows harness/pluginval execution remains required.
 
 Evidence:
 [round 14](../evidence/continuation-round14-2026-11-20.json),
@@ -181,18 +187,34 @@ performance, TSan, leak, OS-I/O deadline or physical-model qualification. Local
 leak detection was disabled under the tracer. Models remain synthetic and
 filesystem operations retain the documented trusted-directory assumption.
 
+## Build-gate qualification
+
+[Dependency verification](../audits/DEPENDENCY_SOURCE_GATE_2026-11-20_R25.md)
+now checks all pinned source roots/submodules and their current contents before
+upstream configuration. The [build-gate source map](../evidence/commit-map-build-gates-2026-11-20.json)
+records verified local/remote tree equality. Source-only CI caching and fresh release acquisition
+exclude cached population scripts. Root configured the actual native project and
+executed the registered 24-case gate successfully; the six native targets then
+required no rebuild. See the [execution record](../evidence/build-gates-2026-11-20-r25-r26.json).
+
+[One Windows validator](../audits/RELEASE_VALIDATOR_GATE_2026-11-20_R25.md)
+now serves CI and release, waits for completed processes, requires both products
+and fresh nonempty reports, and retains failure logs. Its 16-case synthetic
+PowerShell harness is installed in both workflows but has not run locally because
+PowerShell is unavailable. Exact-source Windows and real pluginval remain open.
+
 ## Next continuation
 
 1. Read the live PR #16 head and exact-head CI; repair concrete failures without
    relaxing assertions or acceptance gates. Use an expected old SHA and forward
    ref update, preserving concurrent work and original branches.
-2. Resume the active R25 repair owners: release_gate_r25 owns one synchronous
-   pluginval script/workflow calls and source-only CI caching/fresh release
-   acquisition; dependency_gate_r25 owns verified source acquisition before any
-   dependency configuration; session_bug_hunt_r25 audits the next G12 feature.
-   Root integrates and qualifies. Wait for all three, then hand their evidence
-   to fresh reviewers. R24 findings are verification order/working-tree integrity
-   and the release's obsolete validator wrapper, not evidence of compromise.
+2. Resume host_restore_fix_r26: valid APVTS replacement currently exposes partial
+   old/new parameter configurations to audio. The worker owns adapter publication
+   plus a deterministic test-first regression; root owns native builds and
+   integration. Read the [R25 session audit](../audits/SESSION_PUBLICATION_2026-11-20_R25.md).
+   All R25 workers completed, and both R26 build-gate reviewers completed without
+   new actionable findings. Wait for the host repair to finish, then hand the
+   complete set to fresh code, bug and defensive reviewers.
 3. Complete runtime/control/engine/seed checkpoint capture, host-thread handoff,
    stopped-audio restore, compatibility/migration and coordinated dynamic A/B.
    Sound-preset Load/Save and complete scene transactions depend on that contract.

@@ -8,11 +8,11 @@
     "date": "2026-11-20",
     "branch": "codex/cdfx-consolidation-20261119",
     "local_branch": "codex/cdfx-integration-20261120-round14",
-    "source_head": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
-    "local_source_head": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
-    "source_tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
-    "source_head_difference": "Containing publication adds execution/review/handoff evidence. Read live PR16 for publication SHA.",
-    "stage": "gif_locally_qualified_exact_publication_ci_required_build_gate_repairs_active",
+    "source_head": "0c425f815320ebbc2568af8e6428d536fa6e76c4",
+    "local_source_head": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
+    "source_tree": "57c2368dc5cb4e2bd8540c54a2ab3dbd7a0b5431",
+    "source_head_difference": "Latest build/workflow source is51029e0; application/native test source remains b84d2ba, with no intervening C++ changes. Containing publication adds evidence; read live PR16 for publication SHA.",
+    "stage": "build_gates_locally_validated_windows_pending_host_restore_active",
     "validation": {
       "native": {
         "state": "passed",
@@ -140,13 +140,14 @@
         "scope": "Freshly generated real-editor GIF outputs; independent decoder compatibility, timing, dimensions, loop metadata, full decoded pixels and provenance. Not a formal GIF conformance proof."
       },
       "evidence": "docs/evidence/gif-integration-2026-11-20-r20.json",
-      "prior_full_core": "Previous checkpoint retains 31/31 baseline; not a new GIF full-core run."
+      "prior_full_core": "Previous checkpoint retains 31/31 baseline; not a new GIF full-core run.",
+      "build_gates": "docs/evidence/build-gates-2026-11-20-r25-r26.json"
     },
     "publication": {
       "pr": 16,
       "branch": "codex/cdfx-consolidation-20261119",
       "guard": "Fresh live head; expected_sha; force=false; preserve concurrent advancement.",
-      "commit_map": "docs/evidence/commit-map-gif-2026-11-20.json",
+      "commit_map": "docs/evidence/commit-map-build-gates-2026-11-20.json",
       "source_objects": "Full local/remote tree equality verified for mapped source commits."
     },
     "record": "docs/engineering/CONSOLIDATION_HANDOFF.md"
@@ -424,11 +425,19 @@
     {
       "path": "docs/audits/GIF_INTEGRATION_2026-11-20.md",
       "scope": "Fresh rounds 19\u201324; source-only reviews distinguished from scoped sanitizer/native execution and independent 63-frame decoding."
+    },
+    {
+      "path": "docs/audits/DEPENDENCY_SOURCE_GATE_2026-11-20_R25.md",
+      "scope": "R25 repair, owned fixtures and real native configuration; R26 code/defensive source reviews complete without new actionable findings."
+    },
+    {
+      "path": "docs/audits/SESSION_PUBLICATION_2026-11-20_R25.md",
+      "scope": "Source-confirmed partial valid host-state publication, R26 repair active; full G12 prerequisites separately identified."
     }
   ],
   "remaining_work": [
     "Exact-head Linux/Windows/pluginval CI for the new containing publication",
-    "R25: dependency integrity before configuration, build-local FetchContent subbuild state, source-only CI cache/fresh release acquisition, shared synchronous pluginval gate",
+    "R26 coherent host-restored parameter publication repair and deterministic native baseline/fix qualification; Windows shared-validator harness and real two-product pluginval remain required",
     "Full dynamic runtime/control/engine/seed checkpoint capture, compatibility, migration and stopped-audio restore handoff",
     "Coordinated dynamic A/B state transfer and host-automation boundaries",
     "Sound-preset Load/Save and blueprint graph Apply with runtime installation/crossfade/retirement/undo ownership",
@@ -1083,5 +1092,12 @@
       ],
       "scope": "Build-gate repairs and read-only G12 bug/feature handoff; no concurrent competing implementations."
     }
+  },
+  "build_gates_rounds_25_26": {
+    "source": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
+    "evidence": "docs/evidence/build-gates-2026-11-20-r25-r26.json",
+    "r25": "All3 completed; release/dependency repairs integrated and G12/session bug handoff retained.",
+    "r26": "Code and defensive reviews complete without new actionable findings; host_restore_fix_r26 remains active.",
+    "qualification": "CMake4.4.5 actual native configure and registered24cases pass. PowerShell16cases and real Windows pluginval not executed locally."
   }
 }

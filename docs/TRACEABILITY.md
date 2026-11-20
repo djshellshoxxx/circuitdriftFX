@@ -24,8 +24,12 @@ repetition/error feedback. Its [execution record](evidence/gif-integration-2026-
 reports 3/3 scoped sanitized resource/state suites, 1/1 stricter decoder suite,
 6/6 final native suites at b84d2ba, and independent full decoding of 63 frames.
 These distinct results qualify their pinned sources; exact-publication CI remains
-required. R24 dependency-verification and release-validator findings have fresh
-R25 repair owners. Complete sound-preset transactions, Blueprint Apply, dynamic
+required. R24 dependency-verification and release-validator findings are repaired in
+[the R25 build-gate changes](audits/DEPENDENCY_SOURCE_GATE_2026-11-20_R25.md),
+with passing real native configuration and 24-case CMake fixtures plus clean R26
+code/defensive review. Windows harness/pluginval execution remains open. The
+[R25 session audit](audits/SESSION_PUBLICATION_2026-11-20_R25.md) identified partial
+valid host-state publication; its R26 repair owner is active. Complete sound-preset transactions, Blueprint Apply, dynamic
 session/seed continuity, MP4 and remaining services, physical calibration and
 real-host/performance qualification remain open. Historical claims below retain
 older provenance and do not describe current test status.
