@@ -93,7 +93,8 @@ SharedLayout* initializeLayout(void* mem, std::size_t size, const GroupSpec& spe
     if (!mem || size < sizeof(SharedLayout)) { error = "region too small"; return nullptr; }
     if (reinterpret_cast<std::uintptr_t>(mem) % alignof(SharedLayout) != 0) { error = "misaligned region"; return nullptr; }
     if (spec.channels < 1 || spec.channels > kAudioChannels || !std::isfinite(spec.sampleRate) || spec.sampleRate < 8000.0 ||
-        spec.sampleRate > 384000.0 || !std::isfinite(spec.nominalRailV)) {
+        spec.sampleRate > 384000.0 || !std::isfinite(spec.nominalRailV) ||
+        std::abs(spec.nominalRailV) > 10000.0f) {
         error = "invalid group specification"; return nullptr;
     }
     auto* l = new (mem) SharedLayout();
