@@ -308,3 +308,33 @@ races, and (c) dynamic seed/preset load transaction design. Run
 `state_preset`, `ui_snap_live_bridge`, all required native suites and
 exact-head CI before consolidation. Evaluate older PR #9/#10/#14 semantics
 item by item; do not blanket-merge or discard source.
+
+
+## Combined isolated PR #17 and #18 candidate — 2026-11-20 UTC
+
+This isolated continuation starts from draft [PR #18](https://github.com/djshellshoxxx/circuitdriftFX/pull/18) at `86658cf6b126e2eaabb2bac686148b76d7e7cbaa`,
+which already contains the local preset library, atomic PNG output and three scene
+slot guards, and imports only the separate detector production and regression
+files from draft [PR #17](https://github.com/djshellshoxxx/circuitdriftFX/pull/17)
+at `d12fd60d83b6c56f9941ca1dc804c5bcd14ce6b2`.
+The child changes are disjoint outside handoff/state documents. Their historical
+source branches and acceptance contracts are preserved, and the live PR #16
+coordinator's branch is not advanced or force-updated by this candidate.
+
+As freshly checked, the exact head `b3e05b652147a584ad5fb22e5715d1e61b702318`
+of [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44690495993),
+exact head `d12fd60` of [PR #17](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44694338052),
+and exact head `86658cf` of [PR #18](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44702393167)
+**each passed both Linux and Windows, including strictness-5 VST3 pluginval**.
+The combined branch is **not qualified by these separate passes**; run exact-head
+Linux and Windows tests on the new combined commit and independently review the
+result before importing it into PR #16. No local native build can run in this
+connector-only environment (the checkout host cannot resolve github.com).
+No fresh separate code-review, bug-hunt or security-review workers were available.
+See [focused integration audit](../audits/QUALIFIED_CHILD_INTEGRATION_2026-11-20.md).
+
+Next owner: inspect combined exact-head CI, obtain independent code/bug/security
+review, and coordinate guarded integration with PR #16's current owner. Continue
+full dynamic engine/control/seed session checkpoints, coordinated A/B handoff
+and semantic reconciliation of #9/#10/#14 separately. Models are synthetic;
+no physical, release or deployment qualification is implied.

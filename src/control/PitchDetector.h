@@ -55,8 +55,12 @@ public:
     static constexpr int kHop = 128;
     static constexpr int kMinLag = 6, kMaxLag = 218;
     static constexpr int kMaxPendingWindows = 8;
+    // Direct API admission limits. A rejected prepare invalidates earlier results
+    // and leaves the detector unprepared; no unbounded capacity-doubling loop.
+    static constexpr double kMinSampleRate = 16000.0, kMaxSampleRate = 768000.0;
+    static constexpr std::size_t kMinRingSamples = 1024, kMaxRingSamples = std::size_t{1} << 20;
 
-    void prepare(double sampleRate, std::size_t ringSamples = 1u << 16);  // allocates
+    void prepare(double sampleRate, std::size_t ringSamples = 1u << 16);  // idle only; allocates
     void reset();                                                          // idle only
     // Audio producer only: request a seek flush without touching worker analysis
     // state or blocking. Samples pushed after this call belong to a new generation.

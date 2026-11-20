@@ -78,9 +78,15 @@ PitchResult PitchHopTracker::update(bool signalPresent, bool valid, double f, do
 // ---------------------------------------------------------------- detector
 void PitchDetector::prepare(double sampleRate, std::size_t ringSamples) {
     prepared_ = false;
+    // Validate before any conversion, allocation or power-of-two rounding.
+    // In particular, an untrusted SIZE_MAX must not wrap the doubling loop.
+    if (!std::isfinite(sampleRate) || sampleRate < kMinSampleRate || sampleRate > kMaxSampleRate ||
+        ringSamples > kMaxRingSamples) {
+        reset();  // idle-only: clears prior published pitch and advances its generation
+        return;
+    }
     fs_ = sampleRate;
-    if (!(fs_ >= 16000.0)) return;  // not supported: detector stays unprepared
-    std::size_t cap = 1024;
+    std::size_t cap = kMinRingSamples;
     while (cap < ringSamples) cap <<= 1;
     ring_.assign(cap, 0.0);
     mask_ = cap - 1;
@@ -106,9 +112,10 @@ void PitchDetector::reset() {
     rd_.store(0);
     droppedSamples_.store(0);
     droppedWindows_.store(0);
-    generation_.store(0, std::memory_order_relaxed);
+    // A saved result must never become fresh again when a session is reset or
+    // prepared a second time with the same sample clock and generation.
+    workerGeneration_ = generation_.fetch_add(1, std::memory_order_release) + 1;
     seekBoundary_.store(0, std::memory_order_relaxed);
-    workerGeneration_ = 0;
     baseAbs_ = 0;
     resetAnalysis();
     publish(PitchResult{});
@@ -303,9 +310,11 @@ PitchResult PitchDetector::latest() const noexcept {
 }
 
 bool PitchDetector::isFresh(const PitchResult& r) const noexcept {
-    if (r.state == PitchState::None || r.generation != generation_.load(std::memory_order_acquire)) return false;
+    if (!prepared_ || r.state == PitchState::None ||
+        r.generation != generation_.load(std::memory_order_acquire)) return false;
     const uint64_t now = wr_.load(std::memory_order_acquire);
-    const uint64_t age = now > r.timestamp ? now - r.timestamp : 0;
+    if (r.timestamp > now) return false;  // a saved result cannot predate the new input clock
+    const uint64_t age = now - r.timestamp;
     return double(age) <= 0.25 * fs_;
 }
 
