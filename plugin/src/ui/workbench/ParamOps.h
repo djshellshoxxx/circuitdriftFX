@@ -33,7 +33,12 @@ public:
 private:
     EditorBridge& bridge_;
     bool active_ = false;
-    std::vector<std::pair<juce::RangedAudioParameter*, float>> touched_;
+    struct TouchedParameter {
+        juce::String baseName;
+        juce::RangedAudioParameter* parameter;
+        float before;
+    };
+    std::vector<TouchedParameter> touched_;
 };
 
 // Which edit-slot parameter a component's direct manipulation / arrow keys / numeric field drive.

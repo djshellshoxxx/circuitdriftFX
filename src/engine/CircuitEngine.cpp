@@ -229,6 +229,8 @@ struct CircuitEngine::Impl {
     double humPhase[kSlots][kSlice] = {}, excite[kSlice] = {}, extLoad[kSlice] = {}, preserveP[kSlice] = {};
     bool pendingIir = false, pendingZero = false, pendingPitch = false;
     std::vector<double> stateScratch;
+    // Sized during prepare; a rejected nested restore can roll back without audio-thread allocation.
+    Checkpoint checkpointBackup;
 
     // ---------------------------------------------------------------------------------------
     double laneWeight(long pos) const noexcept {
@@ -1435,52 +1437,89 @@ void CircuitEngine::Impl::doReset(ResetKind kind) noexcept {
 
 namespace {
 struct StateIo {
-    enum Mode { Count, Save, Load } mode = Count;
+    enum Mode { Count, Save, Validate, Load } mode = Count;
     double* v = nullptr;
+    const double* input = nullptr;
     std::size_t nv = 0, pos = 0;
     uint64_t* r = nullptr;
+    const uint64_t* rngInput = nullptr;
     std::size_t nr = 0, rpos = 0;
     double* scratch = nullptr;
     std::size_t nScratch = 0;
     bool ok = true;
-    void d(double& x) noexcept {
-        if (mode == Save && pos < nv) v[pos] = x;
-        else if (mode == Load) {
-            if (pos < nv && std::isfinite(v[pos])) x = v[pos];
-            else ok = false;
+    bool reading() const noexcept { return mode == Validate || mode == Load; }
+    double d(double& x, double lo = -std::numeric_limits<double>::max(),
+             double hi = std::numeric_limits<double>::max()) noexcept {
+        double candidate = x;
+        if (mode == Save) {
+            if (pos < nv) v[pos] = x; else ok = false;
+        } else if (reading()) {
+            if (pos < nv && std::isfinite(input[pos]) && input[pos] >= lo && input[pos] <= hi) {
+                candidate = input[pos];
+                if (mode == Load) x = candidate;
+            } else ok = false;
         }
         ++pos;
+        return candidate;
     }
-    template <class I> void integer(I& x) noexcept {
+    template <class I> I integer(I& x, double lo = -9e15 + 1, double hi = 9e15 - 1) noexcept {
         double t = double(x);
-        d(t);
-        if (mode == Load) {
-            if (t == std::floor(t) && std::fabs(t) < 9e15) x = I(t);
-            else ok = false;
+        t = d(t, lo, hi);
+        if (reading()) {
+            // The 9e15 ceiling stays below the exact-integer limit of binary64; narrower
+            // integer types also need their own bounds before any narrowing conversion.
+            if (t != std::floor(t) || std::fabs(t) >= 9e15 ||
+                static_cast<long double>(t) < std::numeric_limits<I>::lowest() ||
+                static_cast<long double>(t) > std::numeric_limits<I>::max()) {
+                ok = false;
+                return x;
+            }
+            if (mode == Load) x = I(t);
+            return I(t);
         }
+        return x;
     }
-    void b(bool& x) noexcept { double t = x ? 1.0 : 0.0; d(t); if (mode == Load) x = t != 0.0; }
-    void u(uint64_t& x) noexcept {
-        if (mode == Save && rpos < nr) r[rpos] = x;
-        else if (mode == Load) { if (rpos < nr) x = r[rpos]; else ok = false; }
+    bool b(bool& x) noexcept {
+        double t = x ? 1.0 : 0.0;
+        t = d(t, 0.0, 1.0);
+        if (reading() && t != 0.0 && t != 1.0) ok = false;
+        if (mode == Load && ok) x = t == 1.0;
+        return t == 1.0;
+    }
+    uint64_t u(uint64_t& x) noexcept {
+        uint64_t candidate = x;
+        if (mode == Save) {
+            if (rpos < nr) r[rpos] = x; else ok = false;
+        } else if (reading()) {
+            if (rpos < nr) {
+                candidate = rngInput[rpos];
+                if (mode == Load) x = candidate;
+            } else ok = false;
+        }
         ++rpos;
+        return candidate;
     }
     void arr(double* p, std::size_t n) noexcept { for (std::size_t k = 0; k < n; ++k) d(p[k]); }
     // Objects with stateSize/getState/setState via scratch.
     template <class T> void obj(T& o, std::size_t n) noexcept {
         if (n > nScratch) { ok = false; pos += n; return; }
         if (mode == Save) o.getState(scratch);
-        for (std::size_t k = 0; k < n; ++k) d(scratch[k]);
-        if (mode == Load && ok) o.setState(scratch);
+        for (std::size_t k = 0; k < n; ++k) scratch[k] = d(scratch[k]);
+        if (mode == Validate && ok && !o.isStateValid(scratch)) ok = false;
+        if (mode == Load && ok && !o.setState(scratch)) ok = false;
     }
     void delay(DelayLine& dl) noexcept {
         auto& st = dl.storage();
         arr(st.data(), st.size());
-        integer(dl.position());
+        integer(dl.position(), 0, double(dl.capacity() - 1));
     }
     void sm(Smoother& s) noexcept { d(s.y); }
     void biquad(Biquad& q) noexcept { d(q.b0); d(q.b1); d(q.b2); d(q.a1); d(q.a2); d(q.z1); d(q.z2); }
-    void rng(Rng& g) noexcept { for (auto& w : g.s) u(w); }
+    void rng(Rng& g) noexcept {
+        uint64_t nonzero = 0;
+        for (auto& w : g.s) nonzero |= u(w);
+        if (reading() && nonzero == 0) ok = false;
+    }
     void cap(CapValues& c) noexcept { d(c.c); d(c.esr); d(c.leak); }
     void values(CircuitValues& cv) noexcept {
         for (double* p : {&cv.rG, &cv.rTop, &cv.rLoad, &cv.rK, &cv.rDec, &cv.rScreen, &cv.rCore, &cv.rRefl, &cv.rWind, &cv.lM,
@@ -1494,16 +1533,21 @@ struct StateIo {
 
 template <class Io>
 void CircuitEngine::Impl::visit(Io& io) {
-    io.integer(sampleIndex);
+    io.integer(sampleIndex, 0);
     io.u(epoch);
     io.b(sawEpoch);
-    io.integer(laneA); io.integer(qState); io.integer(qPos); io.integer(activeFi); io.integer(newtonCap);
-    io.b(inFallback); io.b(needsReset); io.integer(consecutiveFail); io.integer(injectNaN);
-    io.d(detFast); io.d(detSlow); io.d(detPrev);
+    const int savedLane = io.integer(laneA, 0, 1);
+    const int savedQState = io.integer(qState, 0, 1);
+    const long savedQPos = io.integer(qPos, 0, warmup + fade20 + kSlice);
+    const int savedActiveFi = io.integer(activeFi, 0, 4);
+    io.integer(newtonCap, 1, 12);
+    if (io.reading() && io.ok && (!bank[savedActiveFi].ok || (savedQState == 0 && savedQPos != 0))) io.ok = false;
+    io.b(inFallback); io.b(needsReset); io.integer(consecutiveFail, 0, 3); io.integer(injectNaN, 0);
+    io.d(detFast, 0); io.d(detSlow, 0); io.d(detPrev, 0, 1);
     io.sm(inGain); io.sm(outGain); io.sm(mix); io.sm(ab); io.sm(hpfHz);
-    for (Ramp* r : {&hpfOn, &clipOn, &gmOn, &bypass, &fallback}) io.d(r->w);
+    for (Ramp* r : {&hpfOn, &clipOn, &gmOn, &bypass, &fallback}) io.d(r->w, 0, 1);
     io.d(hpfApplied);
-    { double g[3]; gm.getState(g); io.arr(g, 3); if (io.mode == Io::Load && io.ok) gm.setState(g); }
+    io.obj(gm, 3);
     for (int ch = 0; ch < kMaxChannels; ++ch) {
         io.biquad(hpf[ch]);
         io.delay(dryDelay[ch]); io.delay(rawDelay[ch]); io.delay(clipDelay[ch]); io.delay(hist[ch]); io.delay(preHist[ch]);
@@ -1521,9 +1565,14 @@ void CircuitEngine::Impl::visit(Io& io) {
             }
         }
     }
+    int laneIndex = 0;
     for (auto& L : lanes) {
-        io.b(L.on);
-        io.integer(L.fi);
+        const bool savedOn = io.b(L.on);
+        const int savedFi = io.integer(L.fi, 0, 4);
+        if (io.reading() && io.ok && (!bank[savedFi].ok ||
+            (laneIndex == savedLane && (!savedOn || savedFi != savedActiveFi)) ||
+            (laneIndex != savedLane && savedOn != (savedQState != 0)))) io.ok = false;
+        ++laneIndex;
         for (int s = 0; s < kSlots; ++s)
             for (int fam = 0; fam < kFamilyCount; ++fam)
                 for (int ch = 0; ch < nCh; ++ch) {
@@ -1533,7 +1582,11 @@ void CircuitEngine::Impl::visit(Io& io) {
                     io.d(P.railRef());
                     io.d(P.bplusRef());
                     io.obj(P.solver(), std::size_t(P.solver().stateSize()));
-                    if (io.mode == Io::Load && io.ok) { P.setStepSize(1.0 / (fs * kFactorList[L.fi])); P.refreshLoads(); }
+                    if (io.mode == Io::Load && io.ok) {
+                        if (!P.setStepSize(1.0 / (fs * kFactorList[L.fi]))) io.ok = false;
+                        P.solver().setMaxNewton(newtonCap);
+                        P.refreshLoads();
+                    }
                 }
     }
     for (int s = 0; s < kSlots; ++s) {
@@ -1541,18 +1594,31 @@ void CircuitEngine::Impl::visit(Io& io) {
         for (Smoother* sm : {&S.mains, &S.railCap, &S.sag, &S.age, &S.tol, &S.leak, &S.ambient, &S.mass, &S.drift, &S.drive, &S.bias,
                              &S.humHz, &S.humLevel, &S.jn, &S.micro, &S.lpfHz, &S.shelf})
             io.sm(*sm);
-        io.d(S.lpfOn.w);
-        io.integer(S.fam); io.integer(S.famNext); io.integer(S.famPos);
-        io.integer(S.rect); io.integer(S.rectPrev); io.integer(S.core); io.integer(S.corePrev); io.integer(S.res); io.integer(S.resPrev);
-        io.d(S.rectW); io.d(S.coreW); io.d(S.resW);
-        io.arr(S.supply.state(), Supply::kStateSize);
-        io.d(S.thermal.phase()); io.d(S.thermal.count());
+        io.d(S.lpfOn.w, 0, 1);
+        io.integer(S.fam, 0, kFamilyCount - 1);
+        const int savedNext = io.integer(S.famNext, -1, kFamilyCount - 1);
+        const long savedFamPos = io.integer(S.famPos, 0, fade20 + kSlice);
+        if (io.reading() && savedNext == -1 && savedFamPos != 0) io.ok = false;
+        io.integer(S.rect, 0, 2); io.integer(S.rectPrev, 0, 2);
+        io.integer(S.core, 0, 2); io.integer(S.corePrev, 0, 2);
+        io.integer(S.res, 0, 2); io.integer(S.resPrev, 0, 2);
+        io.d(S.rectW, 0, 1); io.d(S.coreW, 0, 1); io.d(S.resW, 0, 1);
+        auto* supply = S.supply.state();
+        io.d(supply[0], 0); io.d(supply[1], 0);
+        io.d(supply[2], 0, std::nextafter(2 * kPi, 0.0));
+        io.d(supply[3], 0);
+        const double conducting = io.d(supply[4], 0, 1);
+        if (io.reading() && conducting != 0.0 && conducting != 1.0) io.ok = false;
+        io.d(S.thermal.phase(), 0, std::nextafter(fs, 0.0));
+        const double thermalCount = io.d(S.thermal.count(), 0, std::ceil(fs / ThermalClock::kRateHz));
+        if (io.reading() && thermalCount != std::floor(thermalCount)) io.ok = false;
         io.arr(S.thermal.accumulator(), S.thermal.size());
         {
             const std::size_t n = S.thermal.size();
             if (io.mode == Io::Save) for (std::size_t k = 0; k < n; ++k) io.scratch[k] = S.thermal.network().temperature(k);
-            for (std::size_t k = 0; k < n; ++k) io.d(io.scratch[k]);
-            if (io.mode == Io::Load && io.ok) S.thermal.network().setState(io.scratch);
+            for (std::size_t k = 0; k < n; ++k) io.scratch[k] = io.d(io.scratch[k]);
+            if (io.mode == Io::Validate && io.ok && !S.thermal.network().isStateValid(io.scratch)) io.ok = false;
+            if (io.mode == Io::Load && io.ok && !S.thermal.network().setState(io.scratch)) io.ok = false;
         }
         io.arr(&S.temps[0][0], std::size_t(kMaxChannels * kComponentCount));
         for (auto& cc : S.cond.c) { io.d(cc.valueScale); io.d(cc.leakage); io.d(cc.esrScale); io.d(cc.noiseScale); io.b(cc.open); io.b(cc.shortish); }
@@ -1564,10 +1630,13 @@ void CircuitEngine::Impl::visit(Io& io) {
             io.biquad(S.lpf[ch]); io.biquad(S.shelfF[ch]);
             io.delay(S.pitch[ch]);
         }
-        io.d(S.micZ1); io.d(S.micZ2); io.d(S.lpfApplied); io.d(S.shelfApplied); io.d(S.pitchDelay); io.d(S.kRec); io.d(S.railDc);
+        io.d(S.micZ1); io.d(S.micZ2); io.d(S.lpfApplied); io.d(S.shelfApplied);
+        io.d(S.pitchDelay, latCreative > 0 ? 2.0 : 0.0,
+             latCreative > 0 ? double(S.pitch[0].capacity() - 4) : 0.0);
+        io.d(S.kRec, 0.05, 20); io.d(S.railDc, 0);
         if (io.mode == Io::Load && io.ok) {
-            S.thermal.network().setAmbient(S.ambient.y);
-            S.thermal.network().setCapacityScale(0.25 * std::pow(16.0, std::clamp(S.mass.y, 0.0, 1.0)));
+            if (!S.thermal.network().setAmbient(S.ambient.y) ||
+                !S.thermal.network().setCapacityScale(0.25 * std::pow(16.0, std::clamp(S.mass.y, 0.0, 1.0)))) io.ok = false;
         }
     }
 }
@@ -1592,6 +1661,13 @@ CircuitEngine::~CircuitEngine() = default;
 bool CircuitEngine::prepare(const EngineConfig& cfg, const core::ParamValues& plain, std::string& err) {
     auto fresh = std::make_unique<Impl>();
     if (!fresh->prepareAll(cfg, plain, err)) return false;
+    StateIo count;
+    count.scratch = fresh->stateScratch.data();
+    count.nScratch = fresh->stateScratch.size();
+    fresh->visit(count);
+    if (!count.ok) { err = "checkpoint state exceeds prepared scratch capacity"; return false; }
+    fresh->checkpointBackup.values.resize(count.pos);
+    fresh->checkpointBackup.rng.resize(count.rpos);
     impl_ = std::move(fresh);
     err.clear();
     return true;
@@ -1682,23 +1758,45 @@ bool CircuitEngine::getCheckpoint(Checkpoint& cp) const noexcept {
 
 bool CircuitEngine::setCheckpoint(const Checkpoint& cp) noexcept {
     if (!impl_ || !impl_->prepared || cp.layout != impl_->layoutHash()) return false;
-    {
-        StateIo count;
-        count.mode = StateIo::Count;
-        count.scratch = impl_->stateScratch.data();
-        count.nScratch = impl_->stateScratch.size();
-        impl_->visit(count);
-        if (count.pos != cp.values.size() || count.rpos != cp.rng.size()) return false;
-        for (double v : cp.values) if (!std::isfinite(v)) return false;
-    }
+    auto& backup = impl_->checkpointBackup;
+    if (cp.values.size() != backup.values.size() || cp.rng.size() != backup.rng.size() ||
+        cp.values.empty() || double(cp.sampleIndex) != cp.values[0]) return false;
     StateIo io;
-    io.mode = StateIo::Load;
-    io.v = const_cast<double*>(cp.values.data()); io.nv = cp.values.size();
-    io.r = const_cast<uint64_t*>(cp.rng.data()); io.nr = cp.rng.size();
+    io.mode = StateIo::Validate;
+    io.input = cp.values.data(); io.nv = cp.values.size();
+    io.rngInput = cp.rng.data(); io.nr = cp.rng.size();
     io.scratch = impl_->stateScratch.data();
     io.nScratch = impl_->stateScratch.size();
     impl_->visit(io);
-    return io.ok;
+    if (!io.ok || io.pos != io.nv || io.rpos != io.nr) return false;
+
+    // The first pass never writes live state. Keep a preallocated rollback image as well:
+    // nested numerical setters also depend on circuit parameters restored earlier in the
+    // second pass, and may refuse an otherwise finite state under those parameters.
+    if (!getCheckpoint(backup)) return false;
+    double oldAmbient[kSlots], oldCapacity[kSlots];
+    for (int s = 0; s < kSlots; ++s) {
+        oldAmbient[s] = impl_->slot[s].thermal.network().ambient();
+        oldCapacity[s] = impl_->slot[s].thermal.network().capacityScale();
+    }
+    io.mode = StateIo::Load;
+    io.pos = io.rpos = 0;
+    impl_->visit(io);
+    if (io.ok) return true;
+
+    StateIo rollback;
+    rollback.mode = StateIo::Load;
+    rollback.input = backup.values.data(); rollback.nv = backup.values.size();
+    rollback.rngInput = backup.rng.data(); rollback.nr = backup.rng.size();
+    rollback.scratch = impl_->stateScratch.data();
+    rollback.nScratch = impl_->stateScratch.size();
+    for (int s = 0; s < kSlots; ++s) {
+        auto& net = impl_->slot[s].thermal.network();
+        net.setAmbient(oldAmbient[s]);
+        net.setCapacityScale(oldCapacity[s]);
+    }
+    impl_->visit(rollback);
+    return false;
 }
 
 EffectiveTargets CircuitEngine::effectiveTargets(int slot) const noexcept {

@@ -140,13 +140,19 @@ bool ThermalNetwork::setCapacityScale(double s) noexcept {
     return true;
 }
 
-void ThermalNetwork::setState(const double* temperaturesK) noexcept {
-    if (!temperaturesK) return;
+bool ThermalNetwork::isStateValid(const double* temperaturesK) const noexcept {
+    if (!temperaturesK) return false;
     for (std::size_t i = 0; i < n_; ++i) {
         if (!(temperaturesK[i] > 0.0) || !std::isfinite(temperaturesK[i]) ||
-            !std::isfinite(cOverDt_[i] * temperaturesK[i] + gAmb_[i] * ambient_)) return;
+            !std::isfinite(cOverDt_[i] * temperaturesK[i] + gAmb_[i] * ambient_)) return false;
     }
+    return true;
+}
+
+bool ThermalNetwork::setState(const double* temperaturesK) noexcept {
+    if (!isStateValid(temperaturesK)) return false;
     for (std::size_t i = 0; i < n_; ++i) t_[i] = temperaturesK[i];
+    return true;
 }
 
 void ThermalNetwork::step(const double* powerW) noexcept {

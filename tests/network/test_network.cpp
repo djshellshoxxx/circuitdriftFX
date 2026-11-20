@@ -1,10 +1,12 @@
 // cd_network tests (T11 worker-side parts). Synthetic fixtures; G05 host/process matrix stays open.
 #include <atomic>
 #include <chrono>
+#include <bit>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <limits>
 #include <numbers>
 #include <random>
 #include <thread>
@@ -523,6 +525,108 @@ void testBundle() {
     // Known FNV-1a vector.
     CHECK(fnv1a64("a", 1) == 0xAF63DC4C8601EC8Cull);
 }
+
+void testBundleValidation() {
+    InfluenceBundle valid;
+    valid.manifest.lengthSamples = kQuantumFrames;
+    valid.manifest.modelVersion = "0.0.1-dev";
+    valid.manifest.memberIds = {mid(1), mid(2)};
+    valid.manifest.inputHashes = {1, 2};
+    valid.railVolts = {300.f};
+    valid.railDemandA = {0.1f};
+    valid.bleed.assign(2 * kAudioChannels * kQuantumFrames, 0.f);
+    const auto bytes = serializeBundle(valid);
+    CHECK(!bytes.empty());
+    const std::size_t countAt = 72 + valid.manifest.modelVersion.size();
+    const std::size_t payloadAt = countAt + 4 + 24 * valid.manifest.memberIds.size();
+    auto rehash = [](std::vector<std::uint8_t>& raw) {
+        const auto h = fnv1a64(raw.data(), raw.size() - 8);
+        for (unsigned i = 0; i < 8; ++i) raw[raw.size() - 8 + i] = std::uint8_t(h >> (8 * i));
+    };
+    auto write32 = [](std::vector<std::uint8_t>& raw, std::size_t at, std::uint32_t value) {
+        for (unsigned i = 0; i < 4; ++i) raw[at + i] = std::uint8_t(value >> (8 * i));
+    };
+    auto rejectWire = [&](std::vector<std::uint8_t> raw) {
+        rehash(raw);
+        auto unchanged = valid;
+        std::string error;
+        CHECK(!parseBundle(raw.data(), raw.size(), unchanged, error));
+        CHECK(unchanged.manifest == valid.manifest && unchanged.railVolts == valid.railVolts &&
+              unchanged.railDemandA == valid.railDemandA && unchanged.bleed == valid.bleed);
+    };
+    // A correct non-cryptographic integrity hash is not semantic validation. Each payload
+    // region must reject NaN/Infinity before any sample can reach a replayer.
+    for (std::size_t at : {payloadAt, payloadAt + 4, payloadAt + 8}) {
+        for (float bad : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+            auto raw = bytes;
+            write32(raw, at, std::bit_cast<std::uint32_t>(bad));
+            rejectWire(std::move(raw));
+        }
+    }
+    // Duplicate/reordered member IDs, unsupported versions, and wrapped sample ranges are rejected.
+    auto raw = bytes;
+    std::copy_n(raw.begin() + std::ptrdiff_t(countAt + 4), 16, raw.begin() + std::ptrdiff_t(countAt + 4 + 24));
+    rejectWire(std::move(raw));
+    raw = bytes; write32(raw, 4, kBundleVersion + 1); rejectWire(std::move(raw));
+    raw = bytes; for (unsigned i = 0; i < 8; ++i) raw[16 + i] = 0xFF; rejectWire(std::move(raw));
+
+    auto rejectMemory = [&](const InfluenceBundle& bad) {
+        BundleReplayer rp; std::string error;
+        CHECK(serializeBundle(bad).empty());
+        CHECK(rp.open(valid, valid.manifest, error));
+        CHECK(!rp.open(bad, bad.manifest, error));
+        float left{}, right{};
+        CHECK(!rp.readBleed(0, 0, 1, &left, &right));  // failed open discards previous authorization
+    };
+    auto bad = valid; bad.manifest.lengthSamples = std::numeric_limits<std::uint64_t>::max();
+    bad.railVolts.clear(); bad.railDemandA.clear(); bad.bleed.clear(); rejectMemory(bad);
+    bad = valid; bad.manifest.memberIds.clear(); bad.manifest.inputHashes.clear(); bad.bleed.clear(); rejectMemory(bad);
+    bad = valid; bad.manifest.inputHashes.clear(); rejectMemory(bad);
+    bad = valid; bad.railVolts[0] = std::numeric_limits<float>::infinity(); rejectMemory(bad);
+    bad = valid; bad.bleed.pop_back(); rejectMemory(bad);
+    bad = valid; std::swap(bad.manifest.memberIds[0], bad.manifest.memberIds[1]); rejectMemory(bad);
+    bad = valid; bad.manifest.bleedGainLinear = -1; rejectMemory(bad);
+    bad = valid; bad.manifest.sourceOhms = -1; rejectMemory(bad);
+
+    // Offline bundles have no live ring-size limit on their requested bleed delay.
+    auto delayed = valid; delayed.manifest.latencyQuanta = 49;
+    BundleReplayer rp; std::string error;
+    CHECK(rp.open(delayed, delayed.manifest, error));
+    const auto delayedBytes = serializeBundle(delayed);
+    InfluenceBundle parsed;
+    CHECK(parseBundle(delayedBytes.data(), delayedBytes.size(), parsed, error));
+    CHECK(parsed.manifest.latencyQuanta == 49);
+
+    // Co-render uses the same validated output contract and leaves prior results untouched.
+    std::vector<MemberStem> stems(2);
+    for (std::size_t i = 0; i < stems.size(); ++i) {
+        stems[i].id = mid(i + 1);
+        stems[i].left.assign(kQuantumFrames, 0.1f);
+        stems[i].right.assign(kQuantumFrames, 0.1f);
+    }
+    CoRenderConfig cfg; cfg.lengthSamples = kQuantumFrames;
+    const DemandFn ordinary = [](std::size_t, std::uint64_t, double) { return 0.01; };
+    auto rejectRender = [&](const CoRenderConfig& config, const std::vector<MemberStem>& input, const DemandFn& demand) {
+        auto unchanged = valid;
+        CHECK(!coRender(config, input, demand, unchanged, error));
+        CHECK(unchanged.manifest == valid.manifest && unchanged.railVolts == valid.railVolts &&
+              unchanged.railDemandA == valid.railDemandA && unchanged.bleed == valid.bleed);
+    };
+    auto invalid = cfg; invalid.startSample = std::numeric_limits<std::uint64_t>::max();
+    rejectRender(invalid, stems, ordinary);
+    invalid = cfg; invalid.tolerance = std::numeric_limits<double>::infinity(); rejectRender(invalid, stems, ordinary);
+    invalid = cfg; invalid.modelVersion.assign(257, 'x'); rejectRender(invalid, stems, ordinary);
+    invalid = cfg; invalid.sourceOhms = 0; invalid.nominalRailV = 1e100; rejectRender(invalid, stems, ordinary);
+    invalid = cfg; invalid.sourceOhms = 0;
+    rejectRender(invalid, stems, [](std::size_t, std::uint64_t, double) { return 1e100; });
+    auto invalidStems = stems; invalidStems[0].left[0] = std::numeric_limits<float>::quiet_NaN();
+    rejectRender(cfg, invalidStems, ordinary);
+    invalid = cfg; invalid.topology = {{0.f, std::numeric_limits<float>::infinity()}, {0.f, 0.f}};
+    rejectRender(invalid, stems, ordinary);
+    cfg.latencyQuanta = 49;
+    CHECK(coRender(cfg, stems, ordinary, parsed, error));
+    CHECK(!serializeBundle(parsed).empty());
+}
 }  // namespace
 
 int main() {
@@ -539,6 +643,7 @@ int main() {
     testValidateLayout();
     testSharedMemory();
     testBundle();
+    testBundleValidation();
     if (failures) { std::printf("%d network check(s) FAILED\n", failures); return 1; }
     std::printf("network tests passed\n");
     return 0;

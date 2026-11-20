@@ -34,7 +34,14 @@ static_assert(kAge < core::kParamCount && kSag < core::kParamCount && kDriftM < 
 double num(double v, double fallback = 0.0) noexcept { return std::isfinite(v) ? v : fallback; }
 double unit(double v) noexcept { return std::clamp(num(v), 0.0, 1.0); }
 bool flag(double v) noexcept { return num(v) >= 0.5; }
-int enumIdx(double v, int hi) noexcept { return std::clamp(int(std::lround(num(v))), 0, hi); }
+int enumIdx(double v, int hi) noexcept { return int(std::lround(std::clamp(num(v), 0.0, double(hi)))); }
+double referencePitch(double hz, double a4Hz) noexcept {
+    const double ratio = hz / a4Hz;
+    // Positive finite tuning can still overflow the ratio (e.g. a subnormal A4).
+    const double octaves = std::isfinite(ratio) && ratio > 0.0 ? std::log2(ratio)
+                                                             : std::log2(hz) - std::log2(a4Hz);
+    return 69.0 + 12.0 * octaves;
+}
 double approach(double cur, double target, double maxStep) noexcept {
     return cur + std::clamp(target - cur, -maxStep, maxStep);
 }
@@ -42,7 +49,8 @@ double approach(double cur, double target, double maxStep) noexcept {
 
 void ControlProcessor::prepare(double sampleRate, int maxBlock, uint64_t instanceSeed) {
     prepared_ = false;
-    fs_ = sampleRate > 0 ? sampleRate : 48000.0;
+    fs_ = std::isfinite(sampleRate) && sampleRate >= 8000.0 && sampleRate <= 768000.0 ? sampleRate : 48000.0;
+    instanceSeed_ = instanceSeed;
     maxBlock_ = std::max(0, maxBlock);
     loadBuf_.assign(std::size_t(maxBlock_) + 1, 0.0);
     transBuf_.assign(std::size_t(maxBlock_) + 1, 0.0);
@@ -62,11 +70,13 @@ void ControlProcessor::prepare(double sampleRate, int maxBlock, uint64_t instanc
     }
     status_ = ControlStatus{};
     lastKeySource_ = 0;
+    lastTempo_ = TempoOutput{};
     prepared_ = true;
 }
 
 void ControlProcessor::reset() {
     if (!prepared_) return;
+    for (uint32_t s = 0; s < 2; ++s) drift_[s].prepare(fs_, instanceSeed_, s);
     key_.reset();
     tempo_.reset();
     transient_.reset();
@@ -80,12 +90,18 @@ void ControlProcessor::reset() {
         st.cutoffOct = st.delayMs = st.dBias = st.dDrive = st.lastQuantOff = 0.0;
     }
     status_ = ControlStatus{};
+    lastKeySource_ = 0;
+    lastTempo_ = TempoOutput{};
 }
 
 void ControlProcessor::setHarmonicMap(int slot, const HarmonicMap* map) noexcept {
     slot_[slot & 1].pendingMap.store(map, std::memory_order_release);
 }
 const HarmonicMap* ControlProcessor::harmonicMapInUse(int slot) const noexcept { return slot_[slot & 1].mapInUse.load(std::memory_order_acquire); }
+
+void ControlProcessor::setReferenceTuning(double a4Hz) noexcept {
+    a4_.store(std::isfinite(a4Hz) && a4Hz > 0.0 ? a4Hz : 440.0, std::memory_order_relaxed);
+}
 
 void ControlProcessor::processBlock(const core::ParamValues& p, const ControlContext& ctx, const AudioView& mainIn,
                                     const AudioView* scIn, core::ModulationBlock& out) noexcept {
@@ -143,7 +159,7 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
     if (frames > 0) {
         if (keySource == int(KeySource::Midi)) key_.advanceMidi(ctx.midi, frames);
         else if (keySource == int(KeySource::Audio) && keyEnabled)
-            key_.advanceAudio(pitchUsable, pitchUsable ? scale::hzToMidi(pr.frequencyHz, a4) : 0.0, frames);
+            key_.advanceAudio(pitchUsable, pitchUsable ? referencePitch(pr.frequencyHz, a4) : 0.0, frames);
         else key_.advanceManual(frames);
     }
     status_.pitchState = pr.state;
@@ -161,9 +177,9 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
             drift_[s].advance(frames);
             const double cutoffM = drift_[s].cutoffOct(d) + lastTempo_.cutoffOct;
             const double fbase = std::clamp(num(p[kFreqIdx[s]], 1000.0), 20.0, 20000.0);
-            const double pManual = scale::hzToMidi(fbase, a4);
+            const double pManual = referencePitch(fbase, a4);
             if (keyEnabled) {
-                st.quant.configure(scale::maskFor(enumIdx(p[kKeyScale], 5), uint16_t(std::clamp(int(num(p[kKeyMask], 4095.0)), 0, 4095))),
+                st.quant.configure(scale::maskFor(enumIdx(p[kKeyScale], 5), uint16_t(std::clamp(num(p[kKeyMask], 4095.0), 0.0, 4095.0))),
                                    enumIdx(p[kKeyRoot], 11));
                 const double pEff = pManual + key_.weight() * (key_.notePitch() - pManual);
                 const double g = st.quant.update(pEff + 12.0 * cutoffM, dt);
@@ -217,7 +233,7 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
     status_.pitchDriftHeld = keyEnabled && delayActive;
     status_.keyState = keyEnabled ? key_.state() : KeyState::Off;
     {
-        const double pm = scale::hzToMidi(std::clamp(num(p[kFreqIdx[0]], 1000.0), 20.0, 20000.0), a4);
+        const double pm = referencePitch(std::clamp(num(p[kFreqIdx[0]], 1000.0), 20.0, 20000.0), a4);
         status_.referenceNote = pm + key_.weight() * (key_.notePitch() - pm);
     }
     status_.sidechainConnected = scConnected;

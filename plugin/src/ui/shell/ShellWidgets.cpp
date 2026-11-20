@@ -27,8 +27,9 @@ Knob::Knob(ShellContext& ctx, EditorBridge& bridge, const juce::String& paramId,
         attachment_ = std::make_unique<juce::SliderParameterAttachment>(*p, *this, nullptr);
         textFromValueFunction = [fmt](double v) { return formatValue(fmt, v); };
         valueFromTextFunction = [fmt, this](const juce::String& s) {
+            if (s.trim() == formatValue(fmt, getValue())) return getValue();
             double v = 0;
-            return parseValue(fmt, s, v) ? v : getValue();
+            return parseValue(fmt, s, v) && v >= getMinimum() && v <= getMaximum() ? v : getValue();
         };
         bipolar_ = getMinimum() < 0.0 && getMaximum() > 0.0;
     }
@@ -240,9 +241,10 @@ void Knob::closeEntry() {
 }
 
 bool Knob::commitText(const juce::String& text) {
+    if (!isAttached()) return false;
+    if (text.trim() == valueText()) return true;
     double v = 0;
-    if (!isAttached() || !parseValue(fmt_, text, v)) return false;
-    v = juce::jlimit(getMinimum(), getMaximum(), v);
+    if (!parseValue(fmt_, text, v) || v < getMinimum() || v > getMaximum()) return false;
     bridge_.beginGesture("Set " + label_);
     setValue(v, juce::sendNotificationSync);
     bridge_.endGesture();

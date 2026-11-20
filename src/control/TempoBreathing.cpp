@@ -10,7 +10,7 @@ double wrapHalf(double x) noexcept { return x - std::floor(x + 0.5); }  // [-0.5
 }
 
 double TempoBreathing::clampBpm(double bpm) noexcept {
-    if (!(bpm == bpm)) return 120.0;
+    if (!std::isfinite(bpm)) return 120.0;
     return std::clamp(bpm, 20.0, 300.0);
 }
 
@@ -45,7 +45,7 @@ void TempoBreathing::reset() noexcept {
 }
 
 TempoOutput TempoBreathing::process(const TempoInput& in, int frames) noexcept {
-    const bool bpmKnown = in.bpm.has_value() && (*in.bpm == *in.bpm);
+    const bool bpmKnown = in.bpm.has_value() && std::isfinite(*in.bpm);
     const double bpm = bpmKnown ? clampBpm(*in.bpm) : 120.0;
     const double q = beatsPerCycle(in.division, in.modifier, in.timeSigNum, in.timeSigDen);
     const double tauTarget = recoveryTau(q, bpm);
@@ -78,10 +78,11 @@ TempoOutput TempoBreathing::process(const TempoInput& in, int frames) noexcept {
     tauSm_ += (tauTarget - tauSm_) * (1.0 - std::exp(-dt / kTauSmoothS));
 
     const double advanceBeats = in.playing ? bps * dt : 0.0;
-    if (in.ppq.has_value() && (*in.ppq == *in.ppq)) {
+    if (in.ppq.has_value() && std::isfinite(*in.ppq)) {
         const double ppq = *in.ppq;
         const double endBeats = ppq + advanceBeats;
-        const double newPhi = frac(endBeats / q);
+        // Reduce in beat units first: a finite PPQ divided by a short cycle can overflow.
+        const double newPhi = frac(std::fmod(endBeats, q) / q);
         // Reference the previous effective phase at this block's start to detect a jump.
         const bool seek = !havePpq_ || std::fabs(ppq - lastPpqEnd_) > 0.01 || std::fabs(q - lastQ_) > 1e-12;
         if (seek) {

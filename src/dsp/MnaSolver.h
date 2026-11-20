@@ -28,6 +28,7 @@ struct NetElement {
     double param[kMaxParams] = {};          // Device: manifest parameter values in manifest order
     double value = 0;                       // source volts (a=+) / amps (flowing a -> b through source)
     int c = 0, d = 0;                       // Device pins[2], pins[3] (3/4-terminal families only)
+    bool internalPortSource = false;        // compiler-generated source, from the separate port budget
 };
 
 struct Netlist {
@@ -39,6 +40,7 @@ struct Netlist {
 class MnaSolver {
 public:
     static constexpr int kMaxNodes = 32, kMaxUnknowns = 96, kMaxComponents = 64, kMaxNonlinear = 8;
+    static constexpr int kMaxPortSources = 4, kMaxElements = kMaxComponents + kMaxPortSources;
     static constexpr int kDcIterations = 100;
     struct Options { int maxNewton = 8; double tol = 1e-7; }; // finite 0 < tol <= 1e-7
 
@@ -98,7 +100,8 @@ public:
     // or voltages whose terminal differences/states overflow, leaving the state unchanged.
     int stateSize() const noexcept { return m_ + int(qOld_.size()); }
     void getState(double* out) const noexcept;
-    void setState(const double* in) noexcept;
+    bool isStateValid(const double* in) const noexcept;
+    bool setState(const double* in) noexcept;
 
 private:
     enum class Cat : unsigned char { Res, Cap, Elec, Ind, Diode, Triode, Pentode, Npn, Njfet, VSrc, ISrc };
@@ -106,7 +109,7 @@ private:
     bool newton(int maxIter, bool dc) noexcept;
     bool luSolve(double* A, double* b) noexcept;
     double scaledResidual(const double* F) const noexcept;
-    bool finiteSolution(const double* x) const noexcept;
+    bool finiteSolution(const double* x, const double* storedState = nullptr) const noexcept;
     void evalDc(const double* x, double* F, double* J) noexcept;
     void evalFast(const double* x, double* F, double* J) noexcept;
     void stampNonlinear(const double* x, double* F, double* J, bool dc) noexcept;

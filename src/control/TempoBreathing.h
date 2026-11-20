@@ -21,8 +21,8 @@ struct TempoInput {
     int division = 3;       // 0..5 (1/32 .. 1 bar)
     int modifier = 0;       // 0 straight, 1 dotted, 2 triplet
     double depth = 0;       // 0..1 sinusoidal creative cutoff depth
-    std::optional<double> bpm;
-    std::optional<double> ppq;
+    std::optional<double> bpm;  // nonfinite values are treated as unavailable
+    std::optional<double> ppq;  // nonfinite values are treated as unavailable
     int timeSigNum = 4, timeSigDen = 4;
     bool playing = true;
 };

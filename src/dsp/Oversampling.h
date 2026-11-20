@@ -30,6 +30,7 @@ public:
     // Dynamic state (delay lines and ring positions) for checkpoints; positions stored as doubles.
     int stateSize() const noexcept { return 4 * E_ + oddLen_ + 3; }
     void getState(double* out) const noexcept;
+    bool isStateValid(const double* in) const noexcept;
     bool setState(const double* in) noexcept;   // false (unchanged) on non-finite/out-of-range data
 private:
     void clear() noexcept;
@@ -55,6 +56,7 @@ public:
     void reset() noexcept;
     static constexpr int kStateSize = 4 * (kMaxCoefs / 2) * 2;
     void getState(double* out) const noexcept;
+    bool isStateValid(const double* in) const noexcept;
     bool setState(const double* in) noexcept;
 private:
     struct Ap { double a = 0, x1 = 0, y1 = 0; };
@@ -93,6 +95,8 @@ public:
     // Dynamic state of every prepared stage (checkpoints, warm transfer between identical specs).
     int stateSize() const noexcept;
     void getState(double* out) const noexcept;
+    bool isStateValid(const double* in) const noexcept;
+    // Validates the entire cascade before changing any stage.
     bool setState(const double* in) noexcept;
 private:
     static constexpr int kMaxStages = 6;

@@ -110,11 +110,14 @@ bool InspectorPanel::applyNumeric(const juce::String& text) {
         if (!q.ok) { error_ = q.error; return false; }
         value = q.value;
     }
-    if (value < range.getStart() - 1e-9 || value > range.getEnd() + 1e-9) {
+    if (!std::isfinite(value) || value < range.getStart() - 1e-9 || value > range.getEnd() + 1e-9) {
         error_ = "Out of range: " + juce::String(range.getStart(), 2) + " to " + juce::String(range.getEnd(), 2);
         return false;
     }
-    ops_.begin(juce::String("Set ") + pcb::parts()[static_cast<std::size_t>(id)].key + " (numeric)", {base});
+    if (!ops_.begin(juce::String("Set ") + pcb::parts()[static_cast<std::size_t>(id)].key + " (numeric)", {base})) {
+        error_ = "Another edit is in progress";
+        return false;
+    }
     ops_.setReal(base, value);
     ops_.end();
     canvas_.refreshForEdit();

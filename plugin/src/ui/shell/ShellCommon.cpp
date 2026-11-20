@@ -1,4 +1,5 @@
 #include "ui/shell/ShellCommon.h"
+#include "ui/workbench/GestureMath.h"
 
 namespace cd::plugin::ui::shell {
 
@@ -15,14 +16,11 @@ juce::String formatValue(Fmt fmt, double v) {
 }
 
 bool parseValue(Fmt fmt, const juce::String& text, double& out) {
-    const auto t = text.trim().toLowerCase();
-    if (!t.containsAnyOf("0123456789")) return false;
-    double v = t.retainCharacters("0123456789.-+eE").getDoubleValue();
-    if (t.containsChar(',') && !t.containsChar('.')) v = t.replaceCharacter(',', '.').retainCharacters("0123456789.-+").getDoubleValue();
-    if (fmt == Fmt::Percent) v /= 100.0;
-    if (fmt == Fmt::Hz && t.contains("k")) v *= 1000.0;
-    out = v;
-    return std::isfinite(v);
+    const char* unit = fmt == Fmt::Percent ? "%" : fmt == Fmt::Db ? "dB" : fmt == Fmt::Hz ? "Hz" : "";
+    const auto parsed = gesture::parseQuantity(text.toStdString(), unit);
+    if (!parsed.ok) return false;
+    out = fmt == Fmt::Percent ? parsed.value / 100.0 : parsed.value;
+    return true;
 }
 
 void drawPlate(juce::Graphics& g, juce::Rectangle<float> r, const Theme& t, bool raised, float corner) {

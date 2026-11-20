@@ -1,6 +1,7 @@
 // Musical (CD-F12..F16) and Quality (CD-F21/F25) panels.
 #include <cmath>
 #include "ui/panels/PanelCommon.h"
+#include "ui/workbench/GestureMath.h"
 
 namespace cd::plugin::ui::pc {
 namespace {
@@ -71,7 +72,7 @@ public:
         hTarget_.setDisplay([](double v) {
             if (std::abs(v) < 0.01) return juce::String("Balanced");
             return juce::String(v < 0 ? "Odd " : "Even ") + juce::String(juce::roundToInt(std::abs(v) * 100.0)) + " %";
-        });
+        }, gesture::parseHarmonicTarget);
         hAmount_.bind("harmonics.amount");
         content_.addItem(hTarget_, 240, ParamSlider::kHeight, true);
         content_.addItem(hAmount_, 240, ParamSlider::kHeight, true);

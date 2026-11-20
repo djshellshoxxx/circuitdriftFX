@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <latch>
 #include <new>
 #include <string>
 #include <thread>
@@ -132,16 +133,28 @@ void testSnapshotPublisher() {
     core::ParamValues out{};
     CHECK(pub.read(out) == 0);  // nothing published yet
     std::atomic<bool> stop{false};
+    std::latch firstPublished{1}, firstRead{1};
     std::thread writer([&] {
         core::ParamValues v{};
-        for (std::uint64_t n = 1; n <= 200000 && !stop.load(std::memory_order_relaxed); ++n) {
+        v.fill(1.0);
+        pub.publish(v);
+        firstPublished.count_down();
+        firstRead.wait();
+        for (std::uint64_t n = 2; n <= 200000; ++n) {
             v.fill(double(n));
             pub.publish(v);
         }
         stop.store(true);
     });
-    std::uint64_t lastGen = 0;
-    long reads = 0;
+    // Guarantee a real published read before starting the racing stress phase.
+    // A wait-free reader is allowed to return 0 while the writer is busy; Windows
+    // can schedule the entire writer loop before any successful racing read.
+    firstPublished.wait();
+    std::uint64_t lastGen = pub.read(out);
+    CHECK(lastGen == 1);
+    for (double x : out) CHECK(x == 1.0);
+    long reads = lastGen == 1 ? 1 : 0;
+    firstRead.count_down();
     bool coherent = true, monotonic = true;
     while (!stop.load(std::memory_order_relaxed)) {
         const std::uint64_t g = pub.read(out);

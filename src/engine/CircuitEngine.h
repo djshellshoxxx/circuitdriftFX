@@ -62,7 +62,9 @@ public:
     std::size_t checkpointSize() const noexcept;      // doubles in Checkpoint::values
     void allocateCheckpoint(Checkpoint& cp) const;    // off-thread: sizes the vectors
     bool getCheckpoint(Checkpoint& cp) const noexcept;  // requires allocated storage
-    bool setCheckpoint(const Checkpoint& cp) noexcept;  // false on layout mismatch / invalid data
+    // Invalid layout, scalar ranges or nested DSP state is rejected without changing live state.
+    // Validation and any rollback use prepare-time storage; no allocation occurs here.
+    bool setCheckpoint(const Checkpoint& cp) noexcept;
 
     // Introspection (tests, inspector): targets resolved for the last processed block.
     EffectiveTargets effectiveTargets(int slot) const noexcept;

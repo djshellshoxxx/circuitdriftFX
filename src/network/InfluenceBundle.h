@@ -41,7 +41,9 @@ struct InfluenceBundle {
     BundleManifest manifest;
     std::vector<float> railVolts, railDemandA;  // per tick
     std::vector<float> bleed;                   // [member][tick][channel][128]
-    std::uint64_t ticks() const noexcept { return (manifest.lengthSamples + kQuantumFrames - 1) / kQuantumFrames; }
+    std::uint64_t ticks() const noexcept {
+        return manifest.lengthSamples / kQuantumFrames + (manifest.lengthSamples % kQuantumFrames != 0);
+    }
     std::size_t bleedOffset(std::size_t member, std::uint64_t tick, unsigned ch) const noexcept {
         return ((member * std::size_t(ticks()) + std::size_t(tick)) * kAudioChannels + ch) * kQuantumFrames;
     }
@@ -71,12 +73,14 @@ struct CoRenderConfig {
 
 bool coRender(const CoRenderConfig& cfg, std::vector<MemberStem> stems, const DemandFn& demand, InfluenceBundle& out, std::string& error);
 
+// Returns empty for invalid manifest, dimensions or non-finite payload values.
 std::vector<std::uint8_t> serializeBundle(const InfluenceBundle& b);
 bool parseBundle(const std::uint8_t* data, std::size_t n, InfluenceBundle& out, std::string& error);
 
 class BundleReplayer {
 public:
-    // Refuses (false + reason) when the bundle manifest differs from `expected` in any field.
+    // Validates the bundle and refuses when its manifest differs from `expected` in any field.
+    // The caller keeps `bundle` alive and immutable until the replayer is no longer used.
     bool open(const InfluenceBundle& bundle, const BundleManifest& expected, std::string& error);
     // Reads n samples starting at absolute sample position `pos` for member index `member`.
     // Out-of-range positions are an error (no extrapolation).

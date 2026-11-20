@@ -1,5 +1,6 @@
 // Presets (CD-F24), A/B (CD-F24) and History (CD-F09) panels.
 #include "ui/panels/PanelCommon.h"
+#include "ui/workbench/GestureMath.h"
 
 namespace cd::plugin::ui::pc {
 namespace {
@@ -250,7 +251,10 @@ public:
         content_.addItem(*swap_, buttonBasis("Swap A and B"), 30);
         heading("Audible mix");
         cross_.bind("ab.crossfade");
-        cross_.setDisplay([](double v) { return juce::String(juce::roundToInt(100.0 * (1.0 - v))) + "% A / " + juce::String(juce::roundToInt(100.0 * v)) + "% B"; });
+        cross_.setDisplay([](double v) {
+            const int b = juce::roundToInt(100.0 * v);
+            return juce::String(100 - b) + "% A / " + juce::String(b) + "% B";
+        }, gesture::parseCrossfade);
         cross_.slider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 110, 22);
         content_.addItem(cross_, 240, ParamSlider::kHeight, true);
         audible_ = note("", Tone::Normal);

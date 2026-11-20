@@ -1,3 +1,21 @@
+# Current traceability — 2026-11-19
+
+The active consolidation candidate is `codex/cdfx-consolidation-20261119`, based on
+PR #15 with selected unique work from PR #10. Read the current
+[consolidation handoff](engineering/CONSOLIDATION_HANDOFF.md),
+[source inventory](engineering/consolidation-state.json), and audit records in
+`docs/audits/` before choosing or reporting work.
+
+The current source has an integrated circuit/control runtime, JUCE adapter,
+configuration/history/queue primitives, media/network/community modules and recovered
+blueprint/lifecycle/fault primitives. The custom editor still uses a fake service
+bridge in tests; the live processor uses its generic parameter editor. Complete
+session continuity, real service/provider integration, physical calibration and
+native host qualification remain open. The historical claims below describe the
+older integration only and must not be used as current source or test status.
+
+## Historical traceability retained for provenance
+
 # Traceability (requirement → implementation → test → evidence → status)
 
 Status vocabulary: Planned / Partial (primitive only) / Implemented / Blocked(gate). Nothing is "Implemented" unless its full acceptance test passes against the integrated engine.

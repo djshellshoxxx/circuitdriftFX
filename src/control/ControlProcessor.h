@@ -40,8 +40,9 @@ public:
     ControlProcessor(const ControlProcessor&) = delete;
     ControlProcessor& operator=(const ControlProcessor&) = delete;
 
+    // Unsupported/nonfinite sample rates use 48000 Hz (supported range 8000..768000 Hz).
     void prepare(double sampleRate, int maxBlock, uint64_t instanceSeed);
-    void reset();
+    void reset();  // restart modulation from the last prepare's seed and clock origin
 
     void processBlock(const core::ParamValues& params, const ControlContext& ctx, const AudioView& mainIn,
                       const AudioView* sidechainIn, core::ModulationBlock& out) noexcept;
@@ -51,7 +52,7 @@ public:
     void setHarmonicMap(int slot, const HarmonicMap* map) noexcept;
     const HarmonicMap* harmonicMapInUse(int slot) const noexcept;
     void setSidechainBudgetA(double amps) noexcept { budgetA_.store(amps, std::memory_order_relaxed); }
-    void setReferenceTuning(double a4Hz) noexcept { a4_.store(a4Hz, std::memory_order_relaxed); }
+    void setReferenceTuning(double a4Hz) noexcept;  // finite positive Hz; invalid values use 440 Hz
 
     const ControlStatus& status() const noexcept { return status_; }
     PitchDetector& pitchDetector() noexcept { return pitch_; }
@@ -73,6 +74,7 @@ private:
     bool prepared_ = false;
     double fs_ = 48000.0;
     int maxBlock_ = 0;
+    uint64_t instanceSeed_ = 0;
     CreativeDrift drift_[2];
     TempoBreathing tempo_;
     KeyTracker key_;

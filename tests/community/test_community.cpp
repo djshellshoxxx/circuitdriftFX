@@ -545,10 +545,10 @@ void testCache(const fs::path& base) {
     CHECK(c.put("h", "1", blobA, err));
     { std::ofstream f(dir / OfflineCache::entryName("h", "1"), std::ios::binary | std::ios::trunc); f << std::string(10000, 'q'); }  // oversize
     CHECK(c.get("h", "1", out) == CacheGet::Corrupt);
-    // Overwrite replaces atomically; stale temp files are cleaned at open.
+    // Overwrite replaces atomically; uncommitted/unrelated files are never removed by a scan.
     CHECK(c.put("o", "1", blobA, err) && c.put("o", "1", blobB, err) && c.get("o", "1", out) == CacheGet::Hit && out == blobB);
     { std::ofstream f(dir / "leftover.part"); f << "x"; }
-    OfflineCache c2(CacheConfig{dir, 1u << 20, 4096}); CHECK(c2.open(err) && !fs::exists(dir / "leftover.part"));
+    OfflineCache c2(CacheConfig{dir, 1u << 20, 4096}); CHECK(c2.open(err) && fs::exists(dir / "leftover.part"));
     // Unrelated files in the directory are ignored, not interpreted.
     { std::ofstream f(dir / "notes.txt"); f << "x"; }
     OfflineCache c3(CacheConfig{dir, 1u << 20, 4096}); CHECK(c3.open(err) && c3.get("notes", "1", out) == CacheGet::Miss);
@@ -556,6 +556,134 @@ void testCache(const fs::path& base) {
     // Write failure (destination is a regular file, not a directory) is reported, not thrown.
     { std::ofstream f(base / "afile"); f << "x"; }
     OfflineCache bad(CacheConfig{base / "afile", 1000, 100}); CHECK(!bad.open(err));
+}
+
+void testCacheFilesystemBoundaries(const fs::path& base) {
+    const fs::path dir = base / "cache_paths";
+    fs::remove_all(dir);
+    std::string error, out;
+    OfflineCache cache(CacheConfig{dir, 1u << 20, 4096});
+    CHECK(cache.open(error));
+    const std::string name = OfflineCache::entryName("a", "1");
+    // A failed pin write must not silently report success or change in-memory pin state.
+    CHECK(cache.put("a", "1", "payload", error));
+    fs::create_directory(dir / (name + ".pin"));
+    CHECK(!cache.setPinned("a", "1", true));
+    fs::remove(dir / (name + ".pin"));
+    CHECK(cache.setPinned("a", "1", true));
+    CHECK(cache.setPinned("a", "1", false));
+
+    // A larger replacement must not overwrite a pinned entry before capacity is known.
+    OfflineCache capacity(CacheConfig{base / "cache_capacity", 300, 4096});
+    CHECK(capacity.open(error));
+    CHECK(capacity.put("a", "1", std::string(80, 'A'), error));
+    CHECK(capacity.put("b", "1", std::string(80, 'B'), error));
+    CHECK(capacity.setPinned("a", "1", true) && capacity.setPinned("b", "1", true));
+    CHECK(!capacity.put("a", "1", std::string(81, 'X'), error));
+    CHECK(capacity.totalBytes() == 300 && capacity.entryCount() == 2);
+    CHECK(capacity.get("a", "1", out) == CacheGet::Hit && out == std::string(80, 'A'));
+
+    // Failed pin persistence must also leave the in-memory eviction policy unchanged.
+    const auto failedPinDir = base / "cache_pin_failure";
+    OfflineCache failedPin(CacheConfig{failedPinDir, 150, 4096});
+    CHECK(failedPin.open(error) && failedPin.put("a", "1", std::string(80, 'A'), error));
+    fs::create_directory(failedPinDir / (name + ".pin"));
+    CHECK(!failedPin.setPinned("a", "1", true));
+    CHECK(failedPin.put("b", "1", std::string(80, 'B'), error));
+    CHECK(!failedPin.contains("a", "1") && failedPin.contains("b", "1"));
+
+    OfflineCache unicode(CacheConfig{base / fs::path(u8"cache_é"), 1000, 4096});
+    CHECK(unicode.open(error) && unicode.put("a", "1", "UTF-8 path", error));
+    CHECK(unicode.get("a", "1", out) == CacheGet::Hit && out == "UTF-8 path");
+
+#if !defined(_WIN32)
+    // Stable preplaced links must never let a cache write truncate another file.
+    // Reopen resets the old implementation's predictable temporary-file counter.
+    OfflineCache writer(CacheConfig{dir, 1u << 20, 4096});
+    CHECK(writer.open(error));
+    const fs::path outside = base / "cache_outside.txt";
+    { std::ofstream f(outside); f << "outside content"; }
+    fs::create_symlink(outside, dir / (name + ".1.part"));
+    CHECK(writer.put("a", "1", "new payload", error));
+    { std::ifstream f(outside); std::string text((std::istreambuf_iterator<char>(f)), {}); CHECK(text == "outside content"); }
+    fs::create_symlink(outside, dir / (name + ".pin"));
+    CHECK(writer.setPinned("a", "1", true));
+    { std::ifstream f(outside); std::string text((std::istreambuf_iterator<char>(f)), {}); CHECK(text == "outside content"); }
+    CHECK(!fs::is_symlink(fs::symlink_status(dir / (name + ".pin"))));
+
+    // A cache entry replaced by a link is rejected even when its target contains a valid entry.
+    const fs::path externalEntry = base / "external_entry.cdc";
+    CHECK(writer.put("b", "1", "separate valid fixture", error));
+    fs::copy_file(dir / OfflineCache::entryName("b", "1"), externalEntry, fs::copy_options::overwrite_existing);
+    fs::remove(dir / name);
+    fs::create_symlink(externalEntry, dir / name);
+    CHECK(writer.get("a", "1", out) == CacheGet::Corrupt);
+    CHECK(fs::exists(externalEntry));
+    fs::remove(dir / name);
+    fs::create_symlink(externalEntry, dir / name);
+    OfflineCache reopened(CacheConfig{dir, 1u << 20, 4096});
+    CHECK(reopened.open(error) && !reopened.contains("a", "1"));
+#endif
+}
+
+void testCacheRemovalFailures(const fs::path& base) {
+    std::string error, out;
+    const std::string payload(80, 'A');  // 150 bytes including the cache header
+    const auto dir = base / "cache_remove_failure";
+    OfflineCache cache(CacheConfig{dir, 150, 4096});
+    CHECK(cache.open(error) && cache.put("a", "1", payload, error));
+    CHECK(cache.setPinned("a", "1", true));
+    const auto path = dir / OfflineCache::entryName("a", "1");
+    const auto saved = dir / "saved-entry";
+    // A stable nonempty directory makes remove fail on every platform, including privileged CI.
+    fs::rename(path, saved);
+    fs::create_directory(path);
+    { std::ofstream f(path / "blocker"); f << "owned test fixture"; }
+    CHECK(!cache.remove("a", "1"));
+    CHECK(cache.contains("a", "1") && cache.entryCount() == 1 && cache.totalBytes() == 150);
+    CHECK(fs::exists(dir / (OfflineCache::entryName("a", "1") + ".pin")));
+    CHECK(cache.setPinned("a", "1", false));
+    CHECK(!cache.put("b", "1", payload, error) && !error.empty());
+    CHECK(cache.contains("a", "1") && !cache.contains("b", "1") && cache.totalBytes() == 150);
+    CHECK(!fs::exists(dir / OfflineCache::entryName("b", "1")));
+    CHECK(cache.get("a", "1", out) == CacheGet::Corrupt);
+    CHECK(cache.contains("a", "1") && cache.totalBytes() == 150);
+    fs::remove_all(path);
+    fs::rename(saved, path);
+    CHECK(cache.get("a", "1", out) == CacheGet::Hit && out == payload);
+    CHECK(cache.remove("a", "1") && cache.totalBytes() == 0);
+
+    // A failed oldest victim must not prevent eviction of a later removable entry.
+    const auto retryDir = base / "cache_remove_next";
+    OfflineCache retry(CacheConfig{retryDir, 300, 4096});
+    CHECK(retry.open(error) && retry.put("a", "1", payload, error) && retry.put("b", "1", payload, error));
+    const auto retryPath = retryDir / OfflineCache::entryName("a", "1");
+    fs::rename(retryPath, retryDir / "saved-entry");
+    fs::create_directory(retryPath);
+    { std::ofstream f(retryPath / "blocker"); f << "owned test fixture"; }
+    CHECK(retry.put("c", "1", payload, error));
+    CHECK(retry.contains("a", "1") && !retry.contains("b", "1") && retry.contains("c", "1"));
+    CHECK(retry.totalBytes() == 300);
+    fs::remove_all(retryPath);
+    fs::rename(retryDir / "saved-entry", retryPath);
+    CHECK(retry.get("a", "1", out) == CacheGet::Hit && out == payload);
+
+    // Persisted pins cannot silently make a newly opened cache exceed its configured capacity.
+    const auto pinnedDir = base / "cache_reopen_pins";
+    {
+        OfflineCache large(CacheConfig{pinnedDir, 300, 4096});
+        CHECK(large.open(error) && large.put("a", "1", payload, error) && large.put("b", "1", payload, error));
+        CHECK(large.setPinned("a", "1", true) && large.setPinned("b", "1", true));
+    }
+    OfflineCache small(CacheConfig{pinnedDir, 150, 4096});
+    CHECK(!small.open(error) && !error.empty());
+    CHECK(small.get("a", "1", out) == CacheGet::Miss);
+    CHECK(!small.put("c", "1", payload, error));
+    CHECK(fs::exists(pinnedDir / OfflineCache::entryName("a", "1")) &&
+          fs::exists(pinnedDir / OfflineCache::entryName("b", "1")));
+    OfflineCache recovered(CacheConfig{pinnedDir, 300, 4096});
+    CHECK(recovered.open(error) && recovered.totalBytes() == 300);
+    CHECK(recovered.get("a", "1", out) == CacheGet::Hit && out == payload);
 }
 
 void testDigestAndHardCases() {
@@ -583,6 +711,8 @@ int main() {
     testFetchAndValidation(base);
     testPublishAndOwnership(base);
     testCache(base);
+    testCacheFilesystemBoundaries(base);
+    testCacheRemovalFailures(base);
     testDigestAndHardCases();
     std::error_code ec; fs::remove_all(base, ec);
     if (failures) { std::printf("%d community check(s) FAILED\n", failures); return 1; }

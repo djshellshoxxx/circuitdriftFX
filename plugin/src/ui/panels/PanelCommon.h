@@ -4,6 +4,8 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 #include "ui/Theme.h"
 #include "ui/panels/Panels.h"
@@ -42,9 +44,10 @@ private:
 class ParamBinding {
 public:
     ParamBinding(EditorBridge& b, juce::String undoLabel) : bridge_(b), label_(std::move(undoLabel)) {}
+    ~ParamBinding() { unbind(); }
     void bind(const juce::String& paramId, std::function<void(float)> onParamChanged);
     juce::RangedAudioParameter* lookup(const juce::String& id) const { return bridge_.parameters().getParameter(id); }
-    void unbind() { attach_.reset(); param_ = nullptr; id_ = {}; }
+    void unbind() { endPart(); attach_.reset(); param_ = nullptr; id_ = {}; }
     bool bound() const noexcept { return param_ != nullptr; }
     juce::RangedAudioParameter* parameter() const noexcept { return param_; }
     const juce::String& id() const noexcept { return id_; }
@@ -68,7 +71,8 @@ public:
     ParamSlider(EditorBridge& b, const juce::String& name, const juce::String& tooltip);
     void bind(const juce::String& paramId);
     void resized() override;
-    void setDisplay(std::function<juce::String(double)> fmt);
+    using PlainParser = std::function<std::optional<double>(const std::string&)>;
+    void setDisplay(std::function<juce::String(double)> fmt, PlainParser parser = {});
     juce::Slider slider;
     juce::Label label;
     ParamBinding binding;
@@ -77,6 +81,7 @@ public:
 private:
     bool inPart_ = false, updating_ = false;
     std::function<juce::String(double)> fmt_;
+    PlainParser parse_;
 };
 
 class ParamChoice : public juce::Component {

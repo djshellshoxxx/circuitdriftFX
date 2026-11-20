@@ -1,6 +1,7 @@
 // Lifecycle (CD-F18 / UX-03), Faults (CD-F19) and Blueprint (CD-F10) panels.
 #include <cmath>
 #include "ui/panels/PanelCommon.h"
+#include "ui/workbench/GestureMath.h"
 
 namespace cd::plugin::ui::pc {
 namespace {
@@ -99,8 +100,7 @@ public:
         restored_.onClick = [this] { if (restored_.getToggleState()) scenario_.binding.setComplete(2.0f); };
         content_.addItem(derelict_, buttonBasis("Derelict outcome"), 30);
         content_.addItem(restored_, buttonBasis("Restored outcome"), 30);
-        scrub_.slider.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v * 100.0)) + " %"; };
-        scrub_.slider.valueFromTextFunction = [](const juce::String& s) { return juce::jlimit(0.0, 1.0, s.retainCharacters("0123456789.").getDoubleValue() / 100.0); };
+        scrub_.setDisplay([](double v) { return juce::String(juce::roundToInt(v * 100.0)) + " %"; }, gesture::parsePercentage);
         scrub_.slider.setNumDecimalPlacesToDisplay(0);
         content_.addItem(scrub_, 260, ParamSlider::kHeight, true);
         content_.addItem(strip_, 260, AnchorStrip::kHeight, true);
@@ -199,7 +199,10 @@ void configurePlain(ParamSlider& ps, double lo, double hi, double step, const ju
     ps.slider.onValueChange = nullptr;
     const int digits = step >= 1.0 ? 0 : step >= 0.1 ? 1 : 2;
     ps.slider.textFromValueFunction = [suffix, digits](double v) { return juce::String(v, digits) + suffix; };
-    ps.slider.valueFromTextFunction = [lo, hi](const juce::String& t) { return juce::jlimit(lo, hi, t.retainCharacters("0123456789.-").getDoubleValue()); };
+    ps.slider.valueFromTextFunction = [&slider = ps.slider, lo, hi, unit = suffix.trim().toStdString()](const juce::String& t) {
+        if (t.trim() == slider.getTextFromValue(slider.getValue()).trim()) return slider.getValue();
+        return gesture::parseBoundedQuantity(t.toStdString(), unit, lo, hi).value_or(slider.getValue());
+    };
     ps.slider.updateText();
 }
 
@@ -217,8 +220,12 @@ public:
         heading("Fault injector");
         note("Artistic bounded failure simulation. These are not validated failure models: output stays finite and bounded, and containment can never be disabled. Faults are reversible and part of undo, A/B and presets.", Tone::Warn);
         const auto* tbl = engine::componentTable();
-        for (int i = 0; i < engine::kComponentCount; ++i)
-            component_.box.addItem(juce::String(tbl[i].key) + " - " + tbl[i].displayName, i + 1);
+        for (int i = 0; i < engine::kComponentCount; ++i) {
+            // Keep the key and human name readable at the supported 360 px drawer width.
+            // Detailed model qualifiers remain in the selected component's tooltip and notes.
+            const auto name = juce::String(tbl[i].displayName).upToFirstOccurrenceOf(" (", false, false);
+            component_.box.addItem(juce::String(tbl[i].key) + " - " + name, i + 1);
+        }
         component_.box.setSelectedId(engine::kComponentCount > 5 ? static_cast<int>(engine::ComponentId::C_k) + 1 : 1, juce::dontSendNotification);
         component_.box.onChange = [this] { rebuildTypes(); };
         content_.addItem(component_, 260, ParamChoice::kHeight, true);
@@ -226,7 +233,9 @@ public:
         content_.addItem(type_, 260, ParamChoice::kHeight, true);
         configurePlain(severity_, 0.0, 1.0, 0.01, "", 0.5);
         severity_.slider.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v * 100.0)) + " %"; };
-        severity_.slider.valueFromTextFunction = [](const juce::String& t) { return juce::jlimit(0.0, 1.0, t.retainCharacters("0123456789.").getDoubleValue() / 100.0); };
+        severity_.slider.valueFromTextFunction = [this](const juce::String& t) {
+            return gesture::parsePercentage(t.toStdString()).value_or(severity_.slider.getValue());
+        };
         severity_.slider.onValueChange = [this] { updatePreview(); };
         severity_.slider.updateText();
         content_.addItem(severity_, 260, ParamSlider::kHeight, true);
@@ -264,6 +273,8 @@ private:
     int typeCode() const { return type_.box.getSelectedId(); }  // FaultType value + 1000 offset
     void rebuildTypes() {
         const auto& c = comp();
+        component_.box.setTooltip(juce::String(c.key) + " - " + c.displayName + ". Circuit component to fault.");
+        component_.box.setDescription(component_.box.getTooltip());
         const auto fam = familyOf(c.role);
         type_.box.clear(juce::dontSendNotification);
         reasonText_ = {};

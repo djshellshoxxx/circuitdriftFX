@@ -25,7 +25,8 @@ public:
     bool prepare(const Config& cfg, double dt, double ambientK) noexcept;
     // Reads size() temperatures in finite positive kelvin. Null, non-finite, non-positive or
     // numerically unrepresentable states are ignored atomically; no model upper bound is invented.
-    void setState(const double* temperaturesK) noexcept;
+    bool isStateValid(const double* temperaturesK) const noexcept;
+    bool setState(const double* temperaturesK) noexcept;
     // One implicit step with finite average power per node [W]. Null input, any overflow or a
     // non-positive candidate kelvin temperature leaves every temperature unchanged. Finite
     // negative power can represent cooling; physical calibration belongs to the model manifest.

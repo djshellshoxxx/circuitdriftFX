@@ -983,7 +983,10 @@ void EditorCore::showSettingsMenu() {
     m.addItem(23, "Low frame rate (30 Hz)", true, ui.lowFrameRate);
     juce::Component::SafePointer<juce::Component> target(&p_->header->gearChip);
     m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target.getComponent()),
-                    [this](int r) {
+                    [this, target](int r) {
+                        // The menu callback can arrive after the editor has closed. The target is
+                        // owned by this core, so its weak pointer must be checked before using this.
+                        if (target == nullptr) return;
                         if (r == 10) setDarkTheme(true);
                         else if (r == 11) setDarkTheme(false);
                         else if (r >= 175 && r <= 300) setUserScale(static_cast<float>(r - 100) / 100.0f);

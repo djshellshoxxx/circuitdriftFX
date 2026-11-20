@@ -2,8 +2,9 @@
 // stochastic drift"). CREATIVE modulation, not physics: it never feeds kelvin or any electrical state.
 //
 // Three stationary AR(1) processes u_j[k+1]=a_j u_j[k]+sqrt(1-a_j^2) z_j[k], tau={0.2,2,20} s,
-// a_j=exp(-0.01/tau_j), on a 100 Hz control clock derived from an absolute sample counter (integer tick
-// count floor(n*100/fs)), so tick sequence is independent of block partitioning. q=tanh(sum/sqrt3).
+// a_j=exp(-0.01/tau_j), on a 100 Hz control clock (integer tick count floor(n*100/fs)). Exact integer
+// phase arithmetic keeps the sequence independent of block partitioning, including large counters.
+// The sample clock saturates at UINT64_MAX. q=tanh(sum/sqrt3).
 // Delay deviation is slew limited (0.002 s/s = 2 ms/s) per control tick, before depth scaling.
 //
 // Threading: prepare() off the audio thread; advance()/accessors noexcept, no allocation.
@@ -31,7 +32,8 @@ public:
         uint64_t ticks = 0;
     };
 
-    // seed derived from (instanceSeed, slot, stream j). Draws the stationary initial state.
+    // Seed derived from (instanceSeed, slot, stream j). Draws the stationary initial state.
+    // Supported sample rates are finite 8000..768000 Hz; other values use 48000 Hz.
     void prepare(double sampleRate, uint64_t instanceSeed, uint32_t slot) noexcept;
     void advance(int frames) noexcept;  // frames==0 advances nothing
 
@@ -44,12 +46,14 @@ public:
         for (int j = 0; j < 3; ++j) s.rng[j] = rng_[j].state();
         return s;
     }
-    void restore(const State& s) noexcept;
+    void restore(const State& s) noexcept;  // incompatible/invalid snapshots leave the current state intact
     uint64_t ticks() const noexcept { return st_.ticks; }
 
 private:
     void tick() noexcept;
-    double fs_ = 48000.0;
+    uint64_t clockPosition(uint64_t samples, uint64_t& phase) const noexcept;
+    // Reduced exact ratio 100/fs = clockStep_/clockPeriod_. Each term is below 2^53.
+    uint64_t clockPeriod_ = 480, clockStep_ = 1, samplePhase_ = 0;
     GaussianRng rng_[3];
     State st_{};
 };

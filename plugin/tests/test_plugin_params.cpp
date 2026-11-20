@@ -3,6 +3,7 @@
 #include "ParameterLayout.h"
 #include "PluginProcessor.h"
 #include "core/ParameterRegistry.h"
+#include "ui/GestureRegressions.h"
 
 #include <cmath>
 #include <cstdint>
@@ -158,24 +159,87 @@ void testBusLayouts() {
     CHECK(!proc.isBusesLayoutSupported(make(juce::AudioChannelSet::quadraphonic(),
                                             juce::AudioChannelSet::quadraphonic(), off)),
           "quad rejected");
+    CHECK(!proc.isBusesLayoutSupported(Layout{}), "empty bus layout rejected before indexing");
+    auto missingSidechain = make(stereo, stereo, off);
+    missingSidechain.inputBuses.removeLast();
+    CHECK(!proc.isBusesLayoutSupported(missingSidechain), "missing declared sidechain bus rejected");
+}
+
+void setPlain(cd::plugin::CircuitDriftProcessor& proc, const char* id, double value) {
+    auto* parameter = proc.parameters().getParameter(id);
+    CHECK(parameter != nullptr, "parameter %s exists", id);
+    if (parameter) parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(value)));
 }
 
 template <typename Sample>
-void testPassThrough() {
+void testRuntimeAudio() {
     cd::plugin::CircuitDriftProcessor proc(Edition::Full, "CircuitDrift");
     proc.setProcessingPrecision(sizeof(Sample) == 8 ? juce::AudioProcessor::doublePrecision
                                                     : juce::AudioProcessor::singlePrecision);
+    setPlain(proc, "mix", 0);
+    setPlain(proc, "hpf.enabled", 0);
+    setPlain(proc, "output.softClip", 0);
+    setPlain(proc, "gainMatch.enabled", 0);
+    setPlain(proc, "analogNoise.enabled", 0);
+    setPlain(proc, "output.gain", -6);
     proc.prepareToPlay(48000.0, 64);
-    juce::AudioBuffer<Sample> buffer(2, 64);
+    const int latency = proc.getLatencySamples();
+    CHECK(latency > 0, "runtime declares oversampling latency");
+    constexpr int frames = 2048;  // host block deliberately exceeds prepareToPlay's size hint
+    juce::AudioBuffer<Sample> buffer(2, frames);
     for (int ch = 0; ch < 2; ++ch)
-        for (int i = 0; i < 64; ++i) buffer.setSample(ch, i, static_cast<Sample>(0.01 * (i + 1) * (ch ? -1 : 1)));
+        for (int i = 0; i < frames; ++i)
+            buffer.setSample(ch, i, static_cast<Sample>(0.1 * std::sin(0.03 * i) * (ch ? -1 : 1)));
     const juce::AudioBuffer<Sample> reference(buffer);
     juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(100)), 63);
+    midi.addEvent(juce::MidiMessage::noteOff(1, 60), 127);
     proc.processBlock(buffer, midi);
+    CHECK(midi.isEmpty(), "MIDI consumed by effect, not forwarded as output");
+    const double gain = std::pow(10.0, -6.0 / 20.0);
     for (int ch = 0; ch < 2; ++ch)
-        for (int i = 0; i < 64; ++i)
-            CHECK(buffer.getSample(ch, i) == reference.getSample(ch, i), "pass-through ch%d sample %d", ch, i);
+        for (int i = 0; i < frames; ++i) {
+            const double expected = i >= latency ? static_cast<double>(reference.getSample(ch, i - latency)) * gain : 0.0;
+            CHECK(near(buffer.getSample(ch, i), expected, 1e-6),
+                  "runtime aligned dry with output trim ch%d sample%d got%g expected%g", ch, i,
+                  static_cast<double>(buffer.getSample(ch, i)), expected);
+        }
+
+    // Bypass still traverses the prepared runtime so host latency stays aligned.
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < frames; ++i) buffer.setSample(ch, i, static_cast<Sample>(0.2));
+    proc.processBlockBypassed(buffer, midi);
+    CHECK(proc.getLatencySamples() == latency, "bypass preserves reported latency");
+    CHECK(near(buffer.getSample(0, frames - 1), 0.2, 1e-6), "host bypass reaches delayed unity dry after crossfade");
     proc.releaseResources();
+    proc.processBlock(buffer, midi);
+    CHECK(buffer.getMagnitude(0, frames) == 0, "unprepared processor silences main output");
+}
+
+void testSidechainBufferPreserved() {
+    cd::plugin::CircuitDriftProcessor proc(Edition::Full, "CircuitDrift");
+    auto layout = proc.getBusesLayout();
+    layout.inputBuses.set(1, juce::AudioChannelSet::stereo());
+    CHECK(proc.setBusesLayout(layout), "sidechain enabled for adapter test");
+    proc.prepareToPlay(48000, 64);
+    juce::AudioBuffer<float> buffer(4, 257);
+    buffer.clear();
+    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+        buffer.setSample(0, i, 0.1f); buffer.setSample(1, i, -0.1f);
+        buffer.setSample(2, i, 0.37f); buffer.setSample(3, i, -0.23f);
+    }
+    juce::MidiBuffer midi;
+    proc.processBlock(buffer, midi);
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        CHECK(buffer.getSample(2, i) == 0.37f && buffer.getSample(3, i) == -0.23f,
+              "sidechain input buffer unchanged at sample%d", i);
+
+    for (int i = 0; i < 1100; ++i)
+        midi.addEvent(juce::MidiMessage::noteOn(1, i % 128, static_cast<juce::uint8>(100)), 0);
+    proc.processBlock(buffer, midi);
+    CHECK(midi.isEmpty() && proc.midiOverflowed(), "oversized MIDI input is bounded and reported");
+    proc.processBlock(buffer, midi);
+    CHECK(!proc.midiOverflowed(), "MIDI overflow status clears on the next normal block");
 }
 
 void testStateRoundTrip() {
@@ -192,18 +256,25 @@ void testStateRoundTrip() {
     const char garbage[] = "not xml";
     b.setStateInformation(garbage, static_cast<int>(sizeof(garbage)));  // must be ignored, not crash
     CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "garbage state ignored");
+    b.setStateInformation(nullptr, 8);
+    b.setStateInformation(garbage, -1);
+    b.setStateInformation(garbage, 4 * 1024 * 1024 + 1);  // reject before touching the small buffer
+    CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "invalid state bounds ignored");
 }
 
 }  // namespace
 
 int main() {
+    juce::ScopedJuceInitialiser_GUI gui;
     testGoldenTable();
     testEdition(Edition::Full);
     testEdition(Edition::Lite);
     testBusLayouts();
-    testPassThrough<float>();
-    testPassThrough<double>();
+    testRuntimeAudio<float>();
+    testRuntimeAudio<double>();
+    testSidechainBufferPreserved();
     testStateRoundTrip();
+    g_failures += cd::plugin::test::gesture_regressions::run();
     if (g_failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", g_failures);
         return 1;

@@ -1,6 +1,7 @@
 // Capture (CD-F03), Network (CD-F11) and Community (CD-F04) panels.
 #include <cmath>
 #include "ui/panels/PanelCommon.h"
+#include "ui/workbench/GestureMath.h"
 
 namespace cd::plugin::ui::pc {
 namespace {
@@ -42,7 +43,10 @@ public:
         duration_.slider.setValue(10.0, juce::dontSendNotification);
         duration_.slider.onValueChange = nullptr;
         duration_.slider.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + " s"; };
-        duration_.slider.valueFromTextFunction = [](const juce::String& t) { return t.retainCharacters("0123456789.").getDoubleValue(); };
+        duration_.slider.valueFromTextFunction = [this](const juce::String& t) {
+            return gesture::parseBoundedQuantity(t.toStdString(), "s", duration_.slider.getMinimum(), duration_.slider.getMaximum())
+                .value_or(duration_.slider.getValue());
+        };
         duration_.slider.updateText();
         content_.addItem(duration_, 240, ParamSlider::kHeight, true);
         durNote_ = note("", Tone::Dim);

@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 1, persist-credentials: false }
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON
       - run: cmake --build build --parallel 4
       - run: ctest --test-dir build --output-on-failure --parallel 4
@@ -33,10 +33,10 @@ jobs:
     env:
       CD_DEPS_CACHE_DIR: ${{ github.workspace }}/.deps-cache
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 1, persist-credentials: false }
       # Dependency sources only (JUCE, clap-juce-extensions + submodules); never build trees.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .deps-cache
           key: deps-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake') }}
@@ -65,7 +65,7 @@ jobs:
       - name: Stage artefacts and smoke-check entry points
         shell: bash
         run: bash plugin/packaging/stage_windows.sh build-plugin dist Release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: circuitdrift-windows-x64-${{ github.sha }}
           path: dist
@@ -91,7 +91,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { Write-Host "pluginval failed for $($bundle.Name)"; $failed = $true }
           }
           if ($failed) { exit 1 }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: pluginval-logs-${{ github.sha }}

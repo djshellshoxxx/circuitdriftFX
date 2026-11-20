@@ -192,17 +192,21 @@ bool MnaSolver::prepareInternal(const Netlist& net, double h, const Options& opt
     if (opt.maxNewton < 1 || opt.maxNewton > 12 || !(opt.tol > 0 && opt.tol <= 1e-7 && std::isfinite(opt.tol)))
         return bad("Newton options out of range (finite 0 < tolerance <= 1e-7 required)");
     if (net.nodes < 1 || net.nodes > kMaxNodes) return bad("node count outside 1..32");
-    if (net.elements.empty() || net.elements.size() > kMaxComponents) return bad("component count outside 1..64");
+    if (net.elements.empty() || net.elements.size() > kMaxElements) return bad("element count outside 1..68");
     if (!(net.voltageScaleV > 0 && net.currentScaleA > 0 && std::isfinite(net.voltageScaleV) && std::isfinite(net.currentScaleA)))
         return bad("circuit scales must be strictly positive");
 
-    int vs = 0, nonlinear = 0;
+    int vs = 0, nonlinear = 0, components = 0, portSources = 0;
     std::vector<int> dcSet(net.nodes + 1), vsSet(net.nodes + 1);
     std::iota(dcSet.begin(), dcSet.end(), 0);
     std::iota(vsSet.begin(), vsSet.end(), 0);
     std::vector<Cat> cats;
     auto join = [&](int p, int q) { dcSet[findRoot(dcSet, p)] = findRoot(dcSet, q); };
     for (const auto& e : net.elements) {
+        if (e.internalPortSource) {
+            if (e.kind == NetElement::Kind::Device || ++portSources > kMaxPortSources)
+                return bad("invalid internal port source budget");
+        } else if (++components > kMaxComponents) return bad("more than 64 user components");
         if (e.a < 0 || e.b < 0 || e.a > net.nodes || e.b > net.nodes || e.a == e.b) return bad("element node index invalid");
         if (e.kind == NetElement::Kind::Device) {
             if (!e.model || e.model->params.size() > std::size_t(NetElement::kMaxParams)) return bad("device without supported manifest");
@@ -820,15 +824,21 @@ void MnaSolver::getState(double* out) const noexcept {
     std::copy(qOld_.begin(), qOld_.end(), out + m_);
 }
 
-void MnaSolver::setState(const double* in) noexcept {
-    if (!in || !finiteSolution(in)) return;
+bool MnaSolver::isStateValid(const double* in) const noexcept {
+    if (!in) return false;
     for (std::size_t k = 0; k < qOld_.size(); ++k)
-        if (!std::isfinite(in[m_ + k])) return;
-    std::copy(in, in + m_, x_.begin());
-    std::copy(in + m_, in + m_ + qOld_.size(), qOld_.begin());
+        if (!std::isfinite(in[m_ + k])) return false;
+    return finiteSolution(in, in + m_);
 }
 
-bool MnaSolver::finiteSolution(const double* x) const noexcept {
+bool MnaSolver::setState(const double* in) noexcept {
+    if (!isStateValid(in)) return false;
+    std::copy(in, in + m_, x_.begin());
+    std::copy(in + m_, in + m_ + qOld_.size(), qOld_.begin());
+    return true;
+}
+
+bool MnaSolver::finiteSolution(const double* x, const double* storedState) const noexcept {
     // Unknowns no larger than half the double range cannot overflow a terminal difference, so the
     // per-element difference check is only needed beyond that bound (rare; same result).
     constexpr double kHalfMax = 0.5 * std::numeric_limits<double>::max();
@@ -845,7 +855,12 @@ bool MnaSolver::finiteSolution(const double* x) const noexcept {
         const double v = diff(e);
         switch (cat_[std::size_t(k)]) {
             case Cat::Cap: if (!std::isfinite(e.param[0] * v)) return false; break;
-            case Cat::Ind: if (!std::isfinite(qOld_[capSlot_[std::size_t(k)]] + h_ * v)) return false; break;
+            case Cat::Ind: {
+                const auto stateIndex = capSlot_[std::size_t(k)];
+                const double q = storedState ? storedState[stateIndex] : qOld_[stateIndex];
+                if (!std::isfinite(q + h_ * v)) return false;
+                break;
+            }
             default: if (!std::isfinite(v / e.param[1])) return false; break;  // electrolytic
         }
     }

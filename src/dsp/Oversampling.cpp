@@ -110,17 +110,26 @@ void PolyphaseHalfband2x::getState(double* out) const noexcept {
     out[0] = upPos_; out[1] = dnPos_; out[2] = oddPos_;
 }
 
-bool PolyphaseHalfband2x::setState(const double* in) noexcept {
+bool PolyphaseHalfband2x::isStateValid(const double* in) const noexcept {
+    if (!in) return false;
     const int n = stateSize();
     for (int k = 0; k < n; ++k) if (!std::isfinite(in[k])) return false;
     const double* pos = in + 4 * E_ + oddLen_;
-    const int up = int(pos[0]), dn = int(pos[1]), od = int(pos[2]);
-    if (double(up) != pos[0] || double(dn) != pos[1] || double(od) != pos[2] || up < 0 || up >= std::max(E_, 1) ||
-        dn < 0 || dn >= std::max(E_, 1) || od < 0 || od >= std::max(oddLen_, 1)) return false;
+    // Reject in floating point before a narrowing conversion (even a finite double can be
+    // outside int's representable range).
+    const auto position = [](double v, int length) {
+        return v >= 0.0 && v < std::max(length, 1) && v == std::floor(v);
+    };
+    return position(pos[0], E_) && position(pos[1], E_) && position(pos[2], oddLen_);
+}
+
+bool PolyphaseHalfband2x::setState(const double* in) noexcept {
+    if (!isStateValid(in)) return false;
+    const double* pos = in + 4 * E_ + oddLen_;
     std::copy(in, in + 2 * E_, upLine_.begin());
     std::copy(in + 2 * E_, in + 4 * E_, dnEven_.begin());
     std::copy(in + 4 * E_, in + 4 * E_ + oddLen_, dnOdd_.begin());
-    upPos_ = up; dnPos_ = dn; oddPos_ = od;
+    upPos_ = int(pos[0]); dnPos_ = int(pos[1]); oddPos_ = int(pos[2]);
     return true;
 }
 
@@ -233,8 +242,14 @@ void HalfbandIir2x::getState(double* out) const noexcept {
         for (int i = 0; i < kMaxCoefs / 2; ++i) { *out++ = bank[i].x1; *out++ = bank[i].y1; }
 }
 
-bool HalfbandIir2x::setState(const double* in) noexcept {
+bool HalfbandIir2x::isStateValid(const double* in) const noexcept {
+    if (!in) return false;
     for (int k = 0; k < kStateSize; ++k) if (!std::isfinite(in[k])) return false;
+    return true;
+}
+
+bool HalfbandIir2x::setState(const double* in) noexcept {
+    if (!isStateValid(in)) return false;
     for (Ap* bank : {upA_, upB_, dnA_, dnB_})
         for (int i = 0; i < kMaxCoefs / 2; ++i) { bank[i].x1 = *in++; bank[i].y1 = *in++; }
     return true;
@@ -318,9 +333,22 @@ void Oversampler::getState(double* out) const noexcept {
     }
 }
 
+bool Oversampler::isStateValid(const double* in) const noexcept {
+    if (!in && stages_ != 0) return false;
+    for (int s = 0; s < stages_; ++s) {
+        if (family_ == OsFamily::Fir) {
+            if (!fir_[s].isStateValid(in)) return false;
+            in += fir_[s].stateSize();
+        } else {
+            if (!iir_[s].isStateValid(in)) return false;
+            in += HalfbandIir2x::kStateSize;
+        }
+    }
+    return true;
+}
+
 bool Oversampler::setState(const double* in) noexcept {
-    const int n = stateSize();
-    for (int k = 0; k < n; ++k) if (!std::isfinite(in[k])) return false;
+    if (!isStateValid(in)) return false;
     for (int s = 0; s < stages_; ++s) {
         if (family_ == OsFamily::Fir) { if (!fir_[s].setState(in)) return false; in += fir_[s].stateSize(); }
         else { if (!iir_[s].setState(in)) return false; in += HalfbandIir2x::kStateSize; }

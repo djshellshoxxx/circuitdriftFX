@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "inventory_date": "2026-11-19",
+  "main": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+  "candidate_base": "0c0d6897caf36d4057ac3d8db8cfb346dd5412b4",
+  "previous_engine_line": "71a263718ae7ac9ed0d4a75d624929489216ef53",
+  "branches": [
+    {
+      "branch": "chat/json-utf8-output-20261102",
+      "sha": "a7ff035393150edf435d7f517e8e15324eeb1325",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "a7ff035393150edf435d7f517e8e15324eeb1325",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 192
+    },
+    {
+      "branch": "chat/manifest-validation-20261102",
+      "sha": "706458154d7b4a24c4b17c24f1c4f7dda4f29ad4",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "706458154d7b4a24c4b17c24f1c4f7dda4f29ad4",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 193
+    },
+    {
+      "branch": "claude/busy-newton-z2ky46",
+      "sha": "ed81a92891b8c753951b6cbf2cc70f7b04871491",
+      "status": "divergent_requires_content_review",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 6,
+      "changed_paths_vs_candidate": 208
+    },
+    {
+      "branch": "claude/charming-lovelace-xsv4e5",
+      "sha": "71a263718ae7ac9ed0d4a75d624929489216ef53",
+      "status": "retained_in_previous_engine_line",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 62,
+      "changed_paths_vs_candidate": 342
+    },
+    {
+      "branch": "claude/circuitdriftfx-implementation-dknarc",
+      "sha": "c3b73d95b117b979be0c761573c49046a3df6e9e",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "c3b73d95b117b979be0c761573c49046a3df6e9e",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 206
+    },
+    {
+      "branch": "claude/continue-previous-work-mbfkit",
+      "sha": "80a59c81cf634cf6b18024f532ff9626cd944301",
+      "status": "divergent_requires_content_review",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 57,
+      "changed_paths_vs_candidate": 343
+    },
+    {
+      "branch": "claude/docs-screenshots",
+      "sha": "fc42ab2d216ef54e099dda3a5e23cad09b0a2c3f",
+      "status": "divergent_requires_content_review",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 1,
+      "changed_paths_vs_candidate": 191
+    },
+    {
+      "branch": "claude/funny-meitner-drdlot",
+      "sha": "7f395066f48a49da675cf36ab7461c554ef10d4e",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "7f395066f48a49da675cf36ab7461c554ef10d4e",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 204
+    },
+    {
+      "branch": "claude/zen-cannon-v5mb75",
+      "sha": "a9c633fd89585a61780f206e303fced1c79326d1",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "a9c633fd89585a61780f206e303fced1c79326d1",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 204
+    },
+    {
+      "branch": "codex/consolidated-continuation-20261030",
+      "sha": "156da435616037c3229fcd3c4e765b326b572340",
+      "status": "divergent_requires_content_review",
+      "merge_base_with_candidate": "404317a266e887207137f67e67d5d92056d6c8d3",
+      "commits_not_in_candidate": 1,
+      "changed_paths_vs_candidate": 201
+    },
+    {
+      "branch": "codex/reconcile-core-safety-20261030",
+      "sha": "2d048fe741f4bfa855e96eae2f60881c20276b52",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "2d048fe741f4bfa855e96eae2f60881c20276b52",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 194
+    },
+    {
+      "branch": "integrate/recover-round-two-fixes",
+      "sha": "e7a06a1d6eba875671ef6af92f35c9def978ab2a",
+      "status": "retained_in_previous_engine_line",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 59,
+      "changed_paths_vs_candidate": 337
+    },
+    {
+      "branch": "integrate/recover-ui-edit-wiring",
+      "sha": "7b21cfc16a37c87156f9e90e9639664213c404ee",
+      "status": "retained_in_previous_engine_line",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 61,
+      "changed_paths_vs_candidate": 342
+    },
+    {
+      "branch": "main",
+      "sha": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "status": "already_in_main",
+      "merge_base_with_candidate": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 191
+    },
+    {
+      "branch": "nodata/confident-fermat-xv16g0",
+      "sha": "0c0d6897caf36d4057ac3d8db8cfb346dd5412b4",
+      "status": "included_in_candidate_base",
+      "merge_base_with_candidate": "0c0d6897caf36d4057ac3d8db8cfb346dd5412b4",
+      "commits_not_in_candidate": 0,
+      "changed_paths_vs_candidate": 0
+    }
+  ],
+  "tags": [],
+  "policy": "Preserve source branches. Ancestry does not prove semantic uniqueness; divergent source needs file-level review. Do not merge incompatible engine architectures wholesale.",
+  "recovered_modules": [
+    {
+      "paths": [
+        "src/blueprint/BlueprintGraph.cpp",
+        "src/blueprint/BlueprintGraph.h",
+        "src/blueprint/Compiler.cpp",
+        "src/blueprint/Compiler.h",
+        "src/blueprint/Faults.cpp",
+        "src/blueprint/Faults.h",
+        "src/blueprint/Timeline.cpp",
+        "src/blueprint/Timeline.h"
+      ],
+      "from": "71a263718ae7ac9ed0d4a75d624929489216ef53",
+      "status": "imported_pending_build_review"
+    }
+  ]
+}

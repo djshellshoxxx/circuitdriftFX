@@ -1,4 +1,5 @@
 #include "ui/panels/PanelCommon.h"
+#include "ui/workbench/GestureMath.h"
 #include <algorithm>
 #include <cmath>
 
@@ -139,7 +140,8 @@ void ParamBinding::bind(const juce::String& paramId, std::function<void(float)> 
     attach_->sendInitialUpdate();
 }
 void ParamBinding::setComplete(float v) {
-    if (!attach_) return;
+    if (!attach_ || !std::isfinite(v)) return;
+    if (inPart_) { setPart(v); return; }
     bridge_.beginGesture(label_);
     attach_->setValueAsCompleteGesture(v);
     bridge_.endGesture();
@@ -150,7 +152,9 @@ void ParamBinding::beginPart() {
     bridge_.beginGesture(label_);
     attach_->beginGesture();
 }
-void ParamBinding::setPart(float v) { if (attach_) attach_->setValueAsPartOfGesture(v); }
+void ParamBinding::setPart(float v) {
+    if (attach_ && inPart_ && std::isfinite(v)) attach_->setValueAsPartOfGesture(v);
+}
 void ParamBinding::endPart() {
     if (!attach_ || !inPart_) return;
     attach_->endGesture();
@@ -193,12 +197,22 @@ ParamSlider::ParamSlider(EditorBridge& b, const juce::String& name, const juce::
         return unit.isNotEmpty() && !s.endsWithIgnoreCase(unit) ? s + " " + unit : s;
     };
     slider.valueFromTextFunction = [this](const juce::String& t) {
-        if (!binding.bound()) return 0.0;
-        return static_cast<double>(binding.parameter()->getValueForText(t.retainCharacters("0123456789.-+eE")));
+        const double current = slider.getValue();
+        if (!binding.bound() || t.trim() == slider.getTextFromValue(current).trim()) return current;
+        const auto& range = binding.parameter()->getNormalisableRange();
+        const auto value = parse_ ? parse_(t.toStdString())
+                                  : gesture::parseBoundedQuantity(t.toStdString(), binding.parameter()->getLabel().toStdString(),
+                                                                  range.start, range.end);
+        if (!value || !std::isfinite(*value) || *value < range.start || *value > range.end) return current;
+        return static_cast<double>(binding.parameter()->convertTo0to1(static_cast<float>(*value)));
     };
 }
 
-void ParamSlider::setDisplay(std::function<juce::String(double)> f) { fmt_ = std::move(f); slider.updateText(); }
+void ParamSlider::setDisplay(std::function<juce::String(double)> f, PlainParser parser) {
+    fmt_ = std::move(f);
+    parse_ = std::move(parser);
+    slider.updateText();
+}
 
 void ParamSlider::bind(const juce::String& id) {
     binding.bind(id, [this](float v) {

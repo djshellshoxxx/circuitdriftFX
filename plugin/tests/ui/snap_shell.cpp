@@ -244,6 +244,14 @@ void testBehaviour(test::FakeBridge& bridge, const juce::File& outDir) {
         check(k->isEntryOpen(), "Enter opens numeric entry");
         k->closeEntry();
         check(!k->commitText("abc"), "invalid text rejected");
+        check(k->commitText("45.321 %"), "precise percentage input accepted");
+        const double precise = getParam(bridge, "macro.age");
+        check(k->commitText(sh::formatValue(sh::Fmt::Percent, k->getValue())) &&
+                  getParam(bridge, "macro.age") == precise,
+              "unchanged rounded knob text preserves exact parameter");
+        for (const auto* bad : {"1 0", "1e 2", "+-1", "45 junk", "nan", "1e999", "101 %"})
+            check(!k->commitText(bad) && getParam(bridge, "macro.age") == precise,
+                  juce::String("malformed knob input preserves parameter: ") + bad);
         k->keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
         check(std::abs(getParam(bridge, "macro.age")) < 1e-6, "Delete resets to default");
     }

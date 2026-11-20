@@ -4,7 +4,9 @@
 // - File format: "CDC1\n" + sha256(payload) hex + "\n" + payload. Read recomputes the digest and
 //   deletes entries that fail (Corrupt). Content is still fully re-validated by the client before use.
 // - Writes go to an exclusively named temp file in the same directory, are flushed and closed, then
-//   renamed over the destination (atomic replace); failed writes remove the temp file.
+//   renamed over the destination (atomic replace); failed writes remove only their own temp file.
+//   The configured directory must be trusted (not concurrently modified by another process).
+//   Entry symlinks are ignored/rejected; existing destination links are replaced, not followed.
 // - LRU by access order (in memory, seeded from file mtimes at open); unpinned entries are evicted
 //   first-in-LRU until the cap holds. Pins are persisted as "<name>.pin" marker files.
 // - Imported presets are embedded in project state independently; this cache is only a convenience.
@@ -34,7 +36,7 @@ bool isSafeIdentifier(std::string_view s) noexcept;
 class OfflineCache {
 public:
     explicit OfflineCache(CacheConfig cfg) : cfg_(std::move(cfg)) {}
-    bool open(std::string& error);  // creates the directory, removes stale temp files, scans entries
+    bool open(std::string& error);  // creates the directory and scans entries; unrelated files stay untouched
     CacheGet get(std::string_view id, std::string_view rev, std::string& bytes);
     bool put(std::string_view id, std::string_view rev, std::string_view bytes, std::string& error);
     bool remove(std::string_view id, std::string_view rev);
@@ -46,13 +48,13 @@ public:
 
 private:
     struct Entry { std::size_t size = 0; std::uint64_t lastUse = 0; bool pinned = false; };
-    void evictLocked(const std::string& keep);
+    bool evictLocked(const std::string& keep, std::size_t incomingBytes, std::string& error);
     CacheConfig cfg_;
     bool opened_ = false;
     mutable std::mutex m_;
     std::map<std::string, Entry> entries_;
     std::size_t total_ = 0;
-    std::uint64_t clock_ = 0, tmpCounter_ = 0;
+    std::uint64_t clock_ = 0;
 };
 
 }  // namespace cd::community
