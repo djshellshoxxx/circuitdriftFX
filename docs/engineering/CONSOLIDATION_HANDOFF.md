@@ -122,3 +122,36 @@ continuity remain limited or open. The build/license decision has evidence in
 ADR-0001; do not repeat the old claim that no dependency/license decision exists.
 
 No release or deployment is part of this checkpoint.
+
+## 2026-11-19 hourly follow-up: isolated seek/pitch generation fix
+
+A separate, non-overlapping child branch `codex/cdfx-seek-epoch-20261119` was
+created from PR #16 exact head `e721e9eea044b352546abd3a1b945fa1f3745038`
+to preserve its running Windows qualification. Engineering commit
+`edf0c21bc8b26ca928f0df8b5ed3d0459d02275c` adds a bounded, atomic
+producer-side pitch discontinuity marker, a worker-side queued-sample flush,
+generation-tagged publications and runtime epoch detection. Its new detector
+and runtime tests cover immediate stale-result invalidation, queued pre-seek
+discard/reacquisition, zero-frame epoch changes and callback allocation limits.
+
+**This child commit has not yet passed CI or been incorporated into PR #16.**
+At inspection the exact PR #16 head passed Linux and its Windows job was still
+building the plugin; do not cancel that run with a ref move. Once that exact-head
+Windows run finishes, investigate failures using its job log (or record timeout),
+review the child patch independently, run affected tests, and only then
+fast-forward the PR continuation ref with a checked expected SHA. Any new PR CI
+run qualifies only its own SHA. Native plugin/host validation and independent
+code/bug/security reviewer signoffs remain open. No worker spawn facility was
+available in this automation environment, so this entry does not claim those
+reviews.
+
+Pitch-epoch limitation: hosts that do not supply sample-position discontinuities
+cannot be inferred to have sought; the adapter may need explicit host transport
+callbacks. If a seek races a worker already consuming a chunk, generation checks
+hide its old publications, but some just-after-seek samples may be dropped until
+the worker observes the new generation. Reacquisition is from subsequently
+accepted post-seek samples; no audio-thread filter reset is performed.
+
+The earlier PR #9/#10/#14 item-level reconciliation and custom editor transaction
+layer remain separate. Do not treat this follow-up as source integration of those
+APIs. Preserve original development branches and core acceptance criteria.
