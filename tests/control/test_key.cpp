@@ -1,6 +1,7 @@
 // T12 (key/scale part): scale quantization, tie/hysteresis determinism, MIDI source timing, scale lock.
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 #include "TestHarness.h"
 #include "control/ControlProcessor.h"
@@ -84,6 +85,39 @@ static void tiesAndHysteresis() {
     q.decide(70.0);
     q.configure(scale::maskFor(1, 0), 0);  // Bb not in C major
     CHECK(q.decide(70.0) == 69, "reconfigured scale re-decides (tie lower)");
+}
+
+static void reconfigurationKeepsGlide() {
+    auto checkChange = [](uint16_t beforeMask, int beforeRoot, double beforePitch,
+                          uint16_t afterMask, int afterRoot, double afterPitch, int nextNote) {
+        ResonanceQuantizer q;
+        q.configure(beforeMask, beforeRoot);
+        const double before = q.update(beforePitch, 0.0);
+        q.configure(afterMask, afterRoot);
+        CHECK(q.update(afterPitch, 0.0) == before, "reconfiguration advances no glide time");
+        CHECK(q.note() == nextNote, "new scale decision is immediate: %d expected %d", q.note(), nextNote);
+        CHECK(std::fabs(q.update(afterPitch, 0.025) - (before + nextNote) * 0.5) < 1e-12,
+              "reconfigured note halfway at 25 ms: %g", q.glided());
+        CHECK(q.update(afterPitch, 0.025) == nextNote, "reconfigured note reaches target at 50 ms");
+    };
+    checkChange(scale::kChromatic, 0, 70.0, scale::maskFor(1, 0), 0, 70.0, 69);
+    checkChange(scale::maskFor(1, 0), 0, 71.0, scale::maskFor(1, 0), 1, 71.0, 70);
+    checkChange(scale::kChromatic, 0, 70.0, uint16_t((1u << 9) | (1u << 11)), 0, 70.0, 69);
+
+    ResonanceQuantizer q;
+    q.update(60.0, 0.0);
+    CHECK(q.update(70.0, 0.025) == 65.0, "initial glide midpoint");
+    q.configure(scale::maskFor(1, 0), 0);
+    CHECK(q.update(70.0, 0.0) == 65.0 && q.note() == 69, "mid-glide scale change keeps current pitch");
+    CHECK(q.update(70.0, 0.025) == 67.0, "replacement glide starts from interrupted position");
+    CHECK(q.update(70.0, 0.025) == 69.0, "replacement glide reaches target after 50 ms");
+
+    q.reset();
+    q.configure(scale::maskFor(1, 0), 0);
+    CHECK(q.update(70.0, 0.0) == 69.0, "genuine first note still initializes immediately");
+    q.update(72.0, 0.025);
+    q.configure(scale::kChromatic, 0);  // the current target remains allowed
+    CHECK(q.update(72.0, 0.025) == 72.0, "compatible reconfiguration does not restart an active glide");
 }
 
 static MidiEvent ev(uint32_t f, uint8_t st, uint8_t d1, uint8_t d2) { MidiEvent e; e.frame = f; e.status = st; e.data1 = d1; e.data2 = d2; return e; }
@@ -182,7 +216,7 @@ static void processorLock() {
     cp.prepare(fs, 480, 99);
     core::ParamValues p = core::defaultValues();
     const auto fIdx = core::indexOf("slot.a.filter.lpfFrequency");
-    p[fIdx] = 1000.0;
+    p[fIdx] = 2000.0;  // valid registry endpoint
     p[core::indexOf("key.enabled")] = 1;
     p[core::indexOf("key.scale")] = 1;   // major
     p[core::indexOf("key.root")] = 0;    // C
@@ -195,7 +229,7 @@ static void processorLock() {
         int settled = 0;
         for (int b = 0; b < 600; ++b) {
             runProcessor(cp, p, 1, 480, mb);
-            const double midi = scale::hzToMidi(1000.0 * std::exp2(mb.slot[0].creativeCutoffOct));
+            const double midi = scale::hzToMidi(2000.0 * std::exp2(mb.slot[0].creativeCutoffOct));
             if (std::fabs(midi - std::round(midi)) < 1e-6) {
                 ++settled;
                 CHECK(scale::isAllowed(scale::maskFor(1, 0), 0, int(std::lround(midi))), "settled note in scale: %g", midi);
@@ -209,31 +243,117 @@ static void processorLock() {
     runProcessor(cp, p, 400, 480, mb);
     CHECK(!cp.status().pitchDriftHeld && mb.slot[0].creativeDelayMs != 0.0, "delay released when lock off");
 
-    // MIDI reference: held note E4 (64) moves the resonance reference there (drift 0).
+    // MIDI reference: held E5 (76) is inside the valid 2 kHz base's modulation range.
     ControlProcessor c2;
     c2.prepare(fs, 480, 5);
     core::ParamValues q = core::defaultValues();
-    q[fIdx] = 1000.0;
+    q[fIdx] = 2000.0;
     q[core::indexOf("key.enabled")] = 1;
     q[core::indexOf("key.source")] = 1;
     q[core::indexOf("key.scale")] = 0;
-    std::vector<MidiEvent> on{ev(0, 0x90, 64, 100)};
+    std::vector<MidiEvent> on{ev(0, 0x90, 76, 100)};
     runProcessor(c2, q, 200, 480, mb, &on);
-    const double fNote = scale::midiToHz(64.0);
-    CHECK(std::fabs(th::cents(1000.0 * std::exp2(mb.slot[0].creativeCutoffOct), fNote)) < 0.01, "MIDI note reference");
-    std::vector<MidiEvent> off{ev(0, 0x80, 64, 0)};
+    const double fNote = scale::midiToHz(76.0);
+    CHECK(std::fabs(th::cents(2000.0 * std::exp2(mb.slot[0].creativeCutoffOct), fNote)) < 0.01, "MIDI note reference");
+    std::vector<MidiEvent> off{ev(0, 0x80, 76, 0)};
     runProcessor(c2, q, 1, 480, mb, &off);
     runProcessor(c2, q, 150, 480, mb);  // 1.5 s: hold 0.5 + return 0.1 + settle
     CHECK(c2.status().keyState == KeyState::ManualReference, "returned to manual");
-    CHECK(std::fabs(th::cents(1000.0 * std::exp2(mb.slot[0].creativeCutoffOct), scale::midiToHz(std::round(scale::hzToMidi(1000.0))))) < 0.01,
+    CHECK(std::fabs(th::cents(2000.0 * std::exp2(mb.slot[0].creativeCutoffOct), scale::midiToHz(std::round(scale::hzToMidi(2000.0))))) < 0.01,
           "manual reference quantized to chromatic note");
+}
+
+// Independent oracle: enumerate every allowed integer note in the admitted filter
+// octaves. This is deliberately not implemented by clamping an unbounded note.
+static double stablePitch(double hz, double a4) {
+    return 69.0 + 12.0 * (std::log2(hz) - std::log2(a4));
+}
+
+static int admittedNote(double target, double lowHz, double highHz, double a4, uint16_t mask, int root) {
+    int best = 0;
+    double distance = std::numeric_limits<double>::infinity();
+    const int first = int(std::ceil(stablePitch(lowHz, a4)));
+    const int last = int(std::floor(stablePitch(highHz, a4)));
+    for (int n = first; n <= last; ++n) {
+        if (!scale::isAllowed(mask, root, n)) continue;
+        const double d = std::fabs(target - n);
+        if (d < distance) { distance = d; best = n; }
+    }
+    CHECK(std::isfinite(distance), "admitted filter range contains an allowed note");
+    return best;
+}
+
+static void processorAdmittedOctaves() {
+    struct Case { double fs, base; int source, note, scaleIndex, root; uint16_t mask; };
+    const Case cases[] = {
+        {48000, 18000, 1, 60, 0, 0, 4095},  // low MIDI / high valid base
+        {48000, 2000, 1, 127, 0, 0, 4095},  // high MIDI / low valid base
+        {48000, 2000, 1, 60, 0, 0, 4095},   // valid effective cutoff below knob minimum
+        {8000, 20000, 0, 0, 0, 0, 4095},    // manual base above the Nyquist safety ceiling
+        {8000, 20000, 1, 127, 0, 0, 4095},  // MIDI above that ceiling
+        {8000, 18000, 1, 60, 0, 0, 4095},   // low MIDI remains reachable after ceiling admission
+        {48000, 18000, 1, 60, 5, 0, 1},     // C only: first allowed note is far from the boundary
+        {8000, 20000, 1, 127, 5, 1, 1}      // C# only, restricted by the low-Fs ceiling
+    };
+    for (const auto& test : cases) {
+        ControlProcessor cp;
+        cp.prepare(test.fs, 480, 5);
+        auto p = core::defaultValues();
+        p[core::indexOf("slot.a.filter.lpfFrequency")] = test.base;
+        p[core::indexOf("key.enabled")] = 1;
+        p[core::indexOf("key.source")] = test.source;
+        p[core::indexOf("key.scale")] = test.scaleIndex;
+        p[core::indexOf("key.root")] = test.root;
+        p[core::indexOf("key.mask")] = test.mask;
+        std::vector<MidiEvent> on{ev(0, 0x90, uint8_t(test.note), 100)};
+        core::ModulationBlock out;
+        runProcessor(cp, p, 30, 480, out, test.source ? &on : nullptr);
+        const double effectiveBase = std::min(test.base, 0.45 * test.fs);
+        const double lo = effectiveBase * 0.25, hi = std::min(effectiveBase * 4.0, 0.45 * test.fs);
+        const double manual = stablePitch(effectiveBase, 440.0);
+        const auto mask = scale::maskFor(test.scaleIndex, test.mask);
+        const int expected = admittedNote(test.source ? test.note : manual, lo, hi, 440.0, mask, test.root);
+        const double gotHz = effectiveBase * std::exp2(out.slot[0].creativeCutoffOct);
+        CHECK(out.slot[0].creativeCutoffOct >= -2.0 && out.slot[0].creativeCutoffOct <= 2.0,
+              "bounded emitted offset for Fs=%g base=%g: %g", test.fs, test.base, out.slot[0].creativeCutoffOct);
+        CHECK(gotHz >= lo - 1e-8 && gotHz <= hi + 1e-8, "locked cutoff stays in admitted range: %g [%g,%g]", gotHz, lo, hi);
+        CHECK(std::fabs(th::cents(gotHz, scale::midiToHz(expected))) < 0.01,
+              "nearest admitted note Fs=%g base=%g note=%d got=%g", test.fs, test.base, expected, gotHz);
+    }
+
+    for (double a4 : {std::numeric_limits<double>::denorm_min(), std::numeric_limits<double>::min(),
+                      std::numeric_limits<double>::max(), 1.0, 432.0, 440.0}) {
+        for (int source : {0, 1}) {
+            ControlProcessor cp;
+            cp.prepare(8000, 80, 5);
+            cp.setReferenceTuning(a4);
+            auto p = core::defaultValues();
+            p[core::indexOf("key.enabled")] = 1;
+            p[core::indexOf("key.source")] = source;
+            p[core::indexOf("key.scale")] = 5;
+            p[core::indexOf("key.mask")] = 1;  // one allowed pitch class still has a valid octave
+            std::vector<MidiEvent> on{ev(0, 0x90, 60, 100)};
+            core::ModulationBlock out;
+            runProcessor(cp, p, 30, 80, out, source ? &on : nullptr);
+            const double manual = stablePitch(3600.0, a4);
+            const int expected = admittedNote(source ? 60.0 : manual, 900.0, 3600.0, a4, 1, 0);
+            const double gotOffset = out.slot[0].creativeCutoffOct;
+            CHECK(std::isfinite(gotOffset) && gotOffset >= -2.0 && gotOffset <= 0.0,
+                  "positive finite A4 retains bounded cutoff: A4=%g offset=%g", a4, gotOffset);
+            // Comparing in semitones avoids overflowing A4*exp2(...) for tiny/huge tunings.
+            CHECK(std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 < 0.01,
+                  "positive finite A4 settles to admitted note: A4=%g source=%d", a4, source);
+        }
+    }
 }
 
 int main() {
     scalesSettle();
     tiesAndHysteresis();
+    reconfigurationKeepsGlide();
     midiTimings();
     processorLock();
+    processorAdmittedOctaves();
     if (g_fail) { std::printf("key: %d failure(s)\n", g_fail); return 1; }
     std::printf("key: all passed\n");
     return 0;
