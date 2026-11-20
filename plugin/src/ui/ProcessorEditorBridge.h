@@ -13,6 +13,7 @@
 namespace cd::plugin {
 class CircuitDriftProcessor;
 class BlueprintValidationService;
+class GifCaptureSession;
 
 class ProcessorEditorBridge final : public EditorBridge {
 public:
@@ -90,6 +91,7 @@ private:
     state::PresetLibrary presetLibrary_;
     juce::String catalogMessage_;
     std::unique_ptr<BlueprintValidationService> blueprintValidator_;
+    std::unique_ptr<GifCaptureSession> gifCapture_;
     ValidationContext validationContext_{};
     int editSlot_ = 0;
     bool gestureOpen_ = false;
