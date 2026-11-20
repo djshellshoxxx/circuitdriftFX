@@ -37,8 +37,9 @@ suites, 129.24 s at 00e2957), followed by versioned engine checkpoint rejection.
 The new [typed control snapshot API](engineering/CONTROL_SNAPSHOTS.md) supports
 Manual/MIDI without harmonic maps. Independent component tests reproduced and
 fixed drift's missing rate identity; 10/10 component/affected suites pass in
-21.15 s at 3fb0846. All R29–R32 workers completed. Fresh R33 aggregate reviews and
-independent test authoring are active; aggregate behavior is not yet qualified.
+21.15 s at 3fb0846. All R29–R33 workers completed; final source reviews found no
+additional actionable defect, and the independent aggregate suite passes 1/1 in
+0.33 s at 787fe55 with unchanged application code.
 Six native plugin/editor suites pass in 57.40 s at the same source 3fb0846.
 Complete sound-preset transactions, Blueprint Apply, dynamic
 session/seed continuity, MP4 and remaining services, physical calibration and

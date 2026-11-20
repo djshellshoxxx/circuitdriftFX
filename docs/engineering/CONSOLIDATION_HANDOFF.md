@@ -7,12 +7,12 @@ Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
 Read its live head before a guarded forward update. Original source branches
 and `main` at `44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6` are preserved.
 
-Current local source is `3fb0846ff0673ea70bb94c404e6f68ce7045cc28`, corresponding
-remote Git object `964eb787e538fc1260098d01e096e3ca5fb51d17`, tree
-`460f96bdf87dbfa3f063969027c75f127246e8a4`. The published branch still points to
-`6f26b38827b849e9f89c15613f63726036e8c26b` while aggregate qualification is active.
+Current qualified local source is `787fe55ed21bc623b88e3567333ab9b436a694ac`,
+corresponding remote source `3993ca0557ebae63a3968c4d4383262357147ebb`, tree
+`31980e244afff8225cca93a53908cb96e2890ed9`. The containing publication adds
+completed qualification and handoff documents; read live PR16 for its head.
 The [control source map](../evidence/commit-map-control-checkpoints-2026-11-20.json)
-records exact complete tree equality; creating source objects has not moved the branch.
+records exact complete tree equality. Every branch advance uses a fresh expected SHA.
 
 R30 repaired ignored-MIDI processing boundaries, preserved scale/root glides,
 selected notes in the effective cutoff domain, and preserved/bounded sidechain
@@ -25,10 +25,10 @@ Fixed-size [control snapshots](CONTROL_SNAPSHOTS.md) now compose six components
 for Manual/MIDI with no harmonic-map lifetime. All R32 reviewers completed;
 their shared drift-rate finding reproduced 28 assertions before repair. The
 fixed component suite and nine affected suites pass **10/10 in 21.15 s** at
-3fb0846. The aggregate compiles; fresh R33 code/security review and aggregate
-behavioral test authoring are active. Six native plugin/editor suites pass
-**6/6 in 57.40 s** at the same source 3fb0846; aggregate behavior remains a
-separate pending gate.
+3fb0846. All fresh R33 workers completed without an additional production repair
+request. The independent aggregate suite passes **1/1 in 0.33 s** at 787fe55.
+Six native plugin/editor suites pass **6/6 in 57.40 s** at 3fb0846. Root verified
+identical application/native-test inputs between those source pins.
 Root owns all compiler/test execution and integration. Read the
 [R29–R33 audit](../audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md) and
 [execution evidence](../evidence/control-checkpoints-2026-11-20-r30-r33.json).
@@ -59,9 +59,9 @@ reread at ecae510 and remains intact.
 
 The preceding publication 338e952 has separate 31/31 sanitized core and 6/6 native
 baseline evidence. Those results are not relabeled as a new full-core GIF run.
-All R25–R32 worker sets completed before their successors began. R26 build-gate
+All R25–R33 worker sets completed before their successors began. R26 build-gate
 and R28 host-fallback reviews found no new actionable issue in assigned scopes.
-Current R33 ownership and remaining snapshot boundaries are described above.
+Completed R33 ownership and remaining snapshot boundaries are described above.
 
 ## Consolidated sources and ownership
 
@@ -240,12 +240,12 @@ PowerShell is unavailable. Exact-source Windows and real pluginval remain open.
 1. Read the live PR #16 head and exact-head CI; repair concrete failures without
    relaxing assertions or acceptance gates. Use an expected old SHA and forward
    ref update, preserving concurrent work and original branches.
-2. Complete fresh R33 aggregate reviews and independent continuation/rejection
-   tests, execute the current native gate, and publish the qualified checkpoint.
-   Preserve validation-before-mutation, preparation/reset identity, pending-setting
-   history and explicit audio/map exclusions. The component tests already pass;
-   do not relabel that result as aggregate behavior or full G12 completion.
-   The host restoration repair remains complete at its recorded source.
+2. Hand the completed R33 checkpoint to a fresh code, bug and defensive set for
+   engine/runtime snapshot composition. Inspect pending condition publication,
+   prepared warm/cold reset state, complete dynamic continuation and capture
+   storage before adding a coordinated API. Preserve validation-before-mutation,
+   pending-setting history and explicit audio/map exclusions. The aggregate is
+   qualified in its stated domain; full G12 and host persistence remain open.
 3. Complete runtime/control/engine/seed checkpoint capture, host-thread handoff,
    stopped-audio restore, compatibility/migration and coordinated dynamic A/B.
    Sound-preset Load/Save and complete scene transactions depend on that contract.

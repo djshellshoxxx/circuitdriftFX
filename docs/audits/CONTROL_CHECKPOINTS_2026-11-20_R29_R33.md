@@ -129,17 +129,45 @@ One compiler and serial suites are used. No test threshold was relaxed.
 | `bef8d07` | Engine checkpoint rejection and unchanged-state regression | 1/1 passed, 0.88 s |
 | `921240b` | Independent six-component snapshot suite before the rate fix | Expected failure: 28 assertions, 0.06 s |
 | `3fb0846` | Fixed component suite plus nine affected existing suites | 10/10 passed, 21.15 s |
+| `787fe55` | Independent aggregate continuation/rejection suite | 1/1 passed, 0.33 s |
 
-The last row compiles the aggregate API but does not execute its new aggregate
-behavioral suite, which is still being written by the fresh R33 bug/test worker.
-R33 code and defensive security reviews are also active on source `09f0024`, tree
-`5cd5509a897de11bced6a07acc8d3fb3faea2762`. Root owns build/test execution and
-integration. All six native plugin/editor targets rebuilt with Clang 19.1.7,
+All six native plugin/editor targets rebuilt with Clang 19.1.7,
 Custom `-O0 -g0 -DNDEBUG`, pinned JUCE and no sanitizers; **6/6 passed in 57.40 s**
 at the same source 3fb0846. This checks existing processor/editor integration
 after the control changes and ABI additions. It does not independently exercise
-the new aggregate API. Neither this native result nor R30's eleven-suite run
-is relabeled as aggregate behavioral qualification.
+the new aggregate API. Its separate behavioral result is the final table row.
+Application and native test sources are unchanged between 3fb0846 and 787fe55;
+root verified that boundary with an empty source diff. Earlier test results
+retain their original source identities.
+
+## R33 completed aggregate handoff
+
+All three fresh workers completed before the next set. The read-only code and
+defensive reviewers checked source `09f0024b3f764f9d07c2e396ea8f9b868d7d4ab2`,
+tree `5cd5509a897de11bced6a07acc8d3fb3faea2762`, and found no additional actionable
+defect in the supported contract. They verified complete continuation state,
+pure preflight before mutation, unchanged preparation during component commits,
+exact pending-setting normalization, reset identity, independent clocks and the
+explicit Audio/map exclusions. These are source-review conclusions, not worker
+execution claims.
+
+The bug/test worker supplied independent commit
+`ba36f603677710214b92da99f6e2524fe0e72fb8`; root integrated it at 787fe55, built it
+and executed `control_checkpoint`. The suite compares an independently advanced
+live reference with the receiving processor, including every modulation scalar,
+valid sample span, status field and semantic snapshot field. Fresh/warm/reset
+captures at 44,100.5 and 48,000 Hz cover sustain, full hold/return, tempo and
+zero-frame caches, detector histories, pending normalized budget/extreme tuning
+and independent drift streams. Twenty-three bounded candidate mutations verify
+the stated rejection reason, complete unchanged state and unchanged future.
+Unprepared/Audio/map exclusions also preserve the capture destination.
+
+Accepted and rejected aggregate calls used no observed ordinary/nothrow C++
+`new`/`new[]` allocation in the calibrated fixture. Pitch-worker calls are
+sequential; concurrent execution, other allocation entry points, locking, I/O
+and scheduling are not instrumented. The final R33 set has no outstanding repair
+request. Coordinated engine/runtime capture, pending condition ownership,
+prepared reset identity and host persistence are the next substantive scope.
 
 Windows validator fixtures, real two-product pluginval, real-host/performance
 qualification and the separate open feature gates retain their prior limits.

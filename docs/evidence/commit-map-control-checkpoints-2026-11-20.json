@@ -1,7 +1,7 @@
 {
   "date": "2026-11-20",
   "repository": "djshellshoxxx/circuitdriftFX",
-  "scope": "Verified complete local/remote Git-object trees through control snapshot source3fb0846. Objects are prepared for the next guarded PR16 update; the branch still publishes6f26b388 until that update is verified.",
+  "scope": "Verified complete local/remote Git-object trees through qualified control snapshot source787fe55. The containing documentation publication records the qualification; its final branch head is read live and advanced only with an expected-SHA guard.",
   "commits": [
     {
       "local": "bd378a62ad51cea18139fff615c9b987a139ada1",
@@ -470,6 +470,34 @@
         "24be0fc220e9362d3f538a0c80515151bad5d487"
       ],
       "message": "merge: integrate rate-qualified aggregate control snapshots"
+    },
+    {
+      "local": "147d919b0996626808ba0b02a25e9589884efcfd",
+      "remote": "7f89cc273dbb03c0ba76c6460e741e816c8ed813",
+      "tree": "dedf4bc8f188a868e9e2db9fe89a9ccd6c9a19c7",
+      "parents": [
+        "964eb787e538fc1260098d01e096e3ca5fb51d17"
+      ],
+      "message": "docs: qualify repaired controls and component snapshot continuation"
+    },
+    {
+      "local": "ba36f603677710214b92da99f6e2524fe0e72fb8",
+      "remote": "97d82d66dd4941776f5fb545274f2ef22d2df679",
+      "tree": "c7e2dadc8b5eb6ebdc3bb8d1663041326de15d8b",
+      "parents": [
+        "24be0fc220e9362d3f538a0c80515151bad5d487"
+      ],
+      "message": "test(control): verify aggregate snapshot continuation and atomic rejection"
+    },
+    {
+      "local": "787fe55ed21bc623b88e3567333ab9b436a694ac",
+      "remote": "3993ca0557ebae63a3968c4d4383262357147ebb",
+      "tree": "31980e244afff8225cca93a53908cb96e2890ed9",
+      "parents": [
+        "7f89cc273dbb03c0ba76c6460e741e816c8ed813",
+        "97d82d66dd4941776f5fb545274f2ef22d2df679"
+      ],
+      "message": "merge: add independent aggregate control checkpoint qualification"
     }
   ]
 }

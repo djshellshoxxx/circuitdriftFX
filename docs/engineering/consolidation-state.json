@@ -8,11 +8,11 @@
     "date": "2026-11-20",
     "branch": "codex/cdfx-consolidation-20261119",
     "local_branch": "codex/cdfx-integration-20261120-round14",
-    "local_source_head": "3fb0846ff0673ea70bb94c404e6f68ce7045cc28",
-    "source_head": "964eb787e538fc1260098d01e096e3ca5fb51d17",
-    "source_tree": "460f96bdf87dbfa3f063969027c75f127246e8a4",
-    "source_head_difference": "Current local implementation and exact remote Git object; branch publication remains6f26b38827b849e9f89c15613f63726036e8c26b while independent aggregate qualification is active.",
-    "stage": "control_components_and_native_validated_aggregate_test_authoring_active",
+    "local_source_head": "787fe55ed21bc623b88e3567333ab9b436a694ac",
+    "source_head": "3993ca0557ebae63a3968c4d4383262357147ebb",
+    "source_tree": "31980e244afff8225cca93a53908cb96e2890ed9",
+    "source_head_difference": "The tested source includes the independent aggregate suite. The containing publication adds its evidence and completed handoff documents; read live PR16 for that commit SHA.",
+    "stage": "control_snapshot_locally_qualified",
     "validation": {
       "control_repairs": {
         "name": "control-r30-fixed",
@@ -176,9 +176,38 @@
         "remote_source_sha": "964eb787e538fc1260098d01e096e3ca5fb51d17"
       },
       "aggregate_behavior": {
-        "status": "test_authoring_active",
-        "worker": "aggregate_bug_tests_r33",
-        "reviewed_source": "09f0024b3f764f9d07c2e396ea8f9b868d7d4ab2"
+        "name": "control-checkpoint-r33",
+        "purpose": "Independent aggregate control continuation, failure atomicity and supported-domain qualification",
+        "source_sha": "787fe55ed21bc623b88e3567333ab9b436a694ac",
+        "remote_source_sha": "3993ca0557ebae63a3968c4d4383262357147ebb",
+        "source_tree": "31980e244afff8225cca93a53908cb96e2890ed9",
+        "worker_test_sha": "ba36f603677710214b92da99f6e2524fe0e72fb8",
+        "junit_timestamp": "2026-11-20T11:43:04",
+        "suites": 1,
+        "failed_suites": 0,
+        "ctest_wall_seconds": 0.33,
+        "cases": [
+          {
+            "name": "control_checkpoint",
+            "seconds": 0.322534,
+            "status": "run"
+          }
+        ],
+        "ctest_regex": "^control_checkpoint$",
+        "log": "control-checkpoint-r33.log",
+        "junit": "control-checkpoint-r33.xml",
+        "coverage": [
+          "Independent live-reference exact comparison of every modulation scalar, valid sample span, status and semantic snapshot field",
+          "Fresh/warm/reset continuation at44100.5 and48000Hz; complete sustain/hold/return history, tempo seek/fallback/zero-frame cache, detector histories and independent drift streams",
+          "Pending normalized budget and extreme positive tuning remain independent of historical applied/cache state",
+          "23 bounded candidate mutations; complete-state and independent future comparison after rejection",
+          "Failed capture destination unchanged; unprepared, Audio enabled/disabled and pending/in-use/retained map exclusion",
+          "Calibrated ordinary/nothrow C++ new/new[] observation over accepted and rejected snapshot operations"
+        ],
+        "limits": [
+          "Pitch worker fixtures are sequential; no concurrent worker execution or scheduling instrumentation.",
+          "No malloc/aligned-allocation/lock/I/O instrumentation. Typed values only; no serialized-byte or coordinated runtime/host qualification."
+        ]
       },
       "native": {
         "name": "control-snapshots-r33-native",
@@ -232,15 +261,21 @@
         "junit": "control-snapshots-r33-native.xml",
         "build_note": "All six targets linked serially. The first tool session became unavailable after11/40 steps; resumed incremental build completed with exit0. Application source stayed3fb0846; no assertion changed. Existing u8path deprecation and unused kElemFam warnings remain."
       },
-      "evidence": "docs/evidence/control-checkpoints-2026-11-20-r30-r33.json"
+      "evidence": "docs/evidence/control-checkpoints-2026-11-20-r30-r33.json",
+      "source_equivalence": {
+        "earlier_source": "3fb0846ff0673ea70bb94c404e6f68ce7045cc28",
+        "aggregate_test_source": "787fe55ed21bc623b88e3567333ab9b436a694ac",
+        "command": "git diff --exit-code 3fb0846ff0673ea70bb94c404e6f68ce7045cc28 787fe55ed21bc623b88e3567333ab9b436a694ac -- src plugin/src plugin/tests",
+        "result": "exit0; application and native test inputs identical. Only aggregate test registration/source and evidence/docs were added. Earlier10-suite/native runs retain their original source pins."
+      }
     },
     "publication": {
       "pr": 16,
       "branch": "codex/cdfx-consolidation-20261119",
-      "published_head": "6f26b38827b849e9f89c15613f63726036e8c26b",
       "guard": "Fresh live head; expected_sha; force=false; preserve concurrent advancement.",
       "commit_map": "docs/evidence/commit-map-control-checkpoints-2026-11-20.json",
-      "source_objects": "Full local/remote tree equality verified for mapped source commits; current feature objects do not yet advance the branch."
+      "source_objects": "Full local/remote tree equality verified for all mapped source commits. Containing publication advances only after its own exact tree check.",
+      "previous_published_head": "6f26b38827b849e9f89c15613f63726036e8c26b"
     },
     "record": "docs/engineering/CONSOLIDATION_HANDOFF.md"
   },
@@ -528,11 +563,11 @@
     },
     {
       "path": "docs/audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md",
-      "scope": "R30 three control repairs, R31 engine algorithm identity, R32 component snapshots; fresh R33 aggregate reviews/test authoring active."
+      "scope": "R29-R33 completed: repaired controls, engine algorithm identity, component rate identity and qualified aggregate snapshots; no outstanding repair request from final R33 workers."
     }
   ],
   "remaining_work": [
-    "Complete R33 aggregate continuation/rejection suite, fresh reviews and current native qualification before the next guarded PR16 publication",
+    "Guarded publication of the qualified R33 checkpoint, then fresh code/bug/defensive work on coordinated engine/runtime checkpoint prerequisites",
     "Linux/Windows/pluginval CI for the containing publication; execute the Windows shared-validator fixtures and real two-product validator",
     "Coordinated dynamic runtime/control/engine/seed capture, compatible restore, explicit incompatible-session fallback and host persistence (G12)",
     "Audio-pitch worker and harmonic-map checkpoint contracts; direct KeyTracker pitches beyond the admitted snapshot domain",
@@ -1420,15 +1455,13 @@
       29,
       30,
       31,
-      32
+      32,
+      33
     ],
-    "current_round": 33,
-    "workers": [
-      "aggregate_code_audit_r33",
-      "aggregate_bug_tests_r33",
-      "aggregate_security_audit_r33"
-    ],
+    "current_round": null,
+    "workers": [],
     "ownership": "Root owns all compiler/test execution, production integration and publication. Fresh workers perform read-only code/security reviews and isolated test-only authoring.",
-    "scope": "Manual/MIDI fixed-size control snapshots only; Audio and all harmonic-map lifetimes explicitly excluded. No coordinated runtime/host session or full G12 completion claim."
+    "scope": "Manual/MIDI fixed-size control snapshots only; Audio and all harmonic-map lifetimes explicitly excluded. No coordinated runtime/host session or full G12 completion claim.",
+    "next": "Fresh code, bug and defensive audit of engine/runtime checkpoint composition: prepared reset origin, pending condition ownership, complete engine continuation and bounded capture storage."
   }
 }

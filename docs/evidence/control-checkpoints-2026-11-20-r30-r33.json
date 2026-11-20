@@ -297,7 +297,12 @@
     "r33": {
       "source": "09f0024b3f764f9d07c2e396ea8f9b868d7d4ab2",
       "tree": "5cd5509a897de11bced6a07acc8d3fb3faea2762",
-      "status": "Fresh code audit, aggregate bug/test writer and defensive security audit active. Aggregate compiles; independent aggregate behavioral execution is pending. Component and affected existing suites passed10/10 in21.15s."
+      "status": "all_three_workers_complete",
+      "all_workers_complete": true,
+      "code": "Read-only complete state/continuation/ownership/identity audit; no actionable finding.",
+      "security": "Read-only bounded admission, failure atomicity, numeric and pitch/map ownership audit; no additional actionable defensive finding under the documented single-owner/immutable-candidate contract.",
+      "bugs": "Independent409-line test-only suite ba36f603; no concrete production defect from source/fixture review. Root compiled and executed it at787fe55:1/1 passed0.33s.",
+      "interruption": "Workers were resumed from existing work after reported interrupted statuses; all final handoffs completed before the next set."
     }
   },
   "limits": [
@@ -308,7 +313,7 @@
     "The legacy algorithm-ID regression is admission and failure-atomicity evidence, not historical-binary continuation evidence.",
     "Component allocation instrumentation counts ordinary/nothrow C++ new/new[] only; it is not a malloc, aligned-allocation, lock or I/O monitor.",
     "First aggregate scope is Manual/MIDI and no pending/in-use/retained harmonic maps; coordinated runtime/host persistence and G12 completion remain open.",
-    "Native processor/editor6/6 passed57.40s at3fb0846. Aggregate behavioral test authoring and fresh reviews remain active. Windows validator fixtures and real pluginval remain unexecuted locally."
+    "Current component/affected and native gates pass at3fb0846; new aggregate suite passes at787fe55 with identical application source. Windows validator fixtures and real pluginval remain unexecuted locally."
   ],
   "native_run": {
     "name": "control-snapshots-r33-native",
@@ -361,5 +366,45 @@
     "log": "control-snapshots-r33-native.log",
     "junit": "control-snapshots-r33-native.xml",
     "build_note": "All six targets linked serially. The first tool session became unavailable after11/40 steps; resumed incremental build completed with exit0. Application source stayed3fb0846; no assertion changed. Existing u8path deprecation and unused kElemFam warnings remain."
+  },
+  "aggregate_run": {
+    "name": "control-checkpoint-r33",
+    "purpose": "Independent aggregate control continuation, failure atomicity and supported-domain qualification",
+    "source_sha": "787fe55ed21bc623b88e3567333ab9b436a694ac",
+    "remote_source_sha": "3993ca0557ebae63a3968c4d4383262357147ebb",
+    "source_tree": "31980e244afff8225cca93a53908cb96e2890ed9",
+    "worker_test_sha": "ba36f603677710214b92da99f6e2524fe0e72fb8",
+    "junit_timestamp": "2026-11-20T11:43:04",
+    "suites": 1,
+    "failed_suites": 0,
+    "ctest_wall_seconds": 0.33,
+    "cases": [
+      {
+        "name": "control_checkpoint",
+        "seconds": 0.322534,
+        "status": "run"
+      }
+    ],
+    "ctest_regex": "^control_checkpoint$",
+    "log": "control-checkpoint-r33.log",
+    "junit": "control-checkpoint-r33.xml",
+    "coverage": [
+      "Independent live-reference exact comparison of every modulation scalar, valid sample span, status and semantic snapshot field",
+      "Fresh/warm/reset continuation at44100.5 and48000Hz; complete sustain/hold/return history, tempo seek/fallback/zero-frame cache, detector histories and independent drift streams",
+      "Pending normalized budget and extreme positive tuning remain independent of historical applied/cache state",
+      "23 bounded candidate mutations; complete-state and independent future comparison after rejection",
+      "Failed capture destination unchanged; unprepared, Audio enabled/disabled and pending/in-use/retained map exclusion",
+      "Calibrated ordinary/nothrow C++ new/new[] observation over accepted and rejected snapshot operations"
+    ],
+    "limits": [
+      "Pitch worker fixtures are sequential; no concurrent worker execution or scheduling instrumentation.",
+      "No malloc/aligned-allocation/lock/I/O instrumentation. Typed values only; no serialized-byte or coordinated runtime/host qualification."
+    ]
+  },
+  "qualification_boundary": {
+    "earlier_source": "3fb0846ff0673ea70bb94c404e6f68ce7045cc28",
+    "aggregate_test_source": "787fe55ed21bc623b88e3567333ab9b436a694ac",
+    "command": "git diff --exit-code 3fb0846ff0673ea70bb94c404e6f68ce7045cc28 787fe55ed21bc623b88e3567333ab9b436a694ac -- src plugin/src plugin/tests",
+    "result": "exit0; application and native test inputs identical. Only aggregate test registration/source and evidence/docs were added. Earlier10-suite/native runs retain their original source pins."
   }
 }
