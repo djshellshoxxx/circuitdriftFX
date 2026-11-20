@@ -119,7 +119,12 @@ public:
     void setDestination(const juce::File& destination) {
         if (destination == juce::File()) return;
         clearActionResult();
-        dest_file_ = destination.getFileExtension().isEmpty() ? destination.withFileExtension(ext()) : destination;
+        if (!destination.getFileExtension().equalsIgnoreCase(ext())) {
+            dest_file_ = {};
+            showActionResult("Choose a filename ending in " + ext() + ".", Tone::Warn);
+        } else {
+            dest_file_ = destination;
+        }
         refresh(bridge.status());
     }
 
@@ -127,7 +132,11 @@ private:
     juce::Component& dest_ctl() { return *dest_; }
     juce::TextButton& fmtButton(int i) { return i == 0 ? png_ : i == 1 ? gif_ : mp4_; }
     void setFormat(CaptureFormat f) {
-        if (format_ != f) clearActionResult();
+        const bool changed = format_ != f;
+        if (changed) {
+            clearActionResult();
+            dest_file_ = {};
+        }
         format_ = f;
         const double maxS = f == CaptureFormat::Mp4 ? 60.0 : 15.0;
         duration_.slider.setRange(1.0, maxS, 1.0);
@@ -138,8 +147,8 @@ private:
                                                 : "MP4 recordings are limited to 60 seconds.");
         record_->setButtonText(f == CaptureFormat::Png ? "Save PNG" : "Record");
         record_->setTitle(record_->getButtonText());
-        if (!dest_file_.isDirectory() && dest_file_ != juce::File() && dest_file_.getFileExtension() != ext()) dest_file_ = dest_file_.withFileExtension(ext());
         relayout();
+        if (changed) refresh(bridge.status());
     }
     juce::String ext() const { return format_ == CaptureFormat::Png ? ".png" : format_ == CaptureFormat::Gif ? ".gif" : ".mp4"; }
     void chooseDestination() {

@@ -88,9 +88,10 @@ public:
         result.mp4Reason = "Native MP4 encoder unavailable (G07)";
         return result;
     }
-    bool savePng(const juce::Image& image, const juce::File&, juce::String& error) override {
+    bool savePng(const juce::Image& image, const juce::File& destination, juce::String& error) override {
         ++pngCalls;
         lastPng = image;
+        lastPngDestination = destination;
         error = savePngOk ? juce::String() : juce::String("Synthetic PNG write rejection");
         return savePngOk;
     }
@@ -108,6 +109,7 @@ public:
     CaptureStatus idleStatus;
     std::vector<std::uint32_t> indices;
     juce::Image lastFrame, lastPng;
+    juce::File lastPngDestination;
     // Destroy/join before the clock captured by the worker is destroyed.
     std::unique_ptr<GifCaptureSession> session;
 };
@@ -362,7 +364,9 @@ inline int run(const juce::File& outputDirectory) {
               "PNG failure survives refresh and drawer navigation");
         pc::testing::setCaptureDestination(*panel, directory.getChildFile("another.png"));
         check(message->text() != failedMessage, "a new destination action clears the previous action result");
-        check(chooseFormat(*panel, "GIF animation"), "GIF format control remains available");
+        check(chooseFormat(*panel, "GIF animation") &&
+                  pc::testing::setCaptureDestination(*panel, directory.getChildFile("another.gif")),
+              "GIF format control allows a new destination to be chosen");
         bridge->rejectStart = true;
         record->onClick();
         const auto rejectedMessage = message->text();
@@ -433,6 +437,96 @@ inline int run(const juce::File& outputDirectory) {
         check(bridge->pngCalls == savedBefore && foreignParent.paints == 0 && detachedMessage &&
                   detachedMessage->text().contains("could not render the canvas"),
               "unregistered parent has no capture authority or top-level fallback");
+    }
+
+    {
+        auto bridge = std::make_unique<CaptureBridge>();
+        ui::CircuitDriftEditor editor(bridge->processor(), *bridge);
+        editor.setSize(750, 540);
+        auto* core = sh::EditorCore::find(&editor);
+        check(core != nullptr, "destination fixture has a real editor core");
+        if (!core) return failures;
+        core->selectPanel(ui::PanelId::Capture);
+        auto* panel = control<ui::Panel>(editor, "Capture");
+        check(panel != nullptr, "destination fixture exposes the Capture panel");
+        if (!panel) return failures;
+        auto* record = control<juce::Button>(*panel, "Record");
+        auto* destination = control<pc::NoteLabel>(*panel, "Capture destination");
+        auto* message = control<pc::NoteLabel>(*panel, "Capture result");
+        auto* framing = control<juce::ComboBox>(*panel, "Framing");
+        auto* duration = control<juce::Slider>(*panel, "Duration");
+        auto* loop = control<juce::Button>(*panel, "Loop GIF");
+        check(record && destination && message && framing && duration && loop,
+              "destination fixture exposes its named controls");
+        if (!(record && destination && message && framing && duration && loop)) return failures;
+
+        // These sentinels belong only to this fixture; the bridge observes saves without writing them.
+        const auto fixtures = directory.getNonexistentChildFile("destination_authority", "", false);
+        const auto gif = fixtures.getChildFile("chosen.gif");
+        const auto png = fixtures.getChildFile("chosen.png");
+        const auto extensionless = fixtures.getChildFile("chosen");
+        const bool prepared = fixtures.createDirectory().wasOk() && gif.replaceWithText("original GIF") &&
+            png.replaceWithText("original PNG") && extensionless.replaceWithText("original extensionless file");
+        check(prepared, "destination sentinel files can be prepared in a new fixture directory");
+        if (!prepared) return failures;
+        const auto sentinelsUnchanged = [&] {
+            return gif.loadFileAsString() == "original GIF" && png.loadFileAsString() == "original PNG" &&
+                extensionless.loadFileAsString() == "original extensionless file";
+        };
+        check(pc::testing::setCaptureDestination(*panel, gif) && record->isEnabled(),
+              "the exact chosen GIF destination enables recording");
+        const auto gifDestination = destination->text();
+        check(chooseFormat(*panel, "GIF animation") && record->isEnabled() && destination->text() == gifDestination,
+              "a repeated same-format click preserves the selected destination");
+        framing->setSelectedId(2, juce::sendNotificationSync);
+        duration->setValue(2.0, juce::sendNotificationSync);
+        loop->setToggleState(false, juce::dontSendNotification);
+        loop->onClick();
+        panel->refresh(bridge->status());
+        check(record->isEnabled() && destination->text() == gifDestination,
+              "framing, duration and loop changes preserve the selected destination");
+        check(chooseFormat(*panel, "PNG screenshot") && !record->isEnabled() &&
+                  destination->text().startsWith("No destination chosen"),
+              "an actual format change clears the destination and disables saving immediately");
+        record->onClick();
+        check(bridge->pngCalls == 0 && sentinelsUnchanged(),
+              "format change cannot save to or change the originally selected file or its sibling");
+
+        for (const auto& rejected : {gif, extensionless}) {
+            pc::testing::setCaptureDestination(*panel, rejected);
+            const auto rejection = message->text();
+            for (int i = 0; i < 3; ++i) panel->refresh(bridge->status());
+            record->onClick();
+            check(!record->isEnabled() && destination->text().startsWith("No destination chosen") &&
+                      rejection.contains("filename ending in .png") && message->text() == rejection &&
+                      bridge->pngCalls == 0 && sentinelsUnchanged(),
+                  "wrong or missing extensions require a new choice without rewriting a selected path");
+        }
+
+        bridge->savePngOk = false;
+        check(pc::testing::setCaptureDestination(*panel, png) && record->isEnabled(),
+              "explicit selection of the PNG path enables saving");
+        record->onClick();
+        check(bridge->pngCalls == 1 && bridge->lastPngDestination.getFullPathName() == png.getFullPathName(),
+              "PNG save receives exactly the newly selected destination");
+        const auto pngDestination = destination->text();
+        const auto actionError = message->text();
+        pc::testing::setCaptureDestination(*panel, juce::File());
+        panel->refresh(bridge->status());
+        check(actionError.contains("Synthetic PNG write rejection") && message->text() == actionError &&
+                  destination->text() == pngDestination && record->isEnabled(),
+              "cancelling destination selection preserves the chosen path and local action error");
+        check(chooseFormat(*panel, "PNG screenshot") && record->isEnabled() &&
+                  destination->text() == pngDestination && message->text() == actionError,
+              "a same-format click preserves destination spelling and the current action result");
+        const auto uppercase = fixtures.getChildFile("chosen.PNG");
+        bridge->savePngOk = true;
+        check(pc::testing::setCaptureDestination(*panel, uppercase) && record->isEnabled(),
+              "equivalent uppercase extensions are accepted");
+        record->onClick();
+        check(bridge->pngCalls == 2 && bridge->lastPngDestination.getFullPathName() == uppercase.getFullPathName() &&
+                  destination->text().contains(uppercase.getFullPathName()),
+              "saving preserves the exact spelling of the confirmed uppercase destination");
     }
 
     for (const bool jittered : {false, true}) {
