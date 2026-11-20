@@ -115,6 +115,10 @@ private:
     // Odd while replacement is incomplete, even after successful publication.
     // Only the non-audio publisher writes this sequence; audio makes one attempt.
     std::atomic<std::uint64_t> hostStateSequence_{0};
+    // Serialized host publisher -> one audio consumer. Publish the complete
+    // fallback before the odd sequence, including a successful stopped-audio
+    // restore that has not reached a callback yet. No lifecycle reset is needed.
+    engine::TripleBuffer<ParameterSnapshot> hostFallbackSnapshots_;
     // Audio-owned while prepared; preparation initializes it with audio quiescent.
     ParameterSnapshot audioParameters_{};
     runtime::Processor runtime_;

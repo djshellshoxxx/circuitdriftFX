@@ -38,6 +38,7 @@ CircuitDriftProcessor::CircuitDriftProcessor(Edition edition, const juce::String
       apvts_(*this, nullptr, kStateType, buildParameterLayout(edition)) {
     static_assert(std::atomic<float>::is_always_lock_free, "Audio parameters must be lock-free");
     static_assert(std::atomic<std::uint64_t>::is_always_lock_free, "Audio commands must be lock-free");
+    static_assert(std::atomic<std::uint8_t>::is_always_lock_free, "Audio snapshot exchange must be lock-free");
     for (std::size_t i = 0; i < core::kParamCount; ++i)
         if (isExposed(core::kParams[i], edition_)) rawParameters_[i] = apvts_.getRawParameterValue(core::kParams[i].id);
     if (edition_ == Edition::Lite) rawBypass_ = apvts_.getRawParameterValue(kBypassParamId);
@@ -61,9 +62,16 @@ const CircuitDriftProcessor::ParameterSnapshot& CircuitDriftProcessor::audioPara
         // Keeping both sequence observations and raw reads in that same total
         // order prevents accepting a read that spans any part of replacement.
         // Ordinary independent host automation retains its existing semantics.
-        if (hostStateSequence_.load(std::memory_order_seq_cst) == before)
+        if (hostStateSequence_.load(std::memory_order_seq_cst) == before) {
             audioParameters_ = candidate;
+            return audioParameters_;
+        }
     }
+    // A successful restore may precede a failed one without any audio callback
+    // between them. The last complete host configuration can therefore be newer
+    // than this audio cache. Acquire it without reading host-owned fallback fields.
+    if (hostFallbackSnapshots_.acquire())
+        audioParameters_ = hostFallbackSnapshots_.front();
     // No retry, publisher wait, callback lock or allocation on the audio owner.
     return audioParameters_;
 }
@@ -420,6 +428,8 @@ void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInByte
     hostStateFallbackSettings_ = fallbackSettings;
     hostStateFallbackParameters_ = fallbackParameters;
     hostStateFallback_ = std::move(fallback);
+    hostFallbackSnapshots_.back() = fallbackParameters;
+    hostFallbackSnapshots_.publish();
     // Derive a fresh odd sequence even after an exceptional previous replacement.
     // If JUCE/user notification code throws, leave audio and host saves on the
     // previous complete configuration. A later successful restore reopens reads.
