@@ -374,6 +374,18 @@ std::string saveState(const StateDocument& doc) {
     if (!doc.macros.isObject() || !(doc.timeline.isObject() || doc.timeline.isArray()) ||
         !(doc.faults.isObject() || doc.faults.isArray()))
         throw std::invalid_argument("state writer requires valid macro/timeline/fault containers");
+    // toJson() emits only blueprints[0] for scenes. Reject extra entries
+    // instead of silently dropping a prepared A/B slot during a local save.
+    // Invalid enum values must not be normalized into scenes either.
+    if (doc.kind == DocKind::Scene) {
+        if (doc.blueprints.size() != 1)
+            throw std::invalid_argument("scene writer requires exactly one blueprint");
+    } else if (doc.kind == DocKind::Session) {
+        if (doc.blueprints.empty() || doc.blueprints.size() > 2)
+            throw std::invalid_argument("session writer requires 1..2 blueprints");
+    } else {
+        throw std::invalid_argument("invalid document kind");
+    }
     std::set<std::string> identities;
     for (const auto& param : doc.baseParameters)
         if (!identities.insert(param.first).second)

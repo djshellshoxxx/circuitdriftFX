@@ -320,6 +320,26 @@ void wholeDocumentWriterBoundary() {
     doc = original;
     doc.blueprints[0].get("components")->array[0].set("modelId", core::JsonValue::makeString("not-a-fixture"));
     CHECK(rejects());
+    // A scene with an extra (A/B) blueprint used to serialize successfully
+    // while silently discarding every blueprint after the first.
+    doc = original;
+    doc.blueprints.push_back(doc.blueprints.front());
+    CHECK(rejects());
+    doc = original;
+    doc.blueprints.clear();
+    CHECK(rejects());
+    doc = original;
+    doc.kind = static_cast<state::DocKind>(255);
+    CHECK(rejects());
+    // Legitimate 2-slot sessions must still persist both blueprints.
+    doc = original;
+    doc.kind = state::DocKind::Session;
+    doc.blueprints.push_back(doc.blueprints.front());
+    const auto twoSlotSession = state::saveState(doc);
+    CHECK(state::loadState(twoSlotSession, back, error));
+    CHECK(back.kind == state::DocKind::Session && back.blueprints.size() == 2);
+    doc.blueprints.push_back(doc.blueprints.front());
+    CHECK(rejects());
     doc = original;
     doc.macros = core::JsonValue::makeArray();
     CHECK(rejects());

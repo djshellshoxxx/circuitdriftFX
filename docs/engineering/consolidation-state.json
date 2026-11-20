@@ -520,5 +520,25 @@
     "independent_review": "No separate worker-spawn facility exposed; review remains required",
     "limits": "G12 dynamic capture/restore, host state, blueprint seed transactions, older PR item review and physical gates remain open",
     "preserve": "PR16/PR19-23/main/source branches unchanged"
+  },
+  "scene_blueprint_cardinality_20261120": {
+    "parent_pr": 24,
+    "parent_head": "b6a1acdf653590126416fd0229a94a40c3dd9117",
+    "parent_run_id": 44759057463,
+    "parent_linux": "passed",
+    "parent_windows_pluginval": "in_progress_at_selection",
+    "scope": "G12 lossless in-memory state serialization: scene exactly one blueprint, session one or two, invalid DocKind rejected before toJson",
+    "branch": "codex/cdfx-scene-cardinality-20261120-r13",
+    "changed_paths": [
+      "src/state/StateDocument.cpp",
+      "tests/test_state_safety.cpp",
+      "docs/audits/SCENE_BLUEPRINT_CARDINALITY_2026-11-20.md"
+    ],
+    "tests": "new state_safety invalid scene A/B and empty shape, invalid DocKind, valid 2-slot session, invalid 3-slot session",
+    "audit": "docs/audits/SCENE_BLUEPRINT_CARDINALITY_2026-11-20.md",
+    "verification": "source-anchor check; native and exact-head CI required; no independent worker review available",
+    "next": "Qualify changed head Linux/Windows strictness-5 pluginval; independent review; guarded coordinator integration after exact branch comparison",
+    "remains_open": "Full runtime/seed/session capture and stopped-audio restoration; live sound-preset/blueprint transactions; old PR 9/10/14 semantic reconciliation",
+    "untouched": "PR16 and parent branch heads, main, releases and deployments"
   }
 }
