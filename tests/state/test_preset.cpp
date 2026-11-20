@@ -424,12 +424,25 @@ void testCatalogBudgets() {
     CHECK(filterPresets(noMatches, "absent search term").empty());
     CHECK(noMatches.entries.size() == factoryPresets().size());
 
+    const auto ignored = td.path / "ignored";
+    fs::create_directories(ignored / "Nested.circuitdrift.json");
+    std::ofstream(ignored / "notes.txt") << "ordinary note";
+    std::ofstream(ignored / ".invalid.circuitdrift.json") << "invalid name";
+    const auto ignoredPartial = PresetLibrary(ignored).scan({2, kMaxCatalogReadBytes});
+    CHECK(ignoredPartial.visited == 2 && ignoredPartial.truncated && ignoredPartial.bytesRead == 0);
+    const auto ignoredComplete = PresetLibrary(ignored).scan({3, kMaxCatalogReadBytes});
+    CHECK(ignoredComplete.visited == 3 && !ignoredComplete.truncated && ignoredComplete.bytesRead == 0);
+    CHECK(ignoredComplete.entries.size() == factoryPresets().size());
+
     const auto scenes = td.path / "scenes";
     fs::create_directories(scenes);
     const std::string text = cleanText();
     for (int i = 0; i < 3; ++i)
         std::ofstream(scenes / (std::to_string(i) + std::string(kPresetExtension)), std::ios::binary) << text;
     PresetLibrary library(scenes);
+    const auto zeroEntries = library.scan({0, kMaxCatalogReadBytes});
+    CHECK(zeroEntries.visited == 0 && zeroEntries.truncated && zeroEntries.bytesRead == 0);
+    CHECK(filterPresets(zeroEntries, "user:").empty());
     const auto byBytes = library.scan({kMaxListedPresets, text.size()});
     CHECK(byBytes.truncated && byBytes.bytesRead == text.size());
     CHECK(byBytes.entries.size() == factoryPresets().size() + 1 && byBytes.entries.back().valid);
@@ -437,7 +450,10 @@ void testCatalogBudgets() {
     CHECK(byEntries.truncated && byEntries.visited == 1 && byEntries.bytesRead == text.size());
     const auto all = library.scan({3, text.size() * 3});
     CHECK(!all.truncated && all.visited == 3 && all.bytesRead == text.size() * 3);
-    CHECK(filterPresets(all, "user:").size() == 3);
+    const auto users = filterPresets(all, "user:");
+    CHECK(users.size() == 3);
+    if (users.size() == 3)
+        CHECK(users[0].id == "user:0" && users[1].id == "user:1" && users[2].id == "user:2");
     fs::remove_all(scenes);
     CHECK(filterPresets(all, "user:").size() == 3); // search remains a pure snapshot operation
 

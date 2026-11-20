@@ -3,6 +3,7 @@
 // control has an accessible name and tooltip) and the required labels and interactions.
 #include <cstdio>
 #include "FakeBridge.h"
+#include "PresetSelectionRegressions.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/panels/Panels.h"
 
@@ -484,6 +485,11 @@ int main(int argc, char** argv) {
             if (load->onClick) load->onClick();
             expect(selectionBridge.loadedId == "factory:mint-1968-console", "reselection targets the new factory result");
         } else fail("preset search/selection controls");
+    }
+
+    {
+        currentCase = "preset-selection-identity";
+        failures += test::preset_selection_regressions::run();
     }
 
     {

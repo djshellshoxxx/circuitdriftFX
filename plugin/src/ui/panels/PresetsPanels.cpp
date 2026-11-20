@@ -59,7 +59,7 @@ public:
         current_ = note("", Tone::Normal);
         tip(search_, "Search presets", "Filter factory and user presets by name");
         search_.setTextToShowWhenEmpty("Search presets", content_.theme().textDim);
-        search_.onTextChange = [this] { rebuild(); };
+        search_.onTextChange = [this] { rebuild(true); };
         content_.addItem(search_, 240, 28, true);
         refresh_ = makeButton("Refresh", "Rescan the local preset folder for external changes");
         refresh_->onClick = [this] { bridge.refreshPresets(); rebuild(); };
@@ -82,7 +82,9 @@ public:
         content_.addItem(user_.box, 240, 116, true);
         factory_.model.onSelect = [this](const PresetEntry* p) { if (p) { user_.box.deselectAllRows(); setSelected(*p); } else if (user_.box.getSelectedRow() < 0) clearSelection(); };
         user_.model.onSelect = [this](const PresetEntry* p) { if (p) { factory_.box.deselectAllRows(); setSelected(*p); } else if (factory_.box.getSelectedRow() < 0) clearSelection(); };
-        factory_.model.onOpen = user_.model.onOpen = [this](const PresetEntry&) { doLoad(); };
+        factory_.model.onOpen = user_.model.onOpen = [this](const PresetEntry& preset) {
+            if (selectPreset(preset.id)) doLoad();
+        };
 
         load_ = makeButton("Load into Slot A", "Load the selected preset into the slot being edited");
         remove_ = makeButton("Delete", "Delete the selected user preset (asks first)");
@@ -132,11 +134,14 @@ public:
 private:
     struct Pane { juce::ListBox box; PresetList model; NoteLabel* title = nullptr; };
 
-    void rebuild() {
+    void rebuild(bool preserveQuerySelection = false) {
+        const auto selectedId = preserveQuerySelection && hasSel_ ? selected_.id : juce::String{};
         const auto all = bridge.listPresets(search_.getText());
+        const auto catalog = bridge.presetCatalogStatus();
         // ListBox retains selections by row index when its content changes.
-        // A filter or new async snapshot may put a different preset at that
-        // index, so require an explicit selection before acting on new rows.
+        // A query-only change can follow the same selected ID to a new row.
+        // Refreshes and new async snapshots require explicit reselection, even
+        // when a query happens to consume the new snapshot before refresh().
         factory_.box.deselectAllRows();
         user_.box.deselectAllRows();
         clearSelection();
@@ -145,11 +150,26 @@ private:
         for (const auto& p : all) (p.factory ? factory_ : user_).model.rows.push_back(p);
         factory_.box.updateContent();
         user_.box.updateContent();
+        if (catalog.generation == catalogGeneration_ && selectedId.isNotEmpty())
+            selectPreset(selectedId);
         updateButtons();
-        const auto catalog = bridge.presetCatalogStatus();
         catalogGeneration_ = catalog.generation;
         updateCatalogNotice(catalog);
         repaint();
+    }
+    bool selectPreset(const juce::String& id) {
+        for (auto* pane : {&factory_, &user_}) {
+            for (int row = 0; row < pane->model.getNumRows(); ++row) {
+                const auto& entry = pane->model.rows[static_cast<std::size_t>(row)];
+                if (entry.id != id) continue;
+                (pane == &factory_ ? user_ : factory_).box.deselectAllRows();
+                pane->box.selectRow(row);
+                // An already-selected row does not emit selectedRowsChanged.
+                setSelected(entry);
+                return true;
+            }
+        }
+        return false;
     }
     void updateCatalogNotice(const PresetCatalogStatus& catalog) {
         juce::String message;
@@ -173,7 +193,7 @@ private:
         updateButtons();
         relayout();
     }
-    void clearSelection() { hasSel_ = false; updateButtons(); }
+    void clearSelection() { hasSel_ = false; selected_ = {}; updateButtons(); }
     void updateButtons() {
         load_->setEnabled(hasSel_);
         export_->setEnabled(hasSel_);
