@@ -283,6 +283,49 @@ void realtimeResetMatchesQuiescentReset() {
     }
 }
 
+// Quiescent, engine-only state transfer: the future host session service must
+// additionally coordinate control, seed, transport and the pitch worker.
+void quiescentEngineCheckpointBridge() {
+    Rig rig;
+    engine::Checkpoint saved, advanced, observed;
+    CHECK(!rig.processor.allocateEngineCheckpoint(saved));
+    CHECK(!rig.processor.captureEngineCheckpoint(saved));
+    CHECK(!rig.processor.restoreEngineCheckpoint(saved));
+    CHECK(rig.prepare());
+    CHECK(rig.processor.allocateEngineCheckpoint(saved));
+    CHECK(rig.processor.allocateEngineCheckpoint(advanced));
+    CHECK(rig.processor.allocateEngineCheckpoint(observed));
+    std::vector<double> input(512);
+    for (std::size_t i = 0; i < input.size(); ++i)
+        input[i] = 0.12 * std::sin(double(i) * 0.073);
+    (void)rig.render(input);
+    CHECK(rig.processor.captureEngineCheckpoint(saved));
+    (void)rig.render(input);
+    CHECK(rig.processor.captureEngineCheckpoint(advanced));
+    CHECK(saved.sampleIndex != advanced.sampleIndex);
+
+    // Invalid layout cannot mutate a working engine or its checkpoint output.
+    auto invalid = saved;
+    invalid.layout ^= 1u;
+    CHECK(!rig.processor.restoreEngineCheckpoint(invalid));
+    CHECK(rig.processor.captureEngineCheckpoint(observed));
+    CHECK(observed.layout == advanced.layout);
+    CHECK(observed.sampleIndex == advanced.sampleIndex);
+    CHECK(observed.values == advanced.values);
+    CHECK(observed.rng == advanced.rng);
+
+    CHECK(rig.processor.restoreEngineCheckpoint(saved));
+    CHECK(rig.processor.captureEngineCheckpoint(observed));
+    CHECK(observed.layout == saved.layout);
+    CHECK(observed.sampleIndex == saved.sampleIndex);
+    CHECK(observed.values == saved.values);
+    CHECK(observed.rng == saved.rng);
+
+    rig.processor.release();
+    CHECK(!rig.processor.captureEngineCheckpoint(observed));
+    CHECK(!rig.processor.restoreEngineCheckpoint(saved));
+}
+
 void realtimeResetWithPitchWorker() {
     Rig rig;
     set(rig.parameters, "key.enabled", 1);
@@ -340,6 +383,7 @@ int main() {
     seekInvalidatesPitchWithoutResettingWorkerFromAudio();
     realtimeResetMatchesQuiescentReset();
     realtimeResetWithPitchWorker();
+    quiescentEngineCheckpointBridge();
     std::printf("runtime_processor: %s (%d failures)\n", failures ? "FAILED" : "PASS", failures);
     return failures ? 1 : 0;
 }
