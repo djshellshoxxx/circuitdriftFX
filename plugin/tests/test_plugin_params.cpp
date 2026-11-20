@@ -3,6 +3,7 @@
 #include "ParameterLayout.h"
 #include "PluginProcessor.h"
 #include "ProcessorRegressions.h"
+#include "HostRestoreRegressions.h"
 #include "core/ParameterRegistry.h"
 #include "ui/GestureRegressions.h"
 
@@ -10,6 +11,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <new>
 #include <map>
 #include <set>
 #include <string>
@@ -418,6 +421,21 @@ void testZeroFrameMidi() {
 
 }  // namespace
 
+// Same scoped C++ allocation-counter convention as the portable runtime suite.
+// The flag is thread-local so publisher/pitch-worker allocation is not mistaken
+// for allocation by the simulated audio callback.
+void* operator new(std::size_t size) {
+    using namespace cd::plugin::test::host_restore_regressions;
+    if (countAllocations) ++allocations;
+    if (void* ptr = std::malloc(size == 0 ? 1 : size)) return ptr;
+    throw std::bad_alloc();
+}
+void* operator new[](std::size_t size) { return ::operator new(size); }
+void operator delete(void* ptr) noexcept { std::free(ptr); }
+void operator delete(void* ptr, std::size_t) noexcept { std::free(ptr); }
+void operator delete[](void* ptr) noexcept { std::free(ptr); }
+void operator delete[](void* ptr, std::size_t) noexcept { std::free(ptr); }
+
 int main() {
     juce::ScopedJuceInitialiser_GUI gui;
     testGoldenTable();
@@ -430,6 +448,7 @@ int main() {
     testMonoAuxLayouts<double>();
     testSidechainBufferPreserved();
     testStateRoundTrip();
+    g_failures += cd::plugin::test::host_restore_regressions::run();
     testZeroFrameMidi();
     g_failures += cd::plugin::test::processor_regressions::run();
     g_failures += cd::plugin::test::gesture_regressions::run();
