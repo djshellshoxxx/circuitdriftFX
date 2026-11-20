@@ -209,7 +209,10 @@ static void droppedInputInvalidatesPitch() {
 static void threadedSpsc() {
     constexpr double fs = 48000.0;
     PitchDetector d;
-    d.prepare(fs, 1u << 17);
+    // This case checks concurrent transfer/publication, not scheduler-dependent
+    // producer overflow. The separate gap test covers full-ring invalidation.
+    // Hold the whole finite input even when the worker starts after the producer.
+    d.prepare(fs, 1u << 18);
     const auto x = th::sine(196, 0.3, fs, std::size_t(fs * 3));
     std::atomic<bool> done{false};
     std::thread worker([&] {

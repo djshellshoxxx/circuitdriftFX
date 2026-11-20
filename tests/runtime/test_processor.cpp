@@ -295,13 +295,16 @@ void realtimeResetWithPitchWorker() {
     rig.processor.runPitchWorker();
     rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
     CHECK(rig.processor.controlStatus().pitchState == control::PitchState::Acquired);
-    std::atomic<bool> done{false};
+    (void)rig.render(tone);  // leave old audio queued as the worker/reset race begins
+    std::atomic<bool> done{false}, started{false};
     std::thread worker([&] {
+        started.store(true, std::memory_order_release);
         while (!done.load(std::memory_order_acquire)) {
             rig.processor.runPitchWorker();
             std::this_thread::yield();
         }
     });
+    while (!started.load(std::memory_order_acquire)) std::this_thread::yield();
     allocations = 0;
     countAllocations = true;
     for (int i = 0; i < 16; ++i) {
