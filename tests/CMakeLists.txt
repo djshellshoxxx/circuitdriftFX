@@ -10,6 +10,12 @@ find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
   add_test(NAME registry_codegen_fresh COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/gen_param_registry.py --check)
   add_test(NAME docs_validation_only COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/validate_planned_features.py)
+  find_package(Git QUIET)
+  if(Git_FOUND)
+    add_test(NAME dependency_source_gate COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_dependency_gate.py
+      --cmake ${CMAKE_COMMAND} --git ${GIT_EXECUTABLE})
+  endif()
 endif()
 foreach(dir engine control state blueprint media network community runtime)
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${dir}/CMakeLists.txt)

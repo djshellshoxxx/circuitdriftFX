@@ -1,18 +1,17 @@
 # Pinned third-party sources for the plugin build (see docs/adr/ADR-0001-build-formats-and-ids.md).
 #
-# Every dependency is pinned to a full commit SHA. A git commit id is content-addressed, so the
-# pin is cryptographically strong without a separate archive hash; after checkout the SHA is
-# re-verified below. Changing any value here is a deliberate dependency update (ADR + notices).
+# Every dependency is pinned to a full commit SHA. Both the revision and clean source contents
+# are checked before any dependency CMake code runs. Changing a pin is a deliberate dependency
+# update (ADR + notices); a matching HEAD alone does not validate an edited working tree.
 #
-# Only the downloaded sources and the FetchContent sub-build stamps live under CD_DEPS_CACHE_DIR
-# (cacheable in CI keyed on hashFiles('cmake/Dependencies.cmake')); build trees stay in the build dir.
+# Only source checkouts live under CD_DEPS_CACHE_DIR. Population scripts/stamps and all build
+# trees stay in the current build directory and must not be restored from a source cache.
 
 include_guard(GLOBAL)
-include(FetchContent)
+include("${CMAKE_CURRENT_LIST_DIR}/PinnedDependencies.cmake")
 
 set(CD_DEPS_CACHE_DIR "${CMAKE_BINARY_DIR}/_deps_cache" CACHE PATH
-    "Directory holding fetched dependency sources (safe to cache between CI runs)")
-set(FETCHCONTENT_BASE_DIR "${CD_DEPS_CACHE_DIR}" CACHE PATH "" FORCE)
+    "Directory holding pinned dependency source checkouts (verified before configuration)")
 
 # --- Pins -------------------------------------------------------------------------------------
 # JUCE 8.0.17-security (dual licence AGPLv3 / JUCE 8 EULA; the owner must choose, see ADR-0001).
@@ -32,39 +31,9 @@ set(JUCE_ENABLE_MODULE_SOURCE_GROUPS OFF CACHE BOOL "" FORCE)
 set(JUCE_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
 set(JUCE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-find_package(Git REQUIRED)
-
-# Declares one pinned git dependency with sources in the cache dir and the build tree in the build dir.
-function(cd_declare_pinned name repo sha submodules)
-  FetchContent_Declare(${name}
-    GIT_REPOSITORY "${repo}"
-    GIT_TAG "${sha}"
-    GIT_SUBMODULES "${submodules}"
-    GIT_PROGRESS TRUE
-    SOURCE_DIR "${CD_DEPS_CACHE_DIR}/${name}-src"
-    BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/${name}-build")
-endfunction()
-
-# Fails configuration if the checked-out HEAD of a source directory is not the pinned SHA.
-function(cd_verify_pin dir expected_sha label)
-  execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${dir}" rev-parse HEAD
-                  OUTPUT_VARIABLE actual OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE rc)
-  if(NOT rc EQUAL 0 OR NOT actual STREQUAL expected_sha)
-    message(FATAL_ERROR "${label}: expected ${expected_sha} but found '${actual}' in ${dir}. "
-                        "Delete ${CD_DEPS_CACHE_DIR} and reconfigure.")
-  endif()
-endfunction()
-
-cd_declare_pinned(juce "${CD_JUCE_REPO}" "${CD_JUCE_SHA}" "")
-cd_declare_pinned(clap_juce_extensions "${CD_CJE_REPO}" "${CD_CJE_SHA}" "clap-libs/clap clap-libs/clap-helpers")
-
-# JUCE first: clap-juce-extensions looks for the juce:: targets when it is added.
-FetchContent_MakeAvailable(juce)
-cd_verify_pin("${juce_SOURCE_DIR}" "${CD_JUCE_SHA}" "JUCE ${CD_JUCE_TAG_NAME}")
-FetchContent_MakeAvailable(clap_juce_extensions)
-cd_verify_pin("${clap_juce_extensions_SOURCE_DIR}" "${CD_CJE_SHA}" "clap-juce-extensions")
-cd_verify_pin("${clap_juce_extensions_SOURCE_DIR}/clap-libs/clap" "${CD_CLAP_SHA}" "CLAP headers")
-cd_verify_pin("${clap_juce_extensions_SOURCE_DIR}/clap-libs/clap-helpers" "${CD_CLAP_HELPERS_SHA}" "clap-helpers")
+# Acquire without adding either project, verify both roots and required submodules, then
+# configure JUCE before clap-juce-extensions (which consumes the juce:: targets).
+cd_add_pinned_plugin_dependencies()
 
 # Informational audit of how the pinned wrappers derive host parameter ids (ADR-0001, section 3).
 set(CD_JUCE_VST3_WRAPPER
