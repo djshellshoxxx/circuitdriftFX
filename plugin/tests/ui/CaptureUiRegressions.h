@@ -243,6 +243,22 @@ inline int run(const juce::File& outputDirectory) {
 
     {
         auto bridge = std::make_unique<CaptureBridge>();
+        auto panel = ui::createPanel(ui::PanelId::Capture, *bridge);
+        panel->setSize(360, 1400);
+        auto* message = control<pc::NoteLabel>(*panel, "Capture result");
+        check(message && message->text().isEmpty(), "first-destination fixture starts without a backend result");
+        pc::testing::setCaptureDestination(*panel, directory.getChildFile("missing-extension"));
+        check(message && message->isVisible() && message->getWidth() > 0 &&
+                  message->getHeight() >= message->heightFor(message->getWidth()) &&
+                  message->text().contains("Choose a filename ending in .gif"),
+              "the first invalid destination lays out its visible action result immediately");
+        panel->refresh(bridge->status());
+        check(message && message->getHeight() > 0,
+              "an unchanged status poll preserves the first destination error layout");
+    }
+
+    {
+        auto bridge = std::make_unique<CaptureBridge>();
         juce::Component host;
         host.setSize(750, 540);
         juce::ComponentBoundsConstrainer constrainer;

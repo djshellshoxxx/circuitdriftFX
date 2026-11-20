@@ -166,7 +166,9 @@ private:
         actionResultTone_ = tone;
         actionResultState_ = bridge.captureStatus().state;
         hasActionResult_ = true;
-        msg_->set(message, tone);
+        // A first local error can reveal a previously empty label while every
+        // backend field stays unchanged, so refresh alone may not lay it out.
+        if (msg_->set(message, tone)) relayout();
     }
     juce::Image snapshot() {
         const auto framing = static_cast<CaptureFraming>(juce::jlimit(0, 2, framing_.index()));
