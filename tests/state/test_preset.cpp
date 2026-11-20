@@ -1,6 +1,8 @@
 // Scene presets, factory presets, preset library and strict-reader hostile-input tests
 // (CD-F09/F24; T24 config roundtrip). Synthetic data only.
+#include <atomic>
 #include <chrono>
+#include <thread>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -349,6 +351,45 @@ void testLibrary() {
         f << std::string(kSceneMaxBytes + 1, ' ');
     }
     CHECK(!lib2.importFile(td.path / "big.circuitdrift.json", "big", false, id2, err));
+
+    // Both existing-target preservation and a real two-writer race must be
+    // enforced at installation time (the old exists()+rename path lost the race).
+    {
+        const fs::path exclusive = td.path / "exclusive-test.txt";
+        CHECK_MSG(saveStateFileAtomicNoReplace(exclusive.string(), "first", err), err);
+        CHECK(!saveStateFileAtomicNoReplace(exclusive.string(), "second", err));
+        std::ifstream in(exclusive, std::ios::binary);
+        std::string contents;
+        std::getline(in, contents);
+        CHECK(contents == "first");
+
+        const fs::path concurrent = td.path / "concurrent-test.txt";
+        std::atomic<int> ready{0};
+        std::atomic<bool> start{false};
+        bool succeeded[2] = {false, false};
+        const auto attempt = [&](int index) {
+            ready.fetch_add(1, std::memory_order_release);
+            while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+            std::string localError;
+            succeeded[index] = saveStateFileAtomicNoReplace(
+                concurrent.string(), index == 0 ? "alpha" : "beta", localError);
+        };
+        std::thread first(attempt, 0), second(attempt, 1);
+        while (ready.load(std::memory_order_acquire) != 2) std::this_thread::yield();
+        start.store(true, std::memory_order_release);
+        first.join();
+        second.join();
+        CHECK(succeeded[0] != succeeded[1]);
+        std::ifstream installed(concurrent, std::ios::binary);
+        std::string winner;
+        std::getline(installed, winner);
+        CHECK(winner == (succeeded[0] ? "alpha" : "beta"));
+        for (const auto& entry : fs::directory_iterator(td.path)) {
+            const auto filename = entry.path().filename().string();
+            CHECK(filename.find("exclusive-test.txt.tmp.") != 0);
+            CHECK(filename.find("concurrent-test.txt.tmp.") != 0);
+        }
+    }
 
     // The byte limit is inclusive. Padding with legal JSON whitespace does
     // not change the scene, and one extra byte must reject the whole import.
