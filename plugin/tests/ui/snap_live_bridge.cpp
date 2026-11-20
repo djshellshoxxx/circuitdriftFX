@@ -6,6 +6,7 @@
 #include "ui/panels/PanelCommon.h"
 #include "ui/workbench/ParamOps.h"
 #include "BlueprintValidationRegressions.h"
+#include "GifCaptureRegressions.h"
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -436,6 +437,8 @@ int main() {
     liteBridge.copySlot(0, 1);
     liteBridge.swapSlots();
     check(!liteBridge.history().canUndo, "LITE cannot mutate unavailable A/B slots");
+
+    failures += test::gif_capture_regressions::run();
 
     std::printf("live EditorBridge: %s (%d failures)\n", failures ? "FAIL" : "PASS", failures);
     return failures ? 1 : 0;
