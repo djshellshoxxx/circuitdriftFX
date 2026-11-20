@@ -1650,7 +1650,9 @@ uint64_t CircuitEngine::Impl::layoutHash() const noexcept {
     mixIn(bits);
     mixIn(uint64_t(nCh)); mixIn(zeroLatency); mixIn(iir); mixIn(pitchDrift); mixIn(uint64_t(latTotal));
     mixIn(cfg.seed); mixIn(cfg.variationSeed[0]); mixIn(cfg.variationSeed[1]);
-    mixIn(0xC0DE0001ull);  // checkpoint layout revision
+    // Covers both the serialized shape and continuation algorithms. Revision 2
+    // admits cutoff modulation from the sample-rate-limited base frequency.
+    mixIn(0xC0DE0002ull);
     return h;
 }
 
