@@ -3,6 +3,7 @@
 // control has an accessible name and tooltip) and the required labels and interactions.
 #include <cstdio>
 #include "FakeBridge.h"
+#include "BlueprintPanelRegressions.h"
 #include "PresetSelectionRegressions.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/panels/Panels.h"
@@ -254,6 +255,7 @@ int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI gui;
     const juce::File outDir(argc > 1 ? juce::String(argv[1]) : juce::File::getCurrentWorkingDirectory().getFullPathName());
     FakeBridge bridge;
+    failures += test::blueprint_panel_regressions::run();
 
     // Every registry parameter the panels bind must exist in the processor tree.
     for (auto* id : {"quality.mode", "quality.oversampling", "quality.phase", "quality.zeroLatency", "output.softClip", "hpf.enabled", "ab.crossfade",
