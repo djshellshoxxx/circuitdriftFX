@@ -50,6 +50,7 @@ StatusInfo ProcessorEditorBridge::status() {
     s.channels = processor_.editorChannels();
     s.sampleRate = processor_.editorSampleRate();
     s.latencySamples = processor_.editorLatency();
+    s.stateEpoch = processor_.editorStateEpoch();
     s.editSlot = editSlot_;
     s.networkStatus = "Off";
     s.communityStatus = "No catalog service configured (G06)";

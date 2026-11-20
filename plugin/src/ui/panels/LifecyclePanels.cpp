@@ -388,7 +388,10 @@ public:
         editor_.setScrollbarsShown(true);
         editor_.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain)));
         tip(editor_, "Blueprint JSON", "Blueprint of the edit slot as JSON; edit, then Validate before Apply");
-        editor_.onTextChange = [this] { if (!loading_) setState(BpState::Draft); };
+        editor_.onTextChange = [this] {
+            if (!loading_ && editor_.getText() != validatedText_)
+                invalidateValidation("The blueprint changed. Validate again.");
+        };
         content_.addItem(editor_, 240, 240, true);
         validate_ = makeButton("Validate", "Check the blueprint on a worker thread without changing the sound");
         reload_ = makeButton("Reload", "Discard edits and reload the blueprint of the edit slot");
@@ -411,14 +414,24 @@ public:
     void refresh(const StatusInfo& s) override {
         if (s.editSlot != slot_ && state_v_ != BpState::Draft) { slot_ = s.editSlot; load(); }
         slot_ = s.editSlot;
+        if ((state_v_ == BpState::Validating || hasReport_) && state_v_ != BpState::Applying) {
+            if (editor_.getText() != validatedText_) {
+                invalidateValidation("The blueprint changed. Validate again.");
+                return;
+            }
+            if (s.sampleRate != validatedSampleRate_ || s.activeOversampling != validatedOversampling_ ||
+                s.stateEpoch != validatedStateEpoch_) {
+                invalidateValidation("The audio configuration or session changed. Validate again.");
+                return;
+            }
+        }
         if (state_v_ == BpState::Validating) {
             BlueprintReport r;
             if (bridge.blueprintReport(r)) {
                 report_ = r;
                 hasReport_ = true;
-                const bool stale = editor_.getText() != validatedText_;
                 showReport();
-                setState(stale ? BpState::Draft : (r.ok ? BpState::Ready : BpState::Invalid));
+                setState(r.ok ? BpState::Ready : BpState::Invalid);
             }
         }
     }
@@ -428,12 +441,24 @@ private:
         loading_ = true;
         editor_.setText(bridge.blueprintJson(bridge.status().editSlot), false);
         loading_ = false;
+        validatedText_ = editor_.getText();
+        report_ = {};
         hasReport_ = false;
         showReport();
         setState(BpState::Idle);
     }
+    void invalidateValidation(const juce::String& reason) {
+        report_ = {};
+        hasReport_ = false;
+        showReport();
+        setState(BpState::Draft, reason);
+    }
     void startValidation() {
         validatedText_ = editor_.getText();
+        const auto current = bridge.status();
+        validatedSampleRate_ = current.sampleRate;
+        validatedOversampling_ = current.activeOversampling;
+        validatedStateEpoch_ = current.stateEpoch;
         hasReport_ = false;
         showReport();
         bridge.requestBlueprintValidation(validatedText_);
@@ -498,6 +523,9 @@ private:
     BlueprintReport report_;
     bool hasReport_ = false, loading_ = false;
     juce::String validatedText_;
+    double validatedSampleRate_ = 0;
+    int validatedOversampling_ = 0;
+    std::uint64_t validatedStateEpoch_ = 0;
     int slot_ = 0;
 };
 

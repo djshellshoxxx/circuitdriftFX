@@ -48,6 +48,35 @@ bool waitForReport(ProcessorEditorBridge& bridge, BlueprintReport& report) {
     }
     return false;
 }
+
+template <class T>
+T* findValidationControl(juce::Component& component, const juce::String& title) {
+    for (auto* child : component.getChildren()) {
+        if (child->getTitle() == title)
+            if (auto* found = dynamic_cast<T*>(child)) return found;
+        if (auto* found = findValidationControl<T>(*child, title)) return found;
+    }
+    return nullptr;
+}
+
+bool blueprintPanelHasText(juce::Component& component, const juce::String& prefix) {
+    if (auto* note = dynamic_cast<ui::pc::NoteLabel*>(&component))
+        if (note->text().startsWith(prefix)) return true;
+    for (auto* child : component.getChildren())
+        if (blueprintPanelHasText(*child, prefix)) return true;
+    return false;
+}
+
+bool waitForBlueprintReady(ui::Panel& panel, ProcessorEditorBridge& bridge) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        panel.refresh(bridge.status());
+        if (blueprintPanelHasText(panel, "State: Ready")) return true;
+        if (blueprintPanelHasText(panel, "State: Invalid")) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+}
 }
 
 int main() {
@@ -323,6 +352,70 @@ int main() {
     processor.setStateInformation(beforeValidation.getData(), static_cast<int>(beforeValidation.getSize()));
     check(waitForReport(bridge, report) && !report.ok &&
           report.diagnostics.joinIntoString(" ").contains("changed"), "session replacement invalidates pending validation");
+    {
+        // Exercise the displayed report after delivery, using the real validation
+        // worker and processor lifecycle. These remain synthetic fixture checks.
+        auto panel = ui::pc::makeBlueprintPanel(bridge);
+        auto* editor = findValidationControl<juce::TextEditor>(*panel, "Blueprint JSON");
+        auto* validate = findValidationControl<juce::TextButton>(*panel, "Validate");
+        auto* apply = findValidationControl<juce::TextButton>(*panel, "Apply...");
+        check(editor && validate && apply, "live blueprint panel exposes validation controls");
+        if (editor && validate && apply) {
+            editor->setText(fixture, false);
+            editor->onTextChange();
+            const auto validatePanel = [&](const char* message) {
+                validate->onClick();
+                check(waitForBlueprintReady(*panel, bridge) && blueprintPanelHasText(*panel, "Valid. "), message);
+            };
+            const auto stalePanel = [&] {
+                return blueprintPanelHasText(*panel, "State: Draft") &&
+                       !blueprintPanelHasText(*panel, "Valid. ") && validate->isEnabled() && !apply->isEnabled();
+            };
+            validatePanel("live blueprint panel displays the accepted synthetic report");
+            panel->refresh(bridge.status());
+            check(blueprintPanelHasText(*panel, "State: Ready") && !apply->isEnabled(),
+                  "unchanged configuration preserves the preview without enabling live apply");
+
+            editor->setText("{}", false);
+            editor->onTextChange();
+            check(stalePanel(), "editing validated text immediately clears its previous valid report");
+            editor->setText(fixture, false);
+            editor->onTextChange();
+            validatePanel("edited document can be explicitly revalidated");
+
+            processor.prepareToPlay(16000, 32);
+            silent.clear();
+            processor.processBlock(silent, noMidi);
+            panel->refresh(bridge.status());
+            check(stalePanel(), "sample-rate change invalidates an already delivered blueprint report");
+            validatePanel("new sample rate can be explicitly revalidated");
+
+            auto* oversampling = processor.parameters().getParameter("quality.oversampling");
+            check(oversampling != nullptr, "oversampling parameter exists for freshness regression");
+            if (oversampling) {
+                write(*oversampling, oversampling->convertTo0to1(2.0f)); // explicit 2x
+                processor.prepareToPlay(16000, 32);
+                silent.clear();
+                processor.processBlock(silent, noMidi);
+                check(bridge.status().activeOversampling == 2, "freshness fixture activates explicit 2x quality");
+                panel->refresh(bridge.status());
+                check(stalePanel(), "active quality change invalidates an already delivered blueprint report");
+                validatePanel("new active quality can be explicitly revalidated");
+            }
+
+            juce::MemoryBlock sameConfiguration;
+            processor.getStateInformation(sameConfiguration);
+            processor.setStateInformation(sameConfiguration.getData(), static_cast<int>(sameConfiguration.getSize()));
+            panel->refresh(bridge.status());
+            check(stalePanel(), "session replacement invalidates a delivered report even at unchanged sample rate and quality");
+            check(editor->getText() == fixture, "report invalidation preserves the editable blueprint draft");
+            validatePanel("replacement session can be explicitly revalidated");
+
+            processor.releaseResources();
+            panel->refresh(bridge.status());
+            check(stalePanel(), "releasing audio invalidates an already delivered blueprint report");
+        }
+    }
     processor.releaseResources();
 
     UiSettings prefs;

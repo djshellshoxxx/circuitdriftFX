@@ -111,6 +111,7 @@ struct StatusInfo {
     juce::String networkStatus;  // e.g. "Off", "Joined: 3 members"
     juce::String communityStatus;// e.g. "No catalog service configured (G06)"
     // State
+    std::uint64_t stateEpoch = 0; // Host-session replacement; ordinary parameter edits preserve it.
     int editSlot = 0;            // 0 = A, 1 = B (which slot the detailed controls edit)
     juce::String presetName;
     bool presetModified = false;
