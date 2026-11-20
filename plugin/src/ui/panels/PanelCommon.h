@@ -69,6 +69,7 @@ private:
 class ParamSlider : public juce::Component {
 public:
     ParamSlider(EditorBridge& b, const juce::String& name, const juce::String& tooltip);
+    ~ParamSlider() override;
     void bind(const juce::String& paramId);
     void resized() override;
     using PlainParser = std::function<std::optional<double>(const std::string&)>;

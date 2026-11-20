@@ -185,13 +185,21 @@ void testRuntimeAudio() {
     proc.prepareToPlay(48000.0, 64);
     const int latency = proc.getLatencySamples();
     CHECK(latency > 0, "runtime declares oversampling latency");
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<Sample> empty;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(100)), 0);
+    proc.processBlock(empty, midi);
+    CHECK(midi.isEmpty(), "zero-frame callback accepts an empty audio channel array");
+    juce::AudioBuffer<Sample> missingChannel(1, 16);
+    for (int i = 0; i < 16; ++i) missingChannel.setSample(0, i, static_cast<Sample>(0.5));
+    proc.processBlock(missingChannel, midi);
+    CHECK(missingChannel.getMagnitude(0, 16) == 0, "incomplete positive-frame layout is rejected before bus views");
     constexpr int frames = 2048;  // host block deliberately exceeds prepareToPlay's size hint
     juce::AudioBuffer<Sample> buffer(2, frames);
     for (int ch = 0; ch < 2; ++ch)
         for (int i = 0; i < frames; ++i)
             buffer.setSample(ch, i, static_cast<Sample>(0.1 * std::sin(0.03 * i) * (ch ? -1 : 1)));
     const juce::AudioBuffer<Sample> reference(buffer);
-    juce::MidiBuffer midi;
     midi.addEvent(juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(100)), 63);
     midi.addEvent(juce::MidiMessage::noteOff(1, 60), 127);
     proc.processBlock(buffer, midi);
@@ -214,6 +222,40 @@ void testRuntimeAudio() {
     proc.releaseResources();
     proc.processBlock(buffer, midi);
     CHECK(buffer.getMagnitude(0, frames) == 0, "unprepared processor silences main output");
+}
+
+template <typename Sample>
+void testMonoAuxLayouts() {
+    for (const int scChannels : {0, 1, 2}) {
+        cd::plugin::CircuitDriftProcessor proc(Edition::Full, "CircuitDrift");
+        proc.setProcessingPrecision(sizeof(Sample) == 8 ? juce::AudioProcessor::doublePrecision
+                                                       : juce::AudioProcessor::singlePrecision);
+        auto layout = proc.getBusesLayout();
+        layout.inputBuses.set(0, juce::AudioChannelSet::mono());
+        layout.outputBuses.set(0, juce::AudioChannelSet::mono());
+        layout.inputBuses.set(1, scChannels == 0 ? juce::AudioChannelSet::disabled()
+                                               : scChannels == 1 ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo());
+        CHECK(proc.setBusesLayout(layout), "mono main with %d sidechain channels", scChannels);
+        setPlain(proc, "mix", 0);
+        setPlain(proc, "hpf.enabled", 0);
+        setPlain(proc, "output.softClip", 0);
+        proc.prepareToPlay(48000, 64);
+        const int latency = proc.getLatencySamples();
+        const int frames = std::max(257, latency + 65);
+        juce::AudioBuffer<Sample> buffer(1 + scChannels, frames);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            for (int i = 0; i < frames; ++i)
+                buffer.setSample(ch, i, static_cast<Sample>(ch == 0 ? 0.1 * std::sin(0.03 * i) : 0.17 * ch));
+        const juce::AudioBuffer<Sample> reference(buffer);
+        juce::MidiBuffer midi;
+        proc.processBlock(buffer, midi);
+        for (int i = 0; i < frames; ++i) {
+            const double expected = i >= latency ? static_cast<double>(reference.getSample(0, i - latency)) : 0.0;
+            CHECK(near(buffer.getSample(0, i), expected, 1e-6), "mono main output uses its own channel mapping");
+            for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
+                CHECK(buffer.getSample(ch, i) == reference.getSample(ch, i), "mono main preserves auxiliary input channels");
+        }
+    }
 }
 
 void testSidechainBufferPreserved() {
@@ -251,6 +293,9 @@ void testStateRoundTrip() {
     age->setValueNotifyingHost(0.7f);
     juce::MemoryBlock blob;
     a.getStateInformation(blob);
+    const auto saved = juce::AudioProcessor::getXmlFromBinary(blob.getData(), static_cast<int>(blob.getSize()));
+    CHECK(saved && saved->getStringAttribute("edition") == "full" && saved->getStringAttribute("schemaVersion") == "1",
+          "new adapter state carries explicit edition and schema");
     b.setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
     CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "state round trip");
     const char garbage[] = "not xml";
@@ -260,6 +305,114 @@ void testStateRoundTrip() {
     b.setStateInformation(garbage, -1);
     b.setStateInformation(garbage, 4 * 1024 * 1024 + 1);  // reject before touching the small buffer
     CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "invalid state bounds ignored");
+
+    const auto restoreXml = [&](const juce::XmlElement& xml) {
+        juce::MemoryBlock candidate;
+        juce::AudioProcessor::copyXmlToBinary(xml, candidate);
+        b.setStateInformation(candidate.getData(), static_cast<int>(candidate.getSize()));
+    };
+    // States produced before adapter identity fields remain readable when their
+    // parameter IDs unambiguously belong to this edition.
+    const auto legacy = a.parameters().copyState().createXml();
+    setPlain(b, "macro.age", 0.1);
+    restoreXml(*legacy);
+    CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "legacy same-edition state remains readable");
+    const auto changedCandidate = [&] {
+        auto candidate = std::make_unique<juce::XmlElement>(*legacy);
+        for (auto* child : candidate->getChildIterator())
+            if (child->getStringAttribute("id") == "macro.age") child->setAttribute("value", "0.1");
+        return candidate;
+    };
+    auto invalid = changedCandidate();
+    invalid->setAttribute("edition", "lite");
+    restoreXml(*invalid);
+    CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "foreign explicit edition rejected");
+    invalid->setAttribute("edition", "full");
+    invalid->setAttribute("schemaVersion", "2");
+    restoreXml(*invalid);
+    CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "unsupported adapter schema rejected");
+    for (const auto* encoded : {"nan", "inf", "1e999", "0.5 junk", "-0.1", "1.1"}) {
+        invalid = std::make_unique<juce::XmlElement>(*legacy);
+        for (auto* child : invalid->getChildIterator())
+            if (child->getStringAttribute("id") == "macro.age") child->setAttribute("value", encoded);
+        restoreXml(*invalid);
+        CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "invalid parameter encoding rejected: %s", encoded);
+    }
+    invalid = changedCandidate();
+    invalid->getFirstChildElement()->setAttribute("id", "unknown.parameter");
+    restoreXml(*invalid);
+    CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "ambiguous legacy parameters rejected");
+    invalid = changedCandidate();
+    invalid->addChildElement(new juce::XmlElement(*invalid->getFirstChildElement()));
+    restoreXml(*invalid);
+    CHECK(near(b.parameters().getParameter("macro.age")->getValue(), 0.7, 1e-5), "duplicate state parameter rejected");
+
+    cd::plugin::CircuitDriftProcessor lite(Edition::Lite, "CircuitDrift LITE");
+    setPlain(lite, "lite.sag", 0.6);
+    lite.setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
+    CHECK(near(lite.parameters().getParameter("lite.sag")->getValue(), 0.6, 1e-5), "full state cannot replace LITE configuration");
+    CHECK(!lite.parameters().copyState().getChildWithProperty("id", "macro.age").isValid(), "foreign state children are not installed");
+    juce::MemoryBlock liteBlob;
+    juce::AudioProcessor::copyXmlToBinary(*legacy, liteBlob);
+    lite.setStateInformation(liteBlob.getData(), static_cast<int>(liteBlob.getSize()));
+    CHECK(!lite.parameters().copyState().getChildWithProperty("id", "macro.age").isValid(), "legacy full state is rejected by LITE");
+    const auto liteLegacy = lite.parameters().copyState().createXml();
+    juce::AudioProcessor::copyXmlToBinary(*liteLegacy, liteBlob);
+    setPlain(lite, "lite.sag", 0.2);
+    lite.setStateInformation(liteBlob.getData(), static_cast<int>(liteBlob.getSize()));
+    CHECK(near(lite.parameters().getParameter("lite.sag")->getValue(), 0.6, 1e-5), "legacy LITE state remains readable");
+    lite.getStateInformation(liteBlob);
+    auto liteXml = juce::AudioProcessor::getXmlFromBinary(liteBlob.getData(), static_cast<int>(liteBlob.getSize()));
+    CHECK(liteXml && liteXml->getStringAttribute("edition") == "lite" && liteXml->getStringAttribute("liteMappingVersion") == "1",
+          "LITE state identifies its mapping");
+    liteXml->setAttribute("liteMappingVersion", "2");
+    juce::AudioProcessor::copyXmlToBinary(*liteXml, liteBlob);
+    setPlain(lite, "lite.sag", 0.2);
+    lite.setStateInformation(liteBlob.getData(), static_cast<int>(liteBlob.getSize()));
+    CHECK(near(lite.parameters().getParameter("lite.sag")->getValue(), 0.2, 1e-5), "unsupported LITE mapping rejected");
+
+    // Restore may stage a different latency, but only host reprepare installs it.
+    b.prepareToPlay(48000, 64);
+    const int originalLatency = b.getLatencySamples();
+    setPlain(a, "quality.zeroLatency", 1);
+    a.getStateInformation(blob);
+    b.setStateInformation(blob.getData(), static_cast<int>(blob.getSize()));
+    juce::AudioBuffer<float> empty;
+    juce::MidiBuffer midi;
+    b.processBlock(empty, midi);
+    CHECK(b.getLatencySamples() == originalLatency && originalLatency > 0, "restore keeps active latency until reprepare");
+    b.prepareToPlay(48000, 64);
+    CHECK(b.getLatencySamples() == 0, "reprepare installs restored zero-latency configuration");
+}
+
+void testZeroFrameMidi() {
+    cd::plugin::CircuitDriftProcessor actual(Edition::Full, "Actual"), reference(Edition::Full, "Reference");
+    for (auto* proc : {&actual, &reference}) {
+        setPlain(*proc, "key.enabled", 1);
+        setPlain(*proc, "key.source", 1);
+        setPlain(*proc, "quality.mode", 0);
+        setPlain(*proc, "gainMatch.enabled", 0);
+        proc->prepareToPlay(48000, 64);
+    }
+    juce::AudioBuffer<float> empty, a(2, 2048), b(2, 2048);
+    juce::MidiBuffer midiA, midiB;
+    for (const auto event : {juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(100)),
+                             juce::MidiMessage::allNotesOff(1)}) {
+        midiA.addEvent(event, 0);
+        actual.processBlock(empty, midiA);
+        midiB.addEvent(event, 0);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 2048; ++i)
+                a.setSample(ch, i, static_cast<float>(0.08 * std::sin(0.13 * i)));
+        b.makeCopyOf(a);
+        actual.processBlock(a, midiA);
+        reference.processBlock(b, midiB);
+        double difference = 0;
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 2048; ++i)
+                difference = std::max(difference, std::fabs(double(a.getSample(ch, i)) - b.getSample(ch, i)));
+        CHECK(difference < 1e-7, "zero-frame MIDI flush matches sample-zero event in next audio block: %g", difference);
+    }
 }
 
 }  // namespace
@@ -272,8 +425,11 @@ int main() {
     testBusLayouts();
     testRuntimeAudio<float>();
     testRuntimeAudio<double>();
+    testMonoAuxLayouts<float>();
+    testMonoAuxLayouts<double>();
     testSidechainBufferPreserved();
     testStateRoundTrip();
+    testZeroFrameMidi();
     g_failures += cd::plugin::test::gesture_regressions::run();
     if (g_failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", g_failures);

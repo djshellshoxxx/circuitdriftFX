@@ -132,6 +132,28 @@ inline int run() {
     }
     check(hb.begins == 1 && hb.ends == 1 && bridge.open == 0 && bridge.begins == bridge.ends,
           "destroying binding closes its active host and undo gestures");
+    {
+        HostGestures gestures(a);
+        int teardownCallbacks = 0;
+        auto control = std::make_unique<cd::plugin::ui::pc::ParamSlider>(bridge, "Bias", "Bias");
+        control->bind("slot.a.stage.bias");
+        control->setSize(240, cd::plugin::ui::pc::ParamSlider::kHeight);
+        auto& slider = control->slider;
+        // Observe JUCE teardown without executing the old callback on dead members.
+        slider.onDragEnd = [&] { ++teardownCallbacks; };
+        const juce::Point<float> position{40.0f, 13.0f};
+        const auto now = juce::Time::getCurrentTime();
+        const juce::MouseEvent down(juce::Desktop::getInstance().getMainMouseSource(), position,
+                                   juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier),
+                                   1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &slider, &slider, now, position, now, 1, false);
+        slider.mouseDown(down);
+        check(gestures.begins == 1 && gestures.ends == 0 && bridge.open == 1,
+              "actual JUCE mouse down opens one parameter gesture");
+        control.reset();  // deliberately omit mouse-up: currentDrag ends during destruction
+        check(gestures.begins == 1 && gestures.ends == 1 && bridge.open == 0,
+              "destroying a dragging slider closes its live binding once");
+        check(teardownCallbacks == 0, "slider callbacks detach before referenced members die");
+    }
     numericPanelRegressions(bridge);
     if (!failures) std::puts("UI host-gesture regressions passed");
     return failures ? 1 : 0;

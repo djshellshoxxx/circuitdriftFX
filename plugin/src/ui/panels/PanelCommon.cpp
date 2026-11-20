@@ -208,6 +208,17 @@ ParamSlider::ParamSlider(EditorBridge& b, const juce::String& name, const juce::
     };
 }
 
+ParamSlider::~ParamSlider() {
+    // JUCE can end an internal drag while destroying the slider. Its callbacks
+    // must not refer to the binding/formatters that are destroyed before it.
+    slider.onDragStart = {};
+    slider.onDragEnd = {};
+    slider.onValueChange = {};
+    slider.textFromValueFunction = {};
+    slider.valueFromTextFunction = {};
+    binding.unbind();
+}
+
 void ParamSlider::setDisplay(std::function<juce::String(double)> f, PlainParser parser) {
     fmt_ = std::move(f);
     parse_ = std::move(parser);

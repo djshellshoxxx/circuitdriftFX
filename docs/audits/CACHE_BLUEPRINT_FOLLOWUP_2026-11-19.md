@@ -31,9 +31,9 @@ the repository CI sanitizer configuration was not relaxed.
 
 All four suites passed in 36.84 seconds: `cd_community_tests`,
 `blueprint_compile`, `blueprint_timeline`, `blueprint_faults`. This includes the
-recovered original suites and new typed-input/cache-failure regressions. One
+recovered original suites and new typed-input/cache-failure regressions. An
 additional port-budget direct-solver boundary was then added; the compile suite
-is rerun for that change. The integrated coordinator build must be refreshed.
+passed again in 5.92 seconds. The integrated coordinator build must be refreshed.
 
 ## Limits
 

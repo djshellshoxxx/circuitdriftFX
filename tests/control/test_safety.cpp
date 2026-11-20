@@ -274,6 +274,33 @@ void referenceTuningBoundary() {
           "ordinary alternate tuning keeps its pitch mapping");
 }
 
+void zeroFrameMidi() {
+    ControlProcessor cp;
+    cp.prepare(48000, 480, 17);
+    auto p = core::defaultValues();
+    p[core::indexOf("key.enabled")] = 1;
+    p[core::indexOf("key.source")] = 1;
+    ControlContext ctx;
+    ctx.frames = 480;
+    core::ModulationBlock out;
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    const auto driftA = cp.drift(0).save(), driftB = cp.drift(1).save();
+    const double phase = cp.status().tempoPhase;
+    ctx.frames = 0;
+    MidiEvent event{0, 0x90, 60, 100};
+    ctx.midi = {&event, 1};
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(cp.status().keyState == KeyState::NoteActive, "sample-zero note-on applies without audio");
+    event = {1, 0x80, 60, 0};
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(cp.status().keyState == KeyState::NoteActive, "future event does not apply in zero frames");
+    event.frame = 0;
+    cp.processBlock(p, ctx, {}, nullptr, out);
+    CHECK(cp.status().keyState == KeyState::NoteHold, "zero-frame note-off releases the held note");
+    CHECK(sameState(driftA, cp.drift(0).save()) && sameState(driftB, cp.drift(1).save()) &&
+          phase == cp.status().tempoPhase, "zero-frame events advance neither RNG nor tempo clocks");
+}
+
 void transportBoundary() {
     constexpr double nan = std::numeric_limits<double>::quiet_NaN();
     constexpr double inf = std::numeric_limits<double>::infinity();
@@ -322,6 +349,7 @@ int main() {
     invalidRatesFallback();
     referenceTuningBoundary();
     transportBoundary();
+    zeroFrameMidi();
     if (g_fail) { std::printf("control safety: %d failure(s)\n", g_fail); return 1; }
     std::printf("control safety: all passed\n");
     return 0;

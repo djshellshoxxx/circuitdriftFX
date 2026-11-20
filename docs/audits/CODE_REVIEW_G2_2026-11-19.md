@@ -66,6 +66,40 @@ models remain synthetic fixtures; G01 and product/host qualification stay open.
   `juce_Slider.cpp::Pimpl::textChanged()` feeds the parser result into `setValue`
   with synchronous notification. No local executed-GUI reproduction is claimed.
 
+## Host boundaries, state compatibility and teardown
+
+- Zero-frame callbacks now apply targets without constructing JUCE audio bus
+  views. An empty `AudioBuffer` has no valid channel-pointer entries to expose;
+  the old view construction could read absent entries even though no samples
+  would be processed. Positive-frame callbacks reject incomplete bus buffers
+  before creating views and clear only available main outputs.
+- New APVTS configuration blobs carry `schemaVersion=1` and `edition=full|lite`;
+  LITE also carries `liteMappingVersion=1`. These are adapter configuration
+  markers, not a claim of engine/control checkpoint persistence. The complete
+  candidate is checked before `replaceState`: each child is a unique known
+  parameter in the active edition, its entire value parses as a finite float
+  inside the JUCE range, and discrete values are integral. Parsing directly to
+  float preserves serialized float endpoints. Unknown versions, foreign/mixed
+  IDs and malformed values leave the current state intact.
+- Legacy behavior is explicit:
+
+  | Candidate | Result |
+  | --- | --- |
+  | Old full APVTS blob with known full parameter IDs and no markers | Accepted by full |
+  | Old LITE blob with `lite.sag`, `lite.thermalAge`, optional `bypass` | Accepted by LITE |
+  | Old partial blob containing only known parameters of the current edition | Accepted; APVTS retains current values for missing parameters |
+  | Full blob loaded into LITE, with or without edition markers | Rejected before changing parameters or storing foreign children |
+  | Empty, unknown-only, mixed-edition or duplicate-parameter legacy blob | Rejected; its intended provenance is not guessed |
+  | Explicit unsupported schema or LITE mapping revision | Rejected |
+
+- `ParamSlider` now detaches callbacks and unbinds while all members are alive.
+  In pinned JUCE, destroying an active slider's `currentDrag` can call
+  `onDragEnd`; the old member destruction order had already destroyed
+  `ParamBinding`. The local libstdc++ `unique_ptr` destructor leaves the pointer
+  non-null during deletion, so JUCE's non-null test permits that callback. This
+  is source-confirmed use after object lifetime, not an observed heap-violation
+  crash. A real-JUCE mouse-down/no-mouse-up regression is added for Windows CI.
+
 ## Verification at this checkpoint
 
 - Configured and built `cd_runtime_processor_tests` and `cd_ui_input_tests` with
@@ -88,6 +122,13 @@ models remain synthetic fixtures; G01 and product/host qualification stay open.
   the plugin consistency test with production-panel regressions, and the shell
   snapshot test pass syntax compilation against the pinned JUCE headers. The
   production-widget regressions still require the linked Windows test run.
+- Final focused ASan/UBSan gate: `ui_numeric_input` and `runtime_processor` both
+  passed (6.47 seconds). Final pinned-JUCE syntax checks include the processor,
+  slider teardown, and expanded consistency tests. New linked-JUCE cases cover
+  float/double empty callbacks, malformed channel counts, mono main with zero,
+  mono and stereo auxiliary channels, legacy/foreign/versioned state, and
+  restoring a staged zero-latency mode followed by worker stop/reprepare/start.
+  None of those linked-JUCE executions is claimed locally.
 
 ## Remaining work for the next checkpoint/worker
 
@@ -95,11 +136,19 @@ models remain synthetic fixtures; G01 and product/host qualification stay open.
    retain all existing UI layout/snapshot assertions.
 2. Exercise zero-frame/mono/stereo/auxiliary buffer combinations, repeated worker
    reprepare/release, and configuration restore in linked JUCE tests on Windows.
-3. Persist/validate edition and mapping identity without guessing the provenance
-   of ambiguous legacy state. APVTS is currently parameter configuration only.
+3. Add a real UI compatibility summary for rejected state and pending latency
+   changes. Unknown legacy state is deliberately rejected; do not silently
+   invent a migration. APVTS still saves parameter configuration only, without
+   complete seed/model/UI/session checkpoint metadata or explicit upgrade export.
 4. The seek epoch reaches the engine, but the runtime does not clear the control
    pitch/tempo history. A safe worker-aware epoch handoff is still required;
    calling `ControlProcessor::reset()` from audio would race the pitch worker.
 5. Connect a real custom-editor/service bridge, staged-quality diagnostics,
    validated tail reporting, and complete session checkpoints. Generic JUCE
    editor and synthetic test bridges do not satisfy these product requirements.
+6. The coordinator subsequently repaired the zero-frame MIDI contract in a
+   separate bounded change: sample-zero events now traverse the adapter/runtime
+   into the existing tracker without resetting the pitch worker. New regression
+   fixtures verify note release, overflow release, no allocation, preserved
+   drift/RNG/tempo state, and a linked-JUCE audio-equivalence case. Read the
+   consolidated validation record for executed versus pending evidence.

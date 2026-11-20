@@ -34,7 +34,7 @@ public:
     // MIDI must be sorted, with offsets relative to this call. At most 1024 events
     // are accepted per call; overflow is observable via midiOverflowed() and ends
     // the admitted prefix with all-notes-off so a dropped release cannot latch.
-    // Zero frames applies targets without advancing audio/control clocks.
+    // Zero frames applies sample-zero MIDI events and targets without advancing clocks.
     void process(const engine::ProcessContext& context, const control::ControlContext& controls,
                  const double* const* input, double* const* output, int channels,
                  const double* const* sidechain, int sidechainChannels, int frames,

@@ -113,12 +113,12 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
     engine_.setBypassed(bypassed);
     midiOverflowed_ = controls.midi.size() > kMaxMidiEvents;
     // LITE ignores MIDI entirely, including its effect on processing boundaries.
-    std::size_t sourceCount = lite_ || frames == 0 ? 0 : std::min(controls.midi.size(), kMaxMidiEvents);
-    const bool releaseOverflow = midiOverflowed_ && !lite_ && frames > 0;
+    std::size_t sourceCount = lite_ ? 0 : std::min(controls.midi.size(), kMaxMidiEvents);
+    const bool releaseOverflow = midiOverflowed_ && !lite_;
     control::MidiEvent releaseEvent{};
     if (releaseOverflow) {
         sourceCount = kMaxMidiEvents - 1;
-        const auto frame = std::min(controls.midi[sourceCount].frame, static_cast<uint32_t>(frames - 1));
+        const auto frame = std::min(controls.midi[sourceCount].frame, static_cast<uint32_t>(std::max(0, frames - 1)));
         // Out-of-block events cannot put the terminal release beyond this call.
         while (sourceCount > 0 && controls.midi[sourceCount - 1].frame > frame) --sourceCount;
         releaseEvent = {frame, 0xb0, 123, 0};
@@ -129,7 +129,7 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
     };
     std::size_t eventIndex = 0;
     int offset = 0;
-    // A zero-frame call executes one target update and never consumes MIDI.
+    // A zero-frame call applies sample-zero events and targets without advancing time.
     do {
         int count = std::min(frames - offset, config_.maxBlock);
         // Apply a note at its sample boundary, never at the start of the earlier
@@ -163,9 +163,9 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
         if (cc.ppq && offset > 0 && cc.playing)
             *cc.ppq += double(offset) * cc.bpm.value_or(120.0) / (60.0 * config_.sampleRate);
         std::size_t eventCount = 0;
-        while (count > 0 && eventIndex < eventLimit) {
+        while (eventIndex < eventLimit) {
             const auto& event = eventAt(eventIndex);
-            if (event.frame >= uint32_t(offset + count)) break;
+            if (event.frame >= uint32_t(offset + std::max(count, 1))) break;
             ++eventIndex;
             if (event.frame < uint32_t(offset) || lite_) continue;
             midi_[eventCount] = event;

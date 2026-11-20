@@ -55,34 +55,26 @@ advance independently of a saved prompt. Avoid overlapping another active worker
   tuning/transport handling, and clamp-before-convert control parameters.
 - Fresh code review repaired held MIDI notes on event overflow, prepared-mode
   changes affecting active processing, and numeric editor fields changing meaning.
+- Added edition/schema/mapping markers and validation before parameter-state
+  replacement. Known-ID legacy configuration stays readable in its own edition.
+- Completed a sample-zero MIDI flush path without clock advancement, including
+  bounded overflow release and no pitch-worker reset.
 - Pinned official CI action sources and disabled retained checkout credentials.
 
 ## Verification status at this checkpoint
 
-Validation is ongoing. Do not copy an older green result as qualification of a new
-tree. Native core compilation uses GCC 14.2; local ASan/UBSan/float-cast-overflow
-checks require `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer cannot operate
-under this environment's ptrace. CI retains its normal sanitizer configuration.
+**The final combined core passed 30/30 suites** with GCC 14.2 and
+ASan/UBSan/float-cast-overflow in 136.40 seconds. Read the
+[consolidated validation record](VALIDATION_2026-11-19.md) for the qualified source
+commit, complete log, commands and exact limitations. Generated registry/plugin
+checks and documentation validation also passed.
 
-Completed targeted evidence, with exact commands in `docs/audits/`:
-
-- The pre-final-integration core baseline passed 23/23 suites. This is historical
-  evidence, not a claim that the final changed tree has already passed.
-- Engine runtime/checkpoint maintenance passed 2/2 suites; FIR/cascade checkpoint
-  rejection passed the oversampling suite. Final rollback ordering needs rerun.
-- Control maintenance passed all seven affected suites, the additional binary64
-  sample-rate boundary, then four suites for finite tuning/transport handling.
-- Fresh runtime review passed the ASan/UBSan processor suite with callback
-  allocation checks. Numeric input regression also passed with sanitizers.
-- Earlier cache and bundle repair suites passed 2/2. The coordinator is completing
-  the subsequent cache accounting/typed-blueprint compatibility pass.
-
-Full JUCE linking exceeded local memory. The fresh code reviewer did successfully
-syntax-check the processor, affected UI files and relevant tests against the exact
-pinned JUCE source. Successful syntax checks are not host or plugin execution.
-Windows CI must verify parameters, UI snapshots, format builds and pluginval.
-The source PR #15 failures were `state_queue` scheduling and `ui_snap_panels`
-caption clipping; both repairs remain in the candidate without weaker assertions.
+Final processor and plugin consistency sources passed syntax compilation against
+the pinned JUCE source; the fresh reviewer similarly checked affected UI files.
+Full linking/execution remains a Windows CI gate. The PR's initial CI run was
+queued at publication. No native, leak-check, physical calibration or production
+CPU qualification is inferred from this local result. Adverse ungated alias cases
+remain visible in the full CTest output.
 
 ## Worker handoffs
 
@@ -93,11 +85,24 @@ and the coordinator completed bounded engine/cache/blueprint maintenance. They
 must not be described as completed independent audits. Additional fresh-thread
 creation and follow-up activation reached this session's worker thread limit.
 Future runs must start from this durable checkpoint and recheck live ownership.
+An hourly continuation task is enabled, starting after this development session;
+its future runs resume the live PR and this handoff. Credit balance is not exposed.
+
+## Published checkpoint
+
+Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16) targets main.
+Its branch is `codex/cdfx-consolidation-20261119`. The initial remote commit is
+`5ccbb54a775a59fbd68b1635ff9c1a6b94e07a20`, with tree
+`6582095daf5ff9d0e8f934295c6ac44aa742134a`, verified identical to the local
+consolidation tree. Further changes use guarded forward ref updates. Read live
+head/checks before continuing; source and tests may advance after this record.
+The existing main and original development branches are retained.
 
 ## Fresh-worker queue
 
-1. Finish final integrated sanitizer/CMake checks and read Windows CI on the exact
-   published commit. Resolve actual failures without reducing acceptance criteria.
+1. Read Windows CI on the exact published commit and resolve actual failures
+   without reducing acceptance criteria. Refresh affected local tests for new changes;
+   the recorded combined core run already passed.
 2. Independently review the new cache accounting/typed-blueprint and engine checkpoint
    repairs, including the separate generated-port-source budget in the newer solver.
 3. Implement the real custom `EditorBridge` with actual transactions and supported

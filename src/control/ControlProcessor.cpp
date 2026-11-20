@@ -156,9 +156,18 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
         pr = pitch_.latest();
     }
     const bool pitchUsable = pitch_.isFresh(pr) && (pr.state == PitchState::Acquired || pr.held);
-    if (frames > 0) {
-        if (keySource == int(KeySource::Midi)) key_.advanceMidi(ctx.midi, frames);
-        else if (keySource == int(KeySource::Audio) && keyEnabled)
+    if (keySource == int(KeySource::Midi) && ctx.frames >= 0) {
+        if (frames > 0) key_.advanceMidi(ctx.midi, frames);
+        else {
+            // Zero-frame flushes can release held notes. Future-offset events are
+            // outside this call, and no elapsed-time or pitch-worker state changes.
+            for (const auto& event : ctx.midi) {
+                if (event.frame != 0) break;
+                key_.advanceMidi({&event, 1}, 0);
+            }
+        }
+    } else if (frames > 0) {
+        if (keySource == int(KeySource::Audio) && keyEnabled)
             key_.advanceAudio(pitchUsable, pitchUsable ? referencePitch(pr.frequencyHz, a4) : 0.0, frames);
         else key_.advanceManual(frames);
     }

@@ -1,0 +1,172 @@
+{
+  "source_commit": "f7c7b6a989438b7f320a191a7b63c2ccffa2a3b9",
+  "source_tree": "9391285fde4fa66861aebb40ccf1e3f7de7c054a",
+  "compiler": "GCC 14.2.0",
+  "build_type": "Release",
+  "cxx_flags": "-O1 -DNDEBUG -g0",
+  "sanitizers": [
+    "address",
+    "undefined",
+    "float-cast-overflow"
+  ],
+  "environment": {
+    "ASAN_OPTIONS": "detect_leaks=0",
+    "UBSAN_OPTIONS": "halt_on_error=1"
+  },
+  "leak_check": "not executed: LeakSanitizer is incompatible with the container tracer",
+  "total_elapsed_seconds": 136.4,
+  "tests": [
+    {
+      "name": "acceptance_core",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "blueprint_compile",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "blueprint_faults",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "blueprint_timeline",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "cd_community_tests",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "cd_media_tests",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "cd_network_tests",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_dynamics",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_harmonic",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_key",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_macros",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_pitch",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_safety",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "control_tempo",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "docs_validation_only",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "engine_checkpoint",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "engine_devices",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "engine_runtime",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "engine_stress",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "engine_t21",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "oversampling_safety",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "primitive_safety",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "registry_codegen_fresh",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "runtime_processor",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "solver_safety",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "state_history",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "state_preset",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "state_queue",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "state_safety",
+      "passed": true,
+      "elapsed_seconds": null
+    },
+    {
+      "name": "ui_numeric_input",
+      "passed": true,
+      "elapsed_seconds": null
+    }
+  ],
+  "log_sha256": "d935f2681a2c184d8c4501703c90b5f620563543e4ad412b20afa3ce696dcb28",
+  "native_plugin_execution": "pending Windows CI; processor and tests passed pinned-JUCE syntax compilation"
+}

@@ -159,11 +159,25 @@ void midiChunkingAndZeroFrames() {
     for (std::size_t i = 0; i < whole.size(); ++i) CHECK(std::fabs(whole[i] - explicitSplit[i]) < 1e-12);
     CHECK(rig.processor.controlStatus().keyState == control::KeyState::NoteActive);
     CHECK(!rig.processor.controlStatus().blockClamped);
+    const control::MidiEvent off{0, 0x80, 60, 0};
+    rig.cc.midi = {&off, 1};
+    allocations = 0;
+    countAllocations = true;
+    rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
+    countAllocations = false;
+    CHECK(allocations == 0);
+    CHECK(rig.processor.controlStatus().keyState == control::KeyState::NoteHold);
+    rig.cc.midi = {&startEvent, 1};
+    rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
+    CHECK(rig.processor.controlStatus().keyState == control::KeyState::NoteActive);
     std::array<control::MidiEvent, runtime::Processor::kMaxMidiEvents + 1> events{};
     for (auto& note : events) note = {0, 0x90, 60, 100};
     events.back() = {20, 0x80, 60, 0};  // note-off falls outside the accepted prefix
     rig.cc.midi = events;
     (void)rig.render(input);
+    CHECK(rig.processor.midiOverflowed());
+    CHECK(rig.processor.controlStatus().keyState != control::KeyState::NoteActive);
+    rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
     CHECK(rig.processor.midiOverflowed());
     CHECK(rig.processor.controlStatus().keyState != control::KeyState::NoteActive);
     std::string error;

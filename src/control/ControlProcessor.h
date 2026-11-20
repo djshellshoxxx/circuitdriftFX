@@ -11,7 +11,7 @@
 //    is not inside processBlock (setHarmonicMap is an atomic pointer publish; the caller keeps the map
 //    alive until harmonicMapInUse(slot) reports it or a newer one).
 //  - processBlock() : audio thread only, noexcept, no allocation/locks/I/O. frames==0 advances no clock
-//    (outputs reflect current parameters and the last block's state). frames > maxBlock is clamped and
+//    (sample-zero MIDI and parameters still apply). frames > maxBlock is clamped and
 //    flagged in status().blockClamped.
 //  - runPitchWorker() : worker thread (single), drains the pitch ring and analyses windows.
 //  - status() : audio thread (same thread as processBlock); the runtime may copy it for the UI.

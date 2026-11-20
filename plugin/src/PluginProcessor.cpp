@@ -2,6 +2,7 @@
 
 #include "ParameterLayout.h"
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <limits>
 
@@ -9,6 +10,9 @@ namespace cd::plugin {
 namespace {
 constexpr const char* kStateType = "CircuitDriftState";
 constexpr int kMaxStateBytes = 4 * 1024 * 1024;
+constexpr const char* kAdapterStateVersion = "1";
+constexpr const char* kLiteMappingVersion = "1";
+const char* editionName(Edition edition) noexcept { return edition == Edition::Lite ? "lite" : "full"; }
 std::int64_t advanceSamples(std::int64_t sample, int frames) noexcept {
     return sample > std::numeric_limits<std::int64_t>::max() - frames
         ? std::numeric_limits<std::int64_t>::max() : sample + frames;
@@ -106,12 +110,20 @@ void CircuitDriftProcessor::releaseResources() {
 
 template <typename Sample>
 void CircuitDriftProcessor::processAudio(juce::AudioBuffer<Sample>& buffer, juce::MidiBuffer& midi, bool bypassed) noexcept {
-    auto output = getBusBuffer(buffer, false, 0);
-    if (!runtime_.isPrepared() || maxBlock_ <= 0) { output.clear(); midi.clear(); return; }
-    auto input = getBusBuffer(buffer, true, 0);
-    auto sidechain = getBusBuffer(buffer, true, 1);
     const int frames = buffer.getNumSamples();
-    const int channels = std::min(output.getNumChannels(), engine::kMaxChannels);
+    if (frames < 0) { midi.clear(); return; }
+    const int channels = std::min(getMainBusNumOutputChannels(), engine::kMaxChannels);
+    if (!runtime_.isPrepared() || maxBlock_ <= 0 ||
+        (frames > 0 && buffer.getNumChannels() < std::max(getTotalNumInputChannels(), getTotalNumOutputChannels()))) {
+        for (int ch = 0; ch < std::min(channels, buffer.getNumChannels()); ++ch) buffer.clear(ch, 0, frames);
+        midi.clear();
+        return;
+    }
+    // A parameter-only callback may have no audio channel pointers. Do not form
+    // JUCE bus views until positive frame count and the complete bus layout exist.
+    auto output = frames > 0 ? getBusBuffer(buffer, false, 0) : juce::AudioBuffer<Sample>{};
+    auto input = frames > 0 ? getBusBuffer(buffer, true, 0) : juce::AudioBuffer<Sample>{};
+    auto sidechain = frames > 0 ? getBusBuffer(buffer, true, 1) : juce::AudioBuffer<Sample>{};
     const int sidechainChannels = std::min(sidechain.getNumChannels(), engine::kMaxChannels);
     const auto parameters = parameterSnapshot();
     bypassed = bypassed || (rawBypass_ && rawBypass_->load(std::memory_order_relaxed) >= 0.5f);
@@ -145,14 +157,12 @@ void CircuitDriftProcessor::processAudio(juce::AudioBuffer<Sample>& buffer, juce
             midiOverflowed_.store(true, std::memory_order_relaxed);
             // A dropped note-off must not leave key tracking latched indefinitely. End the
             // admitted event prefix with one all-notes-off (the control tracker clears all channels).
-            if (frames > 0) {
-                const auto frame = midiCount == 0 ? 0u : midiEvents_[midiCount - 1].frame;
-                if (midiCount == midiEvents_.size()) --midiCount;
-                midiEvents_[midiCount++] = {frame, 0xb0, 123, 0};
-            }
+            const auto frame = midiCount == 0 ? 0u : midiEvents_[midiCount - 1].frame;
+            if (midiCount == midiEvents_.size()) --midiCount;
+            midiEvents_[midiCount++] = {frame, 0xb0, 123, 0};
             break;  // bound host-provided MIDI work, including SysEx
         }
-        if (metadata.numBytes < 3 || metadata.samplePosition < 0 || metadata.samplePosition >= frames) continue;
+        if (metadata.numBytes < 3 || metadata.samplePosition < 0 || metadata.samplePosition >= std::max(frames, 1)) continue;
         const auto kind = metadata.data[0] & 0xf0;
         if (kind != 0x80 && kind != 0x90 && kind != 0xb0) continue;
         midiEvents_[midiCount++] = {static_cast<std::uint32_t>(metadata.samplePosition), metadata.data[0],
@@ -186,7 +196,7 @@ void CircuitDriftProcessor::processAudio(juce::AudioBuffer<Sample>& buffer, juce
         if (chunkControls.ppq && chunkControls.playing)
             *chunkControls.ppq += static_cast<double>(offset) / sampleRate_ * chunkControls.bpm.value_or(120.0) / 60.0;
         std::size_t chunkEvents = 0;
-        while (midiCursor < midiCount && midiEvents_[midiCursor].frame < static_cast<std::uint32_t>(offset + count)) {
+        while (midiCursor < midiCount && midiEvents_[midiCursor].frame < static_cast<std::uint32_t>(offset + std::max(count, 1))) {
             auto event = midiEvents_[midiCursor++];
             if (event.frame < static_cast<std::uint32_t>(offset)) continue;
             event.frame -= static_cast<std::uint32_t>(offset);
@@ -239,14 +249,43 @@ juce::AudioProcessorEditor* CircuitDriftProcessor::createEditor() {
 }
 
 void CircuitDriftProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    if (const auto xml = apvts_.copyState().createXml()) copyXmlToBinary(*xml, destData);
+    auto state = apvts_.copyState();
+    state.setProperty("schemaVersion", kAdapterStateVersion, nullptr);
+    state.setProperty("edition", editionName(edition_), nullptr);
+    if (edition_ == Edition::Lite) state.setProperty("liteMappingVersion", kLiteMappingVersion, nullptr);
+    if (const auto xml = state.createXml()) copyXmlToBinary(*xml, destData);
 }
 
 void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInBytes) {
     if (data == nullptr || sizeInBytes <= 0 || sizeInBytes > kMaxStateBytes) return;
     const auto xml = getXmlFromBinary(data, sizeInBytes);
-    if (xml != nullptr && xml->hasTagName(apvts_.state.getType()))
-        apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+    if (xml == nullptr || !xml->hasTagName(apvts_.state.getType())) return;
+    if (xml->hasAttribute("schemaVersion") && xml->getStringAttribute("schemaVersion") != kAdapterStateVersion) return;
+    if (xml->hasAttribute("edition") && xml->getStringAttribute("edition") != editionName(edition_)) return;
+    if (edition_ == Edition::Lite && xml->hasAttribute("liteMappingVersion") &&
+        xml->getStringAttribute("liteMappingVersion") != kLiteMappingVersion) return;
+
+    // Legacy APVTS states have no edition marker. Accept only an unambiguous
+    // subset of this edition's known parameters; reject mixed/unknown payloads.
+    // Validate the entire candidate before JUCE can publish any parameter value.
+    std::array<juce::RangedAudioParameter*, core::kParamCount + 1> seen{};
+    std::size_t count = 0;
+    for (const auto* child : xml->getChildIterator()) {
+        if (!child->hasTagName("PARAM") || count == seen.size()) return;
+        auto* parameter = apvts_.getParameter(child->getStringAttribute("id"));
+        if (!parameter || std::find(seen.begin(), seen.begin() + count, parameter) != seen.begin() + count) return;
+        const auto encoded = child->getStringAttribute("value").toStdString();
+        // APVTS stores float values. Parse directly to that representation so a
+        // decimal serialization of a float endpoint round-trips exactly.
+        float value = 0;
+        const auto parsed = std::from_chars(encoded.data(), encoded.data() + encoded.size(), value);
+        const auto& range = parameter->getNormalisableRange();
+        if (parsed.ec != std::errc{} || parsed.ptr != encoded.data() + encoded.size() || !std::isfinite(value) ||
+            value < range.start || value > range.end || (parameter->isDiscrete() && value != std::round(value))) return;
+        seen[count++] = parameter;
+    }
+    if (count == 0) return;
+    apvts_.replaceState(juce::ValueTree::fromXml(*xml));
 }
 
 }  // namespace cd::plugin
