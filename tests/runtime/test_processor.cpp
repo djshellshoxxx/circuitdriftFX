@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 #include "runtime/Processor.h"
+#include "KeyLockRegressions.h"
 
 namespace {
 thread_local bool countAllocations = false;
@@ -334,6 +335,7 @@ void operator delete(void* ptr) noexcept { std::free(ptr); }
 void operator delete(void* ptr, std::size_t) noexcept { std::free(ptr); }
 
 int main() {
+    failures += cd::tests::key_lock::run();
     parameterBoundaries();
     dryLatencyAndLargeBlocks();
     liteEquivalenceAndAudibleProcessing();
