@@ -145,6 +145,8 @@ public:
     // Lifecycle timeline (CD-F18): scrubbing uses slot.<x>.lifecycle/scenario parameters;
     // committing Restoration changes replacement seeds once.
     virtual void commitRestoration(int slot) = 0;
+    // Feature discovery avoids showing a successful no-op when the live seed service is absent.
+    virtual bool supportsRestorationCommit() const { return true; }
 
     // Faults (CD-F19): explicit preview/apply; reversible; part of undo/A/B/preset state.
     virtual std::vector<FaultInfo> faults(int slot) = 0;
