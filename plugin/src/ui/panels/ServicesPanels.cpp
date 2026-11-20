@@ -120,7 +120,7 @@ public:
         if (destination == juce::File()) return;
         clearActionResult();
         if (!destination.getFileExtension().equalsIgnoreCase(ext())) {
-            dest_file_ = {};
+            dest_file_ = juce::File{};
             showActionResult("Choose a filename ending in " + ext() + ".", Tone::Warn);
         } else {
             dest_file_ = destination;
@@ -135,7 +135,7 @@ private:
         const bool changed = format_ != f;
         if (changed) {
             clearActionResult();
-            dest_file_ = {};
+            dest_file_ = juce::File{};
         }
         format_ = f;
         const double maxS = f == CaptureFormat::Mp4 ? 60.0 : 15.0;
