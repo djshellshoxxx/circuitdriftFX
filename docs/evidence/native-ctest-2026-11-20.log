@@ -1,0 +1,62 @@
+
+## plugin_param_consistency
+UI host-gesture regressions passed
+plugin parameter consistency: all checks passed (116 registry params)
+
+Test project <build-clang>
+    Start 31: plugin_param_consistency
+1/1 Test #31: plugin_param_consistency .........   Passed    4.03 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =   4.05 sec
+
+## ui_snap_live_bridge
+live EditorBridge: PASS (0 failures)
+
+Test project <build-clang>
+    Start 34: ui_snap_live_bridge
+1/1 Test #34: ui_snap_live_bridge ..............   Passed    0.22 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =   0.23 sec
+
+## ui_snap_shell
+UI shell snapshot passed
+
+Test project <build-clang>
+    Start 36: ui_snap_shell
+1/1 Test #36: ui_snap_shell ....................   Passed   19.69 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =  19.70 sec
+
+## ui_snap_panels
+UI panels snapshot passed
+
+
+## ui_snap_workbench
+Workbench snapshot passed
+
+Test project <build-clang>
+    Start 35: ui_snap_panels
+    Start 37: ui_snap_workbench
+1/2 Test #35: ui_snap_panels ...................   Passed   10.57 sec
+2/2 Test #37: ui_snap_workbench ................   Passed   12.34 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =  12.35 sec
+
+## ui_snap_contract
+UI contract snapshot passed
+
+Test project <build-clang>
+    Start 33: ui_snap_contract
+1/1 Test #33: ui_snap_contract .................   Passed    0.83 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =   0.83 sec

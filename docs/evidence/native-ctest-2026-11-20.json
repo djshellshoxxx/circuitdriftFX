@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "local_source_commit": "1f21fe95a2d495be8abe797437730577575f9d58",
+  "published_source_commit": "581745655f26c51fb1b092fe4db9e32a035e1f0c",
+  "compiler": "Clang 19.1.7",
+  "configuration": "Custom, -O0 -g0 -DNDEBUG",
+  "sanitizers": [],
+  "juce_commit": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+  "passed": 6,
+  "failed": 0,
+  "invocations": 5,
+  "scope": "Native processor and all five UI console-test applications; not a DAW or plugin-format qualification. UI images use labelled synthetic fixtures.",
+  "tests": [
+    {
+      "name": "plugin_param_consistency",
+      "passed": true,
+      "seconds": 4.02599,
+      "invocation": "native-processor"
+    },
+    {
+      "name": "ui_snap_contract",
+      "passed": true,
+      "seconds": 0.826973,
+      "invocation": "native-contract"
+    },
+    {
+      "name": "ui_snap_live_bridge",
+      "passed": true,
+      "seconds": 0.220642,
+      "invocation": "native-live-bridge"
+    },
+    {
+      "name": "ui_snap_panels",
+      "passed": true,
+      "seconds": 10.5696,
+      "invocation": "native-workbench-panels"
+    },
+    {
+      "name": "ui_snap_shell",
+      "passed": true,
+      "seconds": 19.6912,
+      "invocation": "native-shell"
+    },
+    {
+      "name": "ui_snap_workbench",
+      "passed": true,
+      "seconds": 12.3445,
+      "invocation": "native-workbench-panels"
+    }
+  ]
+}

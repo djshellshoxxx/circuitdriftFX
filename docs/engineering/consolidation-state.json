@@ -2,6 +2,97 @@
   "schema_version": 1,
   "repository": "djshellshoxxx/circuitdriftFX",
   "inventory_date": "2026-11-19",
+  "status_updated_date": "2026-11-20",
+  "inventory_scope": "Original 15-branch discovery inventory and ancestry counts; retained source provenance, not current remote-ref assertions.",
+  "current_checkpoint": {
+    "date": "2026-11-20",
+    "branch": "codex/cdfx-consolidation-20261119",
+    "source_head": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
+    "production_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+    "source_head_difference": "Audit documentation follows the last tested production/test commit; the containing publication adds validation artifacts and handoff documentation only.",
+    "validation": {
+      "combined_core": {
+        "result": "passed",
+        "passed_suites": 30,
+        "total_suites": 30,
+        "elapsed_seconds": 127.89,
+        "source_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+        "compiler": "GCC 14.2",
+        "optimization": "-O1",
+        "instrumentation": [
+          "AddressSanitizer",
+          "UndefinedBehaviorSanitizer",
+          "float-cast-overflow"
+        ],
+        "leak_detection": "disabled under environment tracer; no leak-check qualification",
+        "generated_table_freshness": "passed separately"
+      },
+      "queue_followup": {
+        "initial_combined_result": "29/30 passed; state_queue monotonic ordering failed",
+        "status": "repair integrated and final combined suite passed",
+        "worker_source_sha": "43d2d777670e068c6be3d6aa7724a7afca403035",
+        "integrated_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+        "worker_audit_sha": "1999eb2bf0e6d63a193b01946d2038173c2c0fbc",
+        "integrated_audit_sha": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
+        "targeted_repetitions_passed": 25,
+        "targeted_elapsed_seconds": 4.52,
+        "independent_review": "No blocking ownership/memory-order finding; lock-free assertion request resolved.",
+        "acceptance": "Existing monotonicity assertion and thresholds retained."
+      },
+      "native": {
+        "compiler": "Clang 19",
+        "build_type": "Custom",
+        "optimization": "-O0",
+        "passed": [
+          {
+            "suite": "plugin_param_consistency",
+            "elapsed_seconds": 4.02599
+          },
+          {
+            "suite": "ui_snap_contract",
+            "elapsed_seconds": 0.826973
+          },
+          {
+            "suite": "ui_snap_live_bridge",
+            "elapsed_seconds": 0.220642
+          },
+          {
+            "suite": "ui_snap_panels",
+            "elapsed_seconds": 10.5696
+          },
+          {
+            "suite": "ui_snap_shell",
+            "elapsed_seconds": 19.6912
+          },
+          {
+            "suite": "ui_snap_workbench",
+            "elapsed_seconds": 12.3445
+          }
+        ],
+        "pending": [],
+        "compile_evidence": "All six native processor/UI console-test applications linked and executed successfully against pinned JUCE.",
+        "listener_fix_sha": "ffab6d29487daea5e42c76fdf6751d1f1ddb33ed",
+        "qualification": "Native processor and all five offscreen UI applications; not an interactive DAW, MSVC, leak, deadline or release qualification.",
+        "evidence": "docs/evidence/native-ctest-2026-11-20.json",
+        "invocations": 5
+      },
+      "record": "docs/engineering/VALIDATION_2026-11-20.md"
+    },
+    "publication": {
+      "status": "local_qualification_complete",
+      "target_branch": "codex/cdfx-consolidation-20261119",
+      "pr": 16,
+      "implementation_source_sha": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
+      "implementation_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51",
+      "head_resolution": "Read the live PR head; the containing commit adds evidence and documentation to the implementation source.",
+      "head_observed_before_publication": "cb53cd812700e5edbcf7323653b84e470da77cfc",
+      "commit_mapping": "docs/evidence/commit-map-2026-11-20.json",
+      "new_exact_source_ci": "Required on the containing published commit; previous cb53cd8 pass does not cover this continuation."
+    },
+    "local_work_branch": "codex/cdfx-continuation-20261120",
+    "local_source_head": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
+    "source_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51"
+  },
   "main": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
   "candidate_base": "0c0d6897caf36d4057ac3d8db8cfb346dd5412b4",
   "previous_engine_line": "71a263718ae7ac9ed0d4a75d624929489216ef53",
@@ -142,7 +233,7 @@
         "src/blueprint/Timeline.h"
       ],
       "from": "71a263718ae7ac9ed0d4a75d624929489216ef53",
-      "status": "imported_pending_build_review"
+      "status": "imported_and_covered_by_historical_core_and_pr16_validation"
     }
   ],
   "continuation": {
@@ -161,47 +252,117 @@
     ],
     "integration_status": "integrated_in_pr16_cb53cd812700e5edbcf7323653b84e470da77cfc",
     "validation": {
-      "pr16_linux": "passed_on_cb53cd812700e5edbcf7323653b84e470da77cfc_run_44674618903",
-      "pr16_windows": "queued_exact_head_run_44674618903_last_checked_2026-11-20",
-      "child": "not_yet_ci_qualified",
-      "windows_run_id": 44662769491,
-      "windows_tested_checkout": "33fbe24c62c134998bf6fe080b592772c390300c (PR synthetic merge checkout)",
-      "exact_head_requalification": "Linux pass, Windows queued as of latest observation; no pluginval verdict"
+      "qualified_pr16": {
+        "source_sha": "cb53cd812700e5edbcf7323653b84e470da77cfc",
+        "run_id": 44674618903,
+        "linux_job_id": 136083378151,
+        "linux": "passed",
+        "windows_job_id": 136103454565,
+        "windows": "passed",
+        "pluginval": "passed",
+        "run_url": "https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903",
+        "coverage": "This exact previous source only; does not qualify later continuation changes."
+      },
+      "historical_windows_wrapper_failure": {
+        "run_id": 44662769491,
+        "job_id": 136049529086,
+        "feature_head": "e721e9eea044b352546abd3a1b945fa1f3745038",
+        "checkout_sha": "33fbe24c62c134998bf6fe080b592772c390300c",
+        "checkout_kind": "synthetic_pr_merge",
+        "result": "Linux passed; Windows build, CTest and packages passed; pluginval wrapper did not wait and reports were empty.",
+        "disposition": "Wrapper and exact-source checkout repaired; superseded by the successful cb53cd8 run."
+      }
     },
     "unresolved": [
-      "Exact PR-head Windows/pluginval rerun after GUI-process wait fix",
-      "independent regression/security review",
-      "custom EditorBridge and session migration",
-      "older PR 9/10/14 per-file reconciliation",
-      "Live EditorBridge branch C++ build/UI snapshot qualification on isolated head before integration"
+      "New continuation exact-source CI and remaining native qualification",
+      "Complete runtime/control/seed session checkpoint and migration",
+      "Older PR 9/10/14 item-level semantic reconciliation",
+      "Live preset, blueprint, fault, restoration, capture and provider services"
     ]
   },
   "editor_bridge_continuation": {
     "base_pr": 16,
     "base_sha": "cb53cd812700e5edbcf7323653b84e470da77cfc",
     "branch": "codex/cdfx-live-editor-bridge-20261120",
-    "source_head": "7c0c72df79a692f14b223a720a9da51c66d164ce",
-    "status": "published_isolated_unbuilt_pending_independent_review",
+    "initial_source_head": "7c0c72df79a692f14b223a720a9da51c66d164ce",
+    "review_start": "3f122dfa0f56706e26329eaa3fd31a3199145ce3",
+    "integration_branch": "codex/cdfx-continuation-20261120",
+    "feature_integration_sha": "0299a176e7cca0fd645f521caea0cb6a394caf1c",
+    "source_head": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
+    "status": "core_and_all_six_native_suites_passed_new_exact_head_ci_required",
     "behavior": [
-      "Actual custom CircuitDriftEditor constructed by plugin instead of JUCE GenericAudioProcessorEditor",
-      "Live EditorBridge APVTS parameter transactions with 20-step bounded local history, guarded undo/redo and A/B copy/swap",
-      "Read-only processor telemetry read gate coordinated with prepare/release",
-      "Host state replacement invalidates stale local undo history",
-      "Unsupported service requests return explicit failure; restoration commit disabled in live UI",
-      "Registered new JUCE UI live-bridge test target via existing snap_*.cpp CMake glob"
+      "Production CircuitDriftEditor with APVTS transactions, 20-step local history, host-conflict checks, parameter-only A/B copy/swap and mirrored crossfade",
+      "Touched-parameter undo excludes unrelated automation; host gesture lifecycle covers keyboard, wheel, numeric, reset and destruction during drag",
+      "Persistent processor-owned single-reader/single-producer editor snapshots carry telemetry, control/quality status and effective targets across runtime lifecycle changes",
+      "Generation-stamped Warm/Cold requests consumed by the audio owner; prepared Full only, worker-owned pitch reset through epoch invalidation",
+      "Optional versioned bounded UI settings in host XML with legacy compatibility, validation before state replacement and host dirty notification for actual local changes",
+      "Already-open editor applies host-restored settings before local mutation/resize without notification recursion; PCB projection persists and unrelated settings preserve orbit",
+      "Zero-frame diagnostics publish without advancing audio clocks; host state replacement invalidates stale local history",
+      "PNG export wired; unavailable services fail explicitly and restoration commit remains disabled"
     ],
-    "verification": {
-      "method": "source/interface inventory via GitHub; C++ test source added but not yet compiled/executed",
-      "tests": "plugin/tests/ui/snap_live_bridge.cpp",
-      "local_plugin_build": "unavailable_local_clone_and_JUCE_dependencies",
-      "ci": "new isolated head has not passed CI; existing PR Linux pass does not cover these edits",
-      "independent_review_workers": "unavailable_in_this_automation_tool_context"
-    },
+    "tests": [
+      "plugin/tests/ProcessorRegressions.h",
+      "plugin/tests/ui/GestureRegressions.h",
+      "plugin/tests/ui/snap_live_bridge.cpp",
+      "plugin/tests/ui/snap_shell.cpp",
+      "plugin/tests/ui/snap_workbench.cpp"
+    ],
     "limitations": [
-      "Unwired presets, faults, blueprint compilation/install, GIF/MP4 capture, live engine reset, component seed restoration and persisted UI settings",
-      "No complete runtime/control/seed/session checkpoint restoration; parameter-only APVTS remains",
-      "History is message-thread local; host automation can invalidate touched steps; no claim of atomic multi-parameter host automation"
+      "No complete runtime/control/engine/seed session checkpoint or exact dynamic continuation; parameters and bounded UI preferences are persisted",
+      "A/B copies parameters, not dynamic engine state; APVTS publication is per parameter and not atomic across host automation",
+      "Live preset, fault, blueprint compiler/apply, restoration seed, GIF/MP4 and community/provider services remain unavailable",
+      "Single message-thread snapshot reader and serialized host prepare/release/process lifecycle assumptions remain",
+      "Real-host/window behavior, sustained performance, native reset budgets and physical/detector qualification remain open"
     ],
-    "next_owner": "Review and build on supported JUCE platform; run live bridge UI regression, then gated non-force PR integration; implement service transactions and versioned session state"
+    "next_owner": "Read exact-head Linux/Windows/pluginval results, resolve actual failures without relaxing gates, then implement dynamic session and live service gaps.",
+    "local_source_head": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b"
+  },
+  "current_reviews": [
+    {
+      "path": "docs/audits/EDITOR_REVIEW_2026-11-20.md",
+      "scope": "Live gesture/undo/lifetime/status/reset source review; initial worker checkpoint did not complete native compilation."
+    },
+    {
+      "path": "docs/audits/STATE_REVIEW_2026-11-20.md",
+      "scope": "History/preset/snapshot/cache review; initial 5/5 Debug sanitized suites passed; later queue repair passed 25 targeted repetitions and independent ordering review."
+    },
+    {
+      "path": "docs/audits/RUNTIME_REVIEW_2026-11-20.md",
+      "scope": "Reset/pitch epoch ownership and reacquisition; 3/3 scoped Release sanitized suites passed on recorded worker source."
+    },
+    {
+      "path": "docs/audits/INTEGRATION_REVIEW_2026-11-20.md",
+      "scope": "Processor lifecycle/serialization source review; open-editor restore and PCB persistence fixes; worker ran no native tests."
+    }
+  ],
+  "remaining_work": [
+    "Exact-head Linux/Windows/pluginval CI for the published continuation; local core and all six native processor/UI suites passed",
+    "Full dynamic runtime/control/engine/seed checkpoint capture, compatibility, migration and stopped-audio restore handoff",
+    "Coordinated dynamic A/B state transfer and host-automation boundaries",
+    "Live preset/blueprint/fault/restoration/capture/provider services",
+    "Older PR 9/10/14 analysis, edition, snapshot, RT-trap and runtime semantic reconciliation",
+    "Real-host, detector-corpus, native reset/CPU budgets, sustained performance and physical calibration gates"
+  ],
+  "release_scope": {
+    "models": "synthetic",
+    "release_or_deployment_authorized": false,
+    "paid_service_provisioning_authorized": false,
+    "preserve_original_branches": true,
+    "preserve_acceptance_criteria": true,
+    "open_or_limited_gates": [
+      "G01",
+      "G02",
+      "G03",
+      "G04",
+      "G05",
+      "G06",
+      "G07",
+      "G08",
+      "G10",
+      "G11",
+      "G12"
+    ],
+    "build_license_decision": "ADR-0001",
+    "review_boundary": "Scoped historical and current reviews; partial interrupted attempts are not completed audits; no new whole-repository security signoff claimed."
   }
 }

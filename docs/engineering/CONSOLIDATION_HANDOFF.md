@@ -1,274 +1,232 @@
-# CircuitDriftFX consolidation handoff — 2026-11-19
+# CircuitDriftFX consolidation handoff — 2026-11-20
 
-## Goal and current authority
+## Current checkpoint
 
-The owner requested consolidation of genuinely unique work, continuation of incomplete
-features, separate code/bug/security workers, and fresh-worker handoffs. Source
-integration and verified repairs are authorized. Preserve existing branches and
-acceptance criteria; do not infer physical calibration, release qualification or
-permission to provision paid services from this development request.
+The live plugin now constructs the custom editor, supports prepared Full-edition
+Warm/Cold reset requests, publishes persistent editor snapshots, and saves bounded
+UI preferences in host state. An already-open editor applies restored settings;
+Workbench projection changes persist. These features have advanced beyond the
+isolated-editor checkpoint at `3f122dfa0f56706e26329eaa3fd31a3199145ce3`.
 
-Read this file, the current live refs/PRs, `consolidation-state.json`, `CLAUDE.md`,
-the build ADR and the audit handoffs before selecting work. Repository state can
-advance independently of a saved prompt. Avoid overlapping another active worker.
+The reviewed implementation checkpoint is
+`d6d20df93bfc13eeb98874b3489b8030f5aaef23`, with tree
+`9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51`. It is identical to local
+`9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b` on
+`codex/cdfx-continuation-20261120`; the [commit mapping](../evidence/commit-map-2026-11-20.json)
+preserves the individual repair history. The containing checkpoint adds evidence
+and documentation after those production/test changes.
 
-## Source reconciliation
+Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
+`codex/cdfx-consolidation-20261119`, is the publication and CI authority. **New
+exact-head Linux/Windows CI and pluginval are required.** Read its live head and
+checks before continuing; the prior Windows pass cannot qualify this new source.
+
+| Evidence | Current result and exact boundary |
+| --- | --- |
+| Previous PR #16 exact source `cb53cd812700e5edbcf7323653b84e470da77cfc` | **PASSED Linux and Windows, including pluginval**, in [run 44674618903](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903). [Linux job 136083378151](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903/job/136083378151) and [Windows job 136103454565](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903/job/136103454565) both passed. This qualifies that prior source only. |
+| Current combined core | **30/30 PASSED in 127.89 seconds** on production source `1f21fe95a2d495be8abe797437730577575f9d58`, GCC 14.2, `-O1`, ASan/UBSan/float-cast-overflow. Leak detection was disabled under the tracer. Generated-table freshness checks passed separately. |
+| Current native plugin tests | **6/6 PASSED**, Clang 19, Custom `-O0`: processor consistency 4.03 s, live bridge 0.22 s, shell 19.69 s, Workbench 12.34 s, panels 10.57 s and contract 0.83 s. All executables linked against pinned JUCE. These are offscreen console-test applications, not a DAW qualification. |
+| New-source remote qualification | Required on the containing published commit; read the live PR checks. The earlier `cb53cd8` result applies only to that prior source. |
+
+Read [the current validation record](VALIDATION_2026-11-20.md) for evidence and
+subsequent coordinator updates. The first combined run of this continuation was
+29/30: `state_queue` exposed an ordering race while the other suites passed.
+The repaired queue passed 25 targeted sanitized repetitions in 4.52 seconds,
+received an independent ownership/memory-order review without a blocking finding,
+and then passed the full 30-suite rerun above. The original assertion and
+acceptance thresholds remain intact.
+
+## Goal, authority and release scope
+
+The owner requested consolidation of genuinely unique work, continuation of
+incomplete features, separate code/bug/security workers, and fresh-worker
+handoffs. Source integration and verified repairs are authorized. Preserve
+existing branches and acceptance criteria. This development request does not
+establish physical calibration, release qualification, or authority to provision
+paid services. No release or deployment is part of this checkpoint.
+
+Read this file, the live refs/PRs, [the source inventory](consolidation-state.json),
+`CLAUDE.md`, ADR-0001, and the audit handoffs before selecting work. Coordinate
+with active workers; repository state may advance after any saved prompt.
+
+## Implemented feature and repair state
+
+### Live editor, reset and host preferences
+
+- The processor owns the production `ProcessorEditorBridge` and constructs
+  `ui::CircuitDriftEditor`. Live APVTS gestures, bounded 20-step undo/redo,
+  host-value conflict checks, A/B parameter copy/swap and mirrored crossfade are
+  implemented. A validated host-state load invalidates stale local history.
+- Explicit touched-parameter declarations keep unrelated host automation out of
+  a user's undo step. Keyboard, wheel, numeric, reset and drag edits have matching
+  host gesture boundaries, including destruction during a drag.
+- Persistent processor-owned triple-buffer snapshots publish telemetry, quality
+  and control status, effective component targets and tempo from the audio
+  owner. UI reads no longer depend on runtime-owned memory surviving a
+  prepare/release transition. The single message-thread reader contract and
+  normal serialized host audio lifecycle still apply.
+- Warm/Cold UI requests carry the prepared-runtime generation and are consumed
+  by the audio owner on the next callback. Repeated requests coalesce. Full
+  prepared processors expose reset; LITE and unprepared processors disable it.
+  Runtime reset updates audio-owned state and invalidates pitch by epoch, leaving
+  analysis-buffer reset to the worker. Existing quiescent reset semantics remain.
+- Audio-key disable/re-enable, source changes and dropped input invalidate old
+  pitch immediately and require fresh acquisition. Zero-frame processing
+  publishes current reset/quality diagnostics without advancing audio clocks.
+- Versioned optional UI fields in host XML persist scale, theme, editor view,
+  educational/accessibility settings, overlays, X-ray, PCB view and dimensions.
+  Bounds and type validation precede parameter replacement; legacy
+  parameter-only states remain readable. Local preference changes notify the
+  host of nonparameter state changes; identical writes and restores do not.
+- An open editor synchronizes restored preferences before refresh, local edits,
+  menu toggles and resize. Restoration avoids writeback/notification recursion.
+  A newer explicit resize uses the restored scale and retains its newer physical
+  dimensions. Workbench view buttons persist their projection; unrelated
+  settings and reselecting a view preserve orbit/pan/zoom.
+
+### State repairs
+
+- Wheel-history coalescing stages a replacement and checks its byte budget before
+  mutation. Rejection preserves the prior transaction; undo boundaries,
+  intervening host values and non-finite timestamps are handled explicitly.
+- Preset reads allocate and consume only the checked bounded size, rejecting
+  short reads or appended data before publishing a result.
+- A failed parameter-snapshot coherence read leaves the caller's last accepted
+  snapshot unchanged.
+- The subsequent ring/coalesced handoff repair transfers complete events through
+  per-parameter SPSC mailboxes and rejects stale ring events using sequence
+  numbers. Legitimate value decreases remain valid. Sequence exhaustion rejects
+  explicitly, and callback work remains fixed and allocation-free.
+
+### Commit and audit map
+
+| Integrated commit | Change or evidence |
+| --- | --- |
+| `1b23249` | Scoped undo targets, complete host gesture lifecycle, live snapshot/reset consumers; [editor review](../audits/EDITOR_REVIEW_2026-11-20.md). |
+| `bff9a40`, `baff47a`, `c34754b` | Transactional wheel history, bounded preset reads, coherent snapshot publication. |
+| `bda4f2d` | [State/cache audit and older-branch reconciliation](../audits/STATE_REVIEW_2026-11-20.md). |
+| `ea63ce5` | Audio-owner reset and pitch activity/drop epoch repairs. |
+| `75257bb`, `7d55df6` | Processor-owned bounded preference delegation and editor snapshot/reset review handoff. |
+| `29b039a` | Runtime/pitch regressions and [runtime review](../audits/RUNTIME_REVIEW_2026-11-20.md). |
+| `0299a17` | Integrated persistent snapshots, reset mailbox, host UI serialization/notification, open-editor restore, PCB persistence, zero-frame diagnostics and regression source; [integration review](../audits/INTEGRATION_REVIEW_2026-11-20.md). |
+| `ffab6d2` | Qualified `juce::AudioProcessor` listener registration in the new native tests. |
+| `1f21fe9`, `9d8ba78` | Queue ordering repair and its repeated-test/independent-review evidence. Original worker commits: `43d2d777670e068c6be3d6aa7724a7afca403035` and `1999eb2bf0e6d63a193b01946d2038173c2c0fbc`. |
+
+## Remaining work and next owner
+
+1. Read exact-head Linux/Windows CI and pluginval on the published PR. Investigate
+   actual failures without weakening acceptance criteria. The combined local
+   core and all six native processor/UI suites passed, and their evidence is
+   archived. Check the live head for competing work before a guarded forward ref
+   update; do not transfer an older CI result to a newer commit.
+2. Define and implement complete runtime/control/engine/seed checkpoint capture,
+   host-thread handoff, restore compatibility and migration. Current plugin
+   sessions preserve parameters and UI preferences; a prepared reset seed is not
+   a saved dynamic continuation. Configuration JSON already has blueprint/seed
+   fields, but that does not connect full dynamic state to the plugin session.
+3. Extend A/B operations to coordinated dynamic-state transfer. Current copy/swap
+   changes parameters and creates one local undo record. APVTS still publishes
+   individual values; it is not an atomic multi-parameter/audio-state transaction,
+   and same-parameter concurrent host writes remain a coordination boundary.
+4. Connect live preset operations, blueprint compile/apply, fault insertion,
+   component restoration seeds, GIF/MP4 capture and community/provider services.
+   Core primitives exist, but the production editor still reports unavailable
+   operations explicitly and disables restoration commit. PNG export is wired.
+5. Continue native host/window/transport tests, audio-thread profiling, worst-case
+   reset and sustained performance measurements, detector-corpus/confidence
+   qualification, and measured sidechain budgets. Keep the zero external-load
+   budget until a model supplies evidence. The direct detector preparation API's
+   finite/rate/capacity bounds remain a recorded follow-up.
+6. Reconcile older PRs item by item, retaining their branches and test contracts.
+   Older snapshot acknowledgement/stopped-audio handoffs, LITE upgrade/export,
+   analysis/rail telemetry and RT-trap semantics are not resolved by similar
+   module names in the newer architecture.
+
+The editor and integration reviews are scoped source reviews with regression
+source; their initial checkpoints did not execute native tests. The state
+worker's initial 5/5 Debug sanitized pass and runtime worker's 3/3 Release
+sanitized passes qualify their own recorded sources and executions. The later
+combined run and native results are recorded above and in the validation file.
+No ThreadSanitizer, leak-check, real-host or production-performance qualification
+is inferred from those results.
+
+## Original source inventory and retained provenance
 
 - Main at discovery: `44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6`.
-- Candidate base: PR #15, `0c0d6897caf36d4057ac3d8db8cfb346dd5412b4`
-  (`nodata/confident-fermat-xv16g0`), retaining its 35 commits beyond main.
-- Earlier substantial engine line: PR #10,
+- Candidate base: PR #15, `0c0d6897caf36d4057ac3d8db8cfb346dd5412b4`,
+  branch `nodata/confident-fermat-xv16g0`, retaining its 35 commits beyond main.
+- Earlier engine line: PR #10,
   `71a263718ae7ac9ed0d4a75d624929489216ef53`.
-- All 15 original remote branches and their exact heads are recorded in
-  `consolidation-state.json`. Already merged ancestors are not imported again.
-- PR #10's blueprint graph/compiler, lifecycle and fault modules were genuinely
-  absent from PR #15. Eight production files and their three original test suites
-  were recovered; their source provenance is recorded in the inventory. Lifecycle
-  snapshot validation was then strengthened in a separate commit.
-- The older and newer runtime, control, media and network APIs differ materially.
-  Remaining old work is retained for semantic comparison, not discarded or
-  declared equivalent because a newer similarly named module exists.
-- PR #14's control handoff/snapshot/trap implementation, remaining PR #9/#10
-  runtime/analysis/edition work, and prior documentation PRs still need item-level
-  reconciliation. Do not close them merely because this candidate contains a
-  larger engine or has more tests.
+- All 15 original remote branches, exact heads, discovery-time ancestry counts
+  and recovered-file source paths remain in `consolidation-state.json`.
+  Already merged ancestors are not imported again. These inventory values are
+  historical provenance, not assertions about today's remote heads.
+- PR #10's eight graph/compiler/lifecycle/fault production files and their three
+  original suites were recovered because they were absent from PR #15. Lifecycle
+  snapshot validation and replacement-generation bounds were then strengthened.
+- Older and newer runtime/control/media/network APIs differ materially. Remaining
+  old work is preserved for semantic comparison; incompatible architectures are
+  not merged wholesale.
 
-## Engineering completed in this candidate
+PR #9/#10 `ScopeMath` and rail/telemetry suites use an older telemetry contract.
+PR #14's `ControlHub`, `LatestSlot`, `SampleClock`, `SpscRing` and RT-trap harness
+need explicit mapping to current queues and worker ownership. Its full-state
+handoffs include useful generation/acknowledgement ideas, but some dynamic-state
+capacities are placeholders. Earlier state/history/cache and LITE implementations
+also require contract-level comparison; the state/runtime audits document those
+dispositions. No PR is closed merely because the candidate has more tests.
 
-- Added `cd_runtime` between control/engine and JUCE. It sanitizes host parameters,
-  maps the two LITE controls, processes all samples of oversized blocks, preserves
-  MIDI event boundaries, handles zero-frame calls, and reports staged latency
-  changes. Audio buffers are prepared outside callbacks.
-- Connected both float and double plugin callbacks to the actual circuit runtime,
-  including declared latency, aligned bypass, transport and bounded MIDI input.
-  Pitch analysis runs on a separate worker joined before preparation/release.
-- Repaired UI gesture identity/lifetime, numeric input validation, a weak-pointer
-  settings callback, and the narrow Faults selector caption.
-- Repaired snapshot stress scheduling without weakening coherence assertions.
-- Hardened cache writes/pins and bundle parse/serialize/replay/co-render validation.
-  Detailed scope and limitations are in the generation-2 security handoff.
-- Recovered blueprint primitives, rejected inconsistent lifecycle snapshots, and
-  prevented replacement-generation wrap.
-- Validated nested engine/DSP checkpoint indices before conversion and mutation,
-  with an allocated rollback image and continuation regressions.
-- Completed portable drift clock/snapshot validation, deterministic reset, finite
-  tuning/transport handling, and clamp-before-convert control parameters.
-- Fresh code review repaired held MIDI notes on event overflow, prepared-mode
-  changes affecting active processing, and numeric editor fields changing meaning.
-- Added edition/schema/mapping markers and validation before parameter-state
-  replacement. Known-ID legacy configuration stays readable in its own edition.
-- Completed a sample-zero MIDI flush path without clock advancement, including
-  bounded overflow release and no pitch-worker reset.
-- Pinned official CI action sources and disabled retained checkout credentials.
+### Historical continuation timeline
 
-## Verification status at this checkpoint
+- Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16) originally
+  published branch `codex/cdfx-consolidation-20261119` at
+  `5ccbb54a775a59fbd68b1635ff9c1a6b94e07a20`, tree
+  `6582095daf5ff9d0e8f934295c6ac44aa742134a`.
+- The original combined core record at
+  `f7c7b6a989438b7f320a191a7b63c2ccffa2a3b9` passed 30/30 in 136.40 seconds.
+  [That validation record](VALIDATION_2026-11-19.md) remains historical evidence,
+  including its adverse ungated alias cases and performance limitations.
+- Isolated branch `codex/cdfx-seek-epoch-20261119` started from
+  `e721e9eea044b352546abd3a1b945fa1f3745038`. It added seek/pitch generations
+  in `edf0c21bc8b26ca928f0df8b5ed3d0459d02275c` and stale persisted-pin
+  cleanup in `63c33686bca432c807c93112e6aa65dc349d49e2`. Both were subsequently
+  incorporated into PR #16 at the qualified `cb53cd8` source above.
+- [Run 44662769491](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44662769491)
+  used synthetic merge checkout `33fbe24c62c134998bf6fe080b592772c390300c`.
+  Linux passed; Windows build/tests/packages passed, but its wrapper checked
+  pluginval before the GUI process completed and retained empty reports. The
+  [diagnosis](../audits/WINDOWS_PLUGINVAL_2026-11-20.md) records this old failure.
+  Waiting for process completion and selecting the exact PR-head checkout
+  repaired the wrapper. The later `cb53cd8` run fully passed; the diagnosis's
+  pending-rerun wording describes its earlier observation only.
+- Isolated branch `codex/cdfx-live-editor-bridge-20261120` began from qualified
+  source `cb53cd812700e5edbcf7323653b84e470da77cfc`; its initial published
+  editor source was `7c0c72df79a692f14b223a720a9da51c66d164ce`, followed by the
+  `3f122df` handoff. The shared continuation now contains the subsequent repairs
+  listed above. Statements at those earlier checkpoints that the live editor was
+  generic, reset was unwired or UI settings were not persisted are superseded.
 
-**The final combined core passed 30/30 suites** with GCC 14.2 and
-ASan/UBSan/float-cast-overflow in 136.40 seconds. Read the
-[consolidated validation record](VALIDATION_2026-11-19.md) for the qualified source
-commit, complete log, commands and exact limitations. Generated registry/plugin
-checks and documentation validation also passed.
+## Preserved engineering and acceptance boundaries
 
-Final processor and plugin consistency sources passed syntax compilation against
-the pinned JUCE source; the fresh reviewer similarly checked affected UI files.
-Full linking/execution remains a Windows CI gate. The PR's initial CI run was
-queued at publication. No native, leak-check, physical calibration or production
-CPU qualification is inferred from this local result. Adverse ungated alias cases
-remain visible in the full CTest output.
+Earlier consolidation established the `cd_runtime` layer; float/double adapter
+processing; oversized-block/MIDI boundaries; staged latency and aligned bypass;
+worker-owned pitch analysis; checkpoint validation/rollback; finite drift, tuning
+and transport handling; edition/schema/mapping checks; bounded cache/bundle
+validation; and pinned CI actions without retained checkout credentials. These
+remain part of the candidate rather than being discarded during the UI work.
 
-## Worker handoffs
+Code audit G1, fresh code review G2, security G2 and control bug review G3 remain
+scoped historical handoffs. Earlier interrupted bug/security attempts are partial
+work, not completed independent audits. The new editor/runtime/state/integration
+reviews do not imply a fresh whole-repository security signoff. Cache/library
+operations retain their documented trusted, serialized/single-process boundary;
+external filesystem races and failed pin-marker deletion are not made atomic.
 
-Code audit G1, fresh code review G2, the security G2 successor, and control bug
-review G3 produced commits and handoffs. Earlier bug/security worker attempts
-were interrupted by automatic content screening; their partial files were retained,
-and the coordinator completed bounded engine/cache/blueprint maintenance. They
-must not be described as completed independent audits. Additional fresh-thread
-creation and follow-up activation reached this session's worker thread limit.
-Future runs must start from this durable checkpoint and recheck live ownership.
-An hourly continuation task is enabled, starting after this development session;
-its future runs resume the live PR and this handoff. Credit balance is not exposed.
-
-## Published checkpoint
-
-Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16) targets main.
-Its branch is `codex/cdfx-consolidation-20261119`. The initial remote commit is
-`5ccbb54a775a59fbd68b1635ff9c1a6b94e07a20`, with tree
-`6582095daf5ff9d0e8f934295c6ac44aa742134a`, verified identical to the local
-consolidation tree. Further changes use guarded forward ref updates. Read live
-head/checks before continuing; source and tests may advance after this record.
-The existing main and original development branches are retained.
-
-## Fresh-worker queue
-
-1. Read Windows CI on the exact published commit and resolve actual failures
-   without reducing acceptance criteria. Refresh affected local tests for new changes;
-   the recorded combined core run already passed.
-2. Independently review the new cache accounting/typed-blueprint and engine checkpoint
-   repairs, including the separate generated-port-source budget in the newer solver.
-3. Implement the real custom `EditorBridge` with actual transactions and supported
-   services. The live editor remains generic; snapshots use `FakeBridge`.
-4. Complete dynamic session checkpoints, state migration policy, staged quality
-   diagnostics, and measured sidechain budget integration. A zero external load
-   budget is retained until a model supplies its value; no calibration is guessed.
-5. Resolve seek/reset coordination between the callback and pitch worker without
-   resetting shared control state concurrently from the audio thread.
-6. Reconcile older analysis/edition/RT-trap and runtime work module by module.
-   Then address remaining community/native media/host IPC and performance gates.
-
-All models remain synthetic. G01 hardware evidence, G02 audition, G03/G04 measured
-budgets, G05 real-host IPC, G06 provider operation, G07 native MP4, G08 AAX,
-G10 detector qualification, G11 custom editor/backend and G12 complete session
-continuity remain limited or open. The build/license decision has evidence in
-ADR-0001; do not repeat the old claim that no dependency/license decision exists.
-
-No release or deployment is part of this checkpoint.
-
-## 2026-11-19 hourly follow-up: isolated seek/pitch generation fix
-
-A separate, non-overlapping child branch `codex/cdfx-seek-epoch-20261119` was
-created from PR #16 exact head `e721e9eea044b352546abd3a1b945fa1f3745038`
-to preserve its running Windows qualification. Engineering commit
-`edf0c21bc8b26ca928f0df8b5ed3d0459d02275c` adds a bounded, atomic
-producer-side pitch discontinuity marker, a worker-side queued-sample flush,
-generation-tagged publications and runtime epoch detection. Its new detector
-and runtime tests cover immediate stale-result invalidation, queued pre-seek
-discard/reacquisition, zero-frame epoch changes and callback allocation limits.
-
-**This child commit has not yet passed CI or been incorporated into PR #16.**
-At inspection the exact PR #16 head passed Linux and its Windows job was still
-building the plugin; do not cancel that run with a ref move. Once that exact-head
-Windows run finishes, investigate failures using its job log (or record timeout),
-review the child patch independently, run affected tests, and only then
-fast-forward the PR continuation ref with a checked expected SHA. Any new PR CI
-run qualifies only its own SHA. Native plugin/host validation and independent
-code/bug/security reviewer signoffs remain open. No worker spawn facility was
-available in this automation environment, so this entry does not claim those
-reviews.
-
-Pitch-epoch limitation: hosts that do not supply sample-position discontinuities
-cannot be inferred to have sought; the adapter may need explicit host transport
-callbacks. If a seek races a worker already consuming a chunk, generation checks
-hide its old publications, but some just-after-seek samples may be dropped until
-the worker observes the new generation. Reacquisition is from subsequently
-accepted post-seek samples; no audio-thread filter reset is performed.
-
-The earlier PR #9/#10/#14 item-level reconciliation and custom editor transaction
-layer remain separate. Do not treat this follow-up as source integration of those
-APIs. Preserve original development branches and core acceptance criteria.
-
-## Cache integrity follow-up on isolated branch
-
-Commit `63c33686bca432c807c93112e6aa65dc349d49e2` corrects a
-confirmed persisted-cache bookkeeping defect: successful cleanup of a corrupt
-entry or discovery of a missing on-disk entry previously left its `.pin`
-marker behind. A subsequent write using the same key could inherit the stale
-pin after reopening the cache, contrary to the deletion intent. The implementation
-now removes the associated marker when forgetting that entry and adds a
-regression that corrupts a previously pinned entry, checks marker cleanup,
-restores the key and reopens it. Filesystem deletion errors can still leave
-orphan markers (and external concurrent modification is unsupported); do not
-claim complete multi-process atomicity. The change has not yet run under CI.
-
-Child-branch last production commit: `63c33686bca432c807c93112e6aa65dc349d49e2`.
-Do not count the base PR #16 Linux pass as verification of this later code.
-
-## 2026-11-20 Windows CI diagnosis and guarded follow-up
-
-Original PR #16 head `e721e9eea044b352546abd3a1b945fa1f3745038`
-completed [CI run 44662769491](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44662769491).
-Linux succeeded. Windows configured, compiled, ran CTest, staged VST3/CLAP/
-standalone and uploaded packages successfully, but the pluginval step failed.
-The job log prints both "pluginval failed" messages **before** either validator
-prints "Started validating". The artifact contains two **zero-byte** validator
-logs. This is consistent with PowerShell invoking the Windows GUI-subsystem
-pluginval executable without waiting, then checking a stale `$LASTEXITCODE`;
-it is **not evidence that plugin compatibility itself failed**. The GitHub
-pull_request checkout also used synthetic merge SHA `33fbe24c...` by
-default, not the exact feature-head commit despite the run's head label.
-
-The isolated continuation now fixes the CI invocation to use
-`Start-Process -Wait -PassThru -NoNewWindow`, checks each *completed*
-validator's exit and nonempty new report, and preserves strictness level 5,
-all plugin formats, all host checks and artifacts. Both checkout actions
-explicitly select the pull request head SHA; artifact names use the same source
-SHA. These are runner/attribution repairs, not a waiver of failed validation.
-The new pluginval invocation and exact-head qualification must still execute
-on Windows after the PR head advances. No plugin pass, screenshot, native-host
-test or real circuit-model evidence is claimed by this commit.
-
-Before integrating this child with PR #16, check its latest head for competing
-workers and fast-forward with a lease. Next: read new exact-head CI logs, inspect
-any genuine validator failures, then pursue real EditorBridge transactions and
-versioned runtime/seed/session persistence. Separate security, bug and code
-review workers were not available in this tool context; the saved reviews are
-not new independent signoffs.
-
-## 2026-11-20 continuation: real editor bridge, isolated until plugin CI
-
-### Ownership and exact source
-
-At entry, draft PR #16 was still at `cb53cd812700e5edbcf7323653b84e470da77cfc`.
-The renewed exact-head run [44674618903](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903)
-completed Linux successfully; the Windows job `136103454565` remained **queued**
-at the latest read. No pluginval result exists yet for that SHA. To avoid aborting
-or making those results obsolete, the coordinator **did not move PR #16's head**.
-A separate branch `codex/cdfx-live-editor-bridge-20261120` was created from
-that precise commit. It does not overlap the previous seek-epoch worker branch.
-
-### Actual feature implementation (on isolated branch)
-
-- `plugin/src/ui/ProcessorEditorBridge.{h,cpp}` now implements the production
-  UI contract against the real processor APVTS, with grouped message-thread
-  gestures, bounded 20-step undo/redo, host-value conflict rejection, A/B slot
-  copy/swap, mirrored crossfade, and read-only status/telemetry. Local history
-  clears when the host loads a validated state blob.
-- The processor now owns this bridge and uses `ui::CircuitDriftEditor` for
-  `createEditor()`, replacing the generic host editor. Runtime telemetry reads
-  are gated while non-audio-thread prepare/release waits for existing UI readers.
-  This is **not** a live service implementation for every editor panel.
-- Presets, fault insertion, blueprint compile/apply, GIF/MP4 capture and
-  restoration seeds are still unavailable: operations with error outputs report
-  an explicit failure rather than returning success with fabricated state.
-  The live lifecycle panel disables restoration commit and indicates gate G12.
-  PNG rendering and bounded UI preferences are wired; per-instance settings
-  are **not** persisted in the host session yet. `resetEngine()` remains
-  unwired rather than changing active worker state unsafely.
-- Added `plugin/tests/ui/snap_live_bridge.cpp`, registered by the current
-  `snap_*.cpp` build glob. It covers live parameter mutation, one-step
-  gesture/copy/swap undo/redo, crossfade, host-conflict rejection, session-load
-  invalidation, 20-step retention, LITE limitations and unimplemented-service
-  failures, plus construction of the custom editor. **Test source is published
-  but the new branch has not been compiled or run.** Previous 30/30 and PR #16
-  Linux passes are evidence for their old source heads only.
-
-### Reconciliation checkpoint (older PRs retained)
-
-- PR #10's graph/compiler/lifecycle/fault primitives had already been imported;
-  no copy was repeated in this run.
-- PRs #9/#10 contain `src/analysis/ScopeMath.*` and related telemetry/rail
-  display suites absent from the current candidate. The old `ScopeMath` code
-  depends on an older `analysis/Telemetry.h` contract and cannot be copied as
-  a drop-in replacement for the new `engine::TelemetryFrame`/JUCE panel path.
-- PR #14's `ControlHub`, `LatestSlot`, `SampleClock`, `SpscRing` and RT-trap
-  harness are absent by path. Their semantics and test harness must be mapped
-  against the newer control queue and worker pipeline individually before
-  porting; no equivalence or acceptance is asserted from filenames.
-- Previous reference branches remain unmodified and open for further review.
-
-### Verification, independent reviewers, and next owner
-
-The current tool context has GitHub read/write access but neither a local
-CircuitDriftFX checkout with pinned JUCE nor a separate agent-worker launcher.
-Source/interface inventory and versioned regression **source** were completed;
-linked Windows, GUI and host validation of this branch, independent code/bug/
-security review, and audio-thread allocation profiling remain **pending**.
-Prior workers' notes are retained, not misrepresented as new reviews.
-
-Next owner: read PR #16's queued Windows/pluginval run before moving its ref.
-Perform native JUCE compiler/build and run `ui_snap_live_bridge` on the exact
-isolated SHA, fix any defects, and obtain independent review. Integrate only
-with a checked non-force fast-forward after checking the live head. Then attach
-real preset, blueprint, fault, reset and capture services, define a versioned
-runtime/control/seed/session checkpoint with safe host-thread coordination, and
-continue item-level old branch reconciliation. Existing G01–G12 gates, synthetic
-model caveats, releases and deployments remain unchanged.
+All models remain synthetic. G01 hardware evidence, G02 audition, G03/G04
+measured budgets, G05 real-host IPC, G06 provider operation, G07 native MP4, G08
+AAX, G10 detector qualification, G11 remaining editor services and G12 complete
+session continuity remain limited or open. The custom editor, reset and UI
+persistence work advances G11/G12 without closing their full acceptance criteria.
+ADR-0001 records the build/license decision. Do not weaken acceptance criteria or
+convert source, stub, mock, sanitizer timing or documentation checks into physical
+or release qualification.
