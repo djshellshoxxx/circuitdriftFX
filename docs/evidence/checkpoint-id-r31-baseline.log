@@ -1,0 +1,16 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-core-r14
+    Start 12: engine_checkpoint
+1/1 Test #12: engine_checkpoint ................***Failed    0.89 sec
+checkpoint algorithm identity: legacy=b8f654aaf8dc8fe5 current=b8f654aaf8dc8fe5
+FAIL line 111: !engine.setCheckpoint(legacy)
+FAIL line 113: after.values == before.values && after.rng == before.rng && after.sampleIndex == before.sampleIndex && after.layout == before.layout
+engine checkpoint safety: FAIL (2 failures)
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.90 sec
+
+The following tests FAILED:
+	 12 - engine_checkpoint (Failed)
+Errors while running CTest

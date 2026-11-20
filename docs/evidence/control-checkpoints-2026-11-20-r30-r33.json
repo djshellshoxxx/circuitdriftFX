@@ -1,0 +1,365 @@
+{
+  "date": "2026-11-20",
+  "scope": "R30 control repairs, R31 engine checkpoint algorithm identity, R32 component snapshot admission",
+  "toolchain": {
+    "cmake_ctest": "4.4.5",
+    "compiler": "GCC 14.2",
+    "build": "Release with -O1 -g0 -DNDEBUG",
+    "sanitizers": [
+      "address",
+      "undefined",
+      "float-cast-overflow"
+    ],
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "parallelism": "one compiler / serial suites"
+  },
+  "runs": [
+    {
+      "name": "control-r30-baseline",
+      "purpose": "Expected regression failure",
+      "source_sha": "b7ee32bf83171d3f6a92758d5cc62365f5c67da6",
+      "source_tree": "eab4a823c78dba173551873cc49c1915c2f451c4",
+      "junit_timestamp": "2026-11-20T11:00:39",
+      "suites": 3,
+      "failed_suites": 3,
+      "failed_assertions": 129,
+      "ctest_wall_seconds": 15.03,
+      "cases": [
+        {
+          "name": "control_key",
+          "seconds": 0.103703,
+          "status": "fail"
+        },
+        {
+          "name": "control_dynamics",
+          "seconds": 0.241239,
+          "status": "fail"
+        },
+        {
+          "name": "runtime_processor",
+          "seconds": 14.6785,
+          "status": "fail"
+        }
+      ],
+      "ctest_regex": "^(control_(key|dynamics)|runtime_processor)$",
+      "log": "control-r30-baseline.log",
+      "junit": "control-r30-baseline.xml",
+      "remote_source_sha": "e35db1808d9f128b6e7a9a6c4d8d06ccb12ee073"
+    },
+    {
+      "name": "control-r30-fixed",
+      "purpose": "Repaired controls qualification",
+      "source_sha": "00e29571bd6cb6b60aca30d28278505885ca35b2",
+      "source_tree": "c63d9b95c3740d484afba05dc68319befa4c815d",
+      "junit_timestamp": "2026-11-20T11:08:36",
+      "suites": 11,
+      "failed_suites": 0,
+      "failed_assertions": 0,
+      "ctest_wall_seconds": 129.24,
+      "cases": [
+        {
+          "name": "engine_runtime",
+          "seconds": 44.3727,
+          "status": "run"
+        },
+        {
+          "name": "engine_checkpoint",
+          "seconds": 0.772622,
+          "status": "run"
+        },
+        {
+          "name": "engine_stress",
+          "seconds": 62.3328,
+          "status": "run"
+        },
+        {
+          "name": "control_macros",
+          "seconds": 0.238143,
+          "status": "run"
+        },
+        {
+          "name": "control_key",
+          "seconds": 0.0971967,
+          "status": "run"
+        },
+        {
+          "name": "control_pitch",
+          "seconds": 4.83849,
+          "status": "run"
+        },
+        {
+          "name": "control_tempo",
+          "seconds": 0.0340253,
+          "status": "run"
+        },
+        {
+          "name": "control_harmonic",
+          "seconds": 0.832689,
+          "status": "run"
+        },
+        {
+          "name": "control_dynamics",
+          "seconds": 0.128751,
+          "status": "run"
+        },
+        {
+          "name": "control_safety",
+          "seconds": 0.23165,
+          "status": "run"
+        },
+        {
+          "name": "runtime_processor",
+          "seconds": 15.3413,
+          "status": "run"
+        }
+      ],
+      "ctest_regex": "^(control_(macros|key|pitch|tempo|harmonic|dynamics|safety)|runtime_processor|engine_(runtime|checkpoint|stress))$",
+      "log": "control-r30-fixed.log",
+      "junit": "control-r30-fixed.xml",
+      "remote_source_sha": "9ef876707e6827775ee10228e3ea59e50ad2e48f"
+    },
+    {
+      "name": "checkpoint-id-r31-baseline",
+      "purpose": "Expected legacy algorithm-ID failure",
+      "source_sha": "e8b093a23d9bd157710175598a4d65f84c9981fe",
+      "source_tree": "c656fdc2da7ea0c6df3f427d3f3c4fc91d0dbb61",
+      "junit_timestamp": "2026-11-20T11:18:07",
+      "suites": 1,
+      "failed_suites": 1,
+      "failed_assertions": 2,
+      "ctest_wall_seconds": 0.9,
+      "cases": [
+        {
+          "name": "engine_checkpoint",
+          "seconds": 0.887264,
+          "status": "fail"
+        }
+      ],
+      "ctest_regex": "^engine_checkpoint$",
+      "log": "checkpoint-id-r31-baseline.log",
+      "junit": "checkpoint-id-r31-baseline.xml",
+      "remote_source_sha": "7ff7f7fca9b62a05da9bffe16574bf9c66a89aca"
+    },
+    {
+      "name": "checkpoint-id-r31-fixed",
+      "purpose": "Revised algorithm-ID qualification",
+      "source_sha": "bef8d07d4eead19856a29442ee9ea37b4dd45dd2",
+      "source_tree": "4aeb9083dd94c8aa23ea3f5a6aa503a82405992a",
+      "junit_timestamp": "2026-11-20T11:19:57",
+      "suites": 1,
+      "failed_suites": 0,
+      "failed_assertions": 0,
+      "ctest_wall_seconds": 0.88,
+      "cases": [
+        {
+          "name": "engine_checkpoint",
+          "seconds": 0.874016,
+          "status": "run"
+        }
+      ],
+      "ctest_regex": "^engine_checkpoint$",
+      "log": "checkpoint-id-r31-fixed.log",
+      "junit": "checkpoint-id-r31-fixed.xml",
+      "remote_source_sha": "57cc8346ac8559c6d67e68eacff4919704b83f35"
+    },
+    {
+      "name": "control-snapshots-r32-baseline",
+      "purpose": "Expected drift rate-identity failure",
+      "source_sha": "921240bd1d5442b8b64312d5bc5beca0fc5b2f0e",
+      "source_tree": "11a20362d842bb0c5af0acf308ce806c53812f13",
+      "junit_timestamp": "2026-11-20T11:23:45",
+      "suites": 1,
+      "failed_suites": 1,
+      "failed_assertions": 28,
+      "ctest_wall_seconds": 0.06,
+      "cases": [
+        {
+          "name": "control_snapshots",
+          "seconds": 0.0581198,
+          "status": "fail"
+        }
+      ],
+      "ctest_regex": "^control_snapshots$",
+      "log": "control-snapshots-r32-baseline.log",
+      "junit": "control-snapshots-r32-baseline.xml",
+      "remote_source_sha": "2f6631d45419462df543f1b6ba36001a4dac5b04"
+    },
+    {
+      "name": "control-snapshots-r33-fixed",
+      "purpose": "Fixed component snapshots and affected existing control/runtime regressions; aggregate compiles but its new behavioral suite is still being written",
+      "source_sha": "3fb0846ff0673ea70bb94c404e6f68ce7045cc28",
+      "source_tree": "460f96bdf87dbfa3f063969027c75f127246e8a4",
+      "junit_timestamp": "2026-11-20T11:25:28",
+      "suites": 10,
+      "failed_suites": 0,
+      "failed_assertions": 0,
+      "ctest_wall_seconds": 21.15,
+      "cases": [
+        {
+          "name": "engine_checkpoint",
+          "seconds": 0.827651,
+          "status": "run"
+        },
+        {
+          "name": "control_macros",
+          "seconds": 0.436806,
+          "status": "run"
+        },
+        {
+          "name": "control_key",
+          "seconds": 0.0809159,
+          "status": "run"
+        },
+        {
+          "name": "control_pitch",
+          "seconds": 4.35044,
+          "status": "run"
+        },
+        {
+          "name": "control_tempo",
+          "seconds": 0.0405132,
+          "status": "run"
+        },
+        {
+          "name": "control_harmonic",
+          "seconds": 0.894193,
+          "status": "run"
+        },
+        {
+          "name": "control_dynamics",
+          "seconds": 0.181881,
+          "status": "run"
+        },
+        {
+          "name": "control_safety",
+          "seconds": 0.186218,
+          "status": "run"
+        },
+        {
+          "name": "control_snapshots",
+          "seconds": 0.0373524,
+          "status": "run"
+        },
+        {
+          "name": "runtime_processor",
+          "seconds": 14.0972,
+          "status": "run"
+        }
+      ],
+      "ctest_regex": "^(control_(macros|key|pitch|tempo|harmonic|dynamics|safety|snapshots)|runtime_processor|engine_checkpoint)$",
+      "log": "control-snapshots-r33-fixed.log",
+      "junit": "control-snapshots-r33-fixed.xml",
+      "remote_source_sha": "964eb787e538fc1260098d01e096e3ca5fb51d17"
+    }
+  ],
+  "findings": [
+    {
+      "id": "R29-MIDI",
+      "repair": "f5a44bb0eb6193803280b88f731c8e5d01c58b7e",
+      "description": "Ignored MIDI created extra sampled control boundaries; mode-aware admission removes those boundaries while preserving bounded overflow fail-safe."
+    },
+    {
+      "id": "R29-KEY",
+      "repair": "00e29571bd6cb6b60aca30d28278505885ca35b2",
+      "description": "Scale/root reconfiguration snapped initialized glides; requested pitches could be clipped outside the selected scale. Separate output initialization preserves glides and shared cutoff domain admits reachable allowed notes."
+    },
+    {
+      "id": "R29-SIDECHAIN",
+      "repair": "056009e0967c33e4a46f5af0c955bf711975a3a3",
+      "description": "Zero-frame calls cleared detector histories; nonfinite/large input could poison them. Preserve zero-frame history and bound prospective filter/detector arithmetic before commit."
+    },
+    {
+      "id": "R31-ALGORITHM-ID",
+      "repair": "bef8d07d4eead19856a29442ee9ea37b4dd45dd2",
+      "description": "The new effective-cutoff algorithm retained the prior engine checkpoint identity. Revision C0DE0002 rejects C0DE0001 without mutation. Regression uses a frozen legacy identity on an owned current-shape record, not a historical binary transfer."
+    },
+    {
+      "id": "R32-DRIFT-RATE",
+      "reviewed_source": "3bbfbce25a0905464ac4b9671f215a9b429dd60c",
+      "repair": "18b5d8f7cd062daaeb6dc9a4f8cfeeab3e0cfe69",
+      "description": "Equal past tick counts did not identify future tick boundaries. State now carries exact effective sample rate, preserving same-rate seed/slot transfer. The six-component continuation/rejection suite passes at3fb0846 together with nine affected existing suites."
+    }
+  ],
+  "reviews": {
+    "r30": "Three repair workers completed and supplied separate tests/implementation commits.",
+    "r31": "Fresh code, bug and defensive security reviews completed. One engine algorithm-ID finding was reproduced and repaired. No additional actionable MIDI/sidechain finding was reported in the stated scopes.",
+    "r32": {
+      "source": "3bbfbce25a0905464ac4b9671f215a9b429dd60c",
+      "tree": "222cea284311dfb216789fc1af925d445dccfaa6",
+      "all_workers_complete": true,
+      "code": "Source-only six-component review found the shared drift sample-rate gap. KeyTracker direct-input pitch-domain limitation noted.",
+      "security": "Source-only bounded validation/commit review found the shared drift rate-identity gap, no additional candidate-driven memory/arithmetic/partial-mutation issue under supported preparation and single-owner contract.",
+      "tests": "Independent test-only commit334ab0571020ea3cc22496e0f1ee19d693fe1441 adds fieldwise exact future continuation and per-mutation unchanged-future oracles for all six leaves. Root executed the baseline, not the worker."
+    },
+    "r33": {
+      "source": "09f0024b3f764f9d07c2e396ea8f9b868d7d4ab2",
+      "tree": "5cd5509a897de11bced6a07acc8d3fb3faea2762",
+      "status": "Fresh code audit, aggregate bug/test writer and defensive security audit active. Aggregate compiles; independent aggregate behavioral execution is pending. Component and affected existing suites passed10/10 in21.15s."
+    }
+  },
+  "limits": [
+    "All fixtures are synthetic; no physical model calibration claim.",
+    "The eleven-suite R30 qualification predates the new component and aggregate snapshot APIs.",
+    "Sidechain current is exercised through the direct/runtime positive-budget fixtures; the plugin adapter still supplies no positive model budget.",
+    "The live base-frequency edit/smoothed-engine-base transition is a separate unexecuted integration follow-up.",
+    "The legacy algorithm-ID regression is admission and failure-atomicity evidence, not historical-binary continuation evidence.",
+    "Component allocation instrumentation counts ordinary/nothrow C++ new/new[] only; it is not a malloc, aligned-allocation, lock or I/O monitor.",
+    "First aggregate scope is Manual/MIDI and no pending/in-use/retained harmonic maps; coordinated runtime/host persistence and G12 completion remain open.",
+    "Native processor/editor6/6 passed57.40s at3fb0846. Aggregate behavioral test authoring and fresh reviews remain active. Windows validator fixtures and real pluginval remain unexecuted locally."
+  ],
+  "native_run": {
+    "name": "control-snapshots-r33-native",
+    "purpose": "Native processor/editor integration after control repairs and snapshot ABI additions; does not independently exercise the new aggregate API",
+    "source_sha": "3fb0846ff0673ea70bb94c404e6f68ce7045cc28",
+    "remote_source_sha": "964eb787e538fc1260098d01e096e3ca5fb51d17",
+    "source_tree": "460f96bdf87dbfa3f063969027c75f127246e8a4",
+    "junit_timestamp": "2026-11-20T11:31:30",
+    "suites": 6,
+    "failed_suites": 0,
+    "ctest_wall_seconds": 57.4,
+    "cases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 4.27828,
+        "status": "run"
+      },
+      {
+        "name": "ui_snap_contract",
+        "seconds": 0.730649,
+        "status": "run"
+      },
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 4.92314,
+        "status": "run"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 10.0706,
+        "status": "run"
+      },
+      {
+        "name": "ui_snap_shell",
+        "seconds": 26.4981,
+        "status": "run"
+      },
+      {
+        "name": "ui_snap_workbench",
+        "seconds": 10.8845,
+        "status": "run"
+      }
+    ],
+    "ctest_regex": "^(plugin_param_consistency|ui_snap_(live_bridge|panels|shell|workbench|contract))$",
+    "compiler": "Clang19.1.7",
+    "cmake_ctest": "4.4.5",
+    "flags": "Custom -O0 -g0 -DNDEBUG",
+    "sanitizers": false,
+    "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+    "log": "control-snapshots-r33-native.log",
+    "junit": "control-snapshots-r33-native.xml",
+    "build_note": "All six targets linked serially. The first tool session became unavailable after11/40 steps; resumed incremental build completed with exit0. Application source stayed3fb0846; no assertion changed. Existing u8path deprecation and unused kElemFam warnings remain."
+  }
+}

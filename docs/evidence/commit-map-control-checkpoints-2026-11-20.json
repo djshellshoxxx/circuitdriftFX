@@ -1,0 +1,475 @@
+{
+  "date": "2026-11-20",
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "scope": "Verified complete local/remote Git-object trees through control snapshot source3fb0846. Objects are prepared for the next guarded PR16 update; the branch still publishes6f26b388 until that update is verified.",
+  "commits": [
+    {
+      "local": "bd378a62ad51cea18139fff615c9b987a139ada1",
+      "remote": "7fa507c9a7e726366e6412b8bb8b77f0c00784c5",
+      "tree": "0276b0b9e5981420828cb60c0e9286bfbc6a8605",
+      "message": "fix(ui): clear stale preset selection when results change"
+    },
+    {
+      "local": "8f97dc5a2c97e8347c92bbcbf58484efa4d6247a",
+      "remote": "1f72b01f59f14d1f8b657ee593043a1599ab9ad9",
+      "tree": "82ee4b852ac7f68c9dd99fcf219832c581162715",
+      "message": "fix(state): reject invalid in-memory checkpoint identities and kinds"
+    },
+    {
+      "local": "333760c438a1ddf638dccdfa1be44b38788e43a4",
+      "remote": "d9a7fcfeb6bc36afc99f406e1ef9273bf562f368",
+      "tree": "87dc4e35f8cadad881ca40074f0a72bf361b4fa5",
+      "message": "feat(editor): connect background blueprint validation and bounded preset search"
+    },
+    {
+      "local": "1bfc6f89c8849cf3d998ca01fa31016eb8f7de14",
+      "remote": "e3bf0c90db5a664d5a53d7add0ab24fc5ede9201",
+      "tree": "bf57ae92cd86012fffd3f54f00f227aea3a44322",
+      "message": "fix(state): bound writer payloads and reject lossy scene exports"
+    },
+    {
+      "local": "1d3e41361f6bc3d57bae7e03be0f280835732b07",
+      "remote": "14367798d6637aa6b64d369f01482e3e1c4018ba",
+      "tree": "1b4187252504594a3d5a5fb71f4b4f306871846e",
+      "message": "fix(ui): refresh retained editor text colors when themes change"
+    },
+    {
+      "local": "a2a4a3108ad33530bf16bb1475b6f885fcd5c348",
+      "remote": "2837d5af74f25e64dd4395e2356703bc1faa99ee",
+      "tree": "54ef5a82f27d355f07f6d734dcaa8dcbef08ab28",
+      "message": "fix(presets): scan bounded catalogs off the message thread\n\nCoalesce refresh requests on one lazy worker, cancel superseded scans and publish only the latest generation. Preserve cached query filtering while showing explicit loading, directory failure and truncation state, and clear row selection when a new snapshot arrives. Add deterministic cancellation/coalescing/retry coverage and live bridge snapshot-selection regressions. Focused state_preset passes under ASan, UBSan and float-cast-overflow; native UI execution remains for integration."
+    },
+    {
+      "local": "2bad4268499b8de993bd504f48b934e2f107a403",
+      "remote": "1e688322ed8c8d502313ece055a636aa6dad32b7",
+      "tree": "b4c5a24191d123698010326372a7a198c3f2ec8e",
+      "message": "fix(ui): invalidate stale blueprint validation previews"
+    },
+    {
+      "local": "c73d6b9b9ebe6b22d03e2b72fd6b9d1b40bc97bb",
+      "remote": "dbb9a3504d3d6d0c5c24bdfd14f0c85c4262c4c9",
+      "tree": "d3500619040e027da15717274a879e22e146e2e0",
+      "message": "fix(ui): preserve current text colors through undo and redo\n\nTrack plain editor notifications independently of field callbacks, retain editing history, and refresh placeholder colors with the theme. Detach registrations safely when editors move or outlive their content. Add a final asynchronous panel regression covering rendered glyph colors, caret and selection, callbacks, both theme directions, and registration lifetimes. Native compilation and before/after execution are reserved for the integration owner.",
+      "parents": [
+        "1e688322ed8c8d502313ece055a636aa6dad32b7"
+      ]
+    },
+    {
+      "local": "9630ae03b4be4bc74b1d01d6bbf42b5259d8faec",
+      "remote": "6cb28a110c4c9a66e80d16fe243307a5c164a2f3",
+      "tree": "a9163ba5fa93f38c03d8f2826f85a87dabee5bed",
+      "message": "merge: preserve concurrent R14 lineage and verification records\n\nRetain the portable validator, asynchronous catalog and stricter local state guards as the source baseline. Follow-up reconciliation commits import the parallel implementation's unique compiler cancellation, UI capability/diagnostic and complete-envelope preflight contracts. Both parent histories and all independent evidence are preserved; this intermediate source is not a qualification checkpoint.",
+      "parents": [
+        "dbb9a3504d3d6d0c5c24bdfd14f0c85c4262c4c9",
+        "02a7331cc687e710f3a3c7c0ab023e651601685e"
+      ]
+    },
+    {
+      "local": "0849f8da8a66594d3012bba3fdc8c2e6490c6d62",
+      "remote": "e898016e7c2047d9636588fb2d8b7c64f55150ee",
+      "tree": "6ea225b77017a448a6c9fd43c9926bc984973aa6",
+      "message": "fix(state): reconcile complete resource admission and checkpoint guards\n\nRetain the remote exact encoded-envelope preflight and its boundary regressions while preserving strict local checkpoint kind, UTF-8 identity and parameter-count admission. Run resource checks before publication semantic traversal, and keep private-field stripping, reader roundtrip and output-on-success behavior. Scoped source review and diff validation only; combined execution belongs to the integration owner."
+    },
+    {
+      "local": "194e529f401813a6789c47b602f102517469a900",
+      "remote": "88dbff91b9dd1b1fc5156650baf334bb3fb3d427",
+      "tree": "9a55b3c2052641ab4beb34db2b5663988413b066",
+      "message": "fix(presets): retain query selection by identity and reject stale snapshots\n\nReconcile explicit-row activation and stable query identity with asynchronous catalog generations. New snapshots and manual refresh still require reselection, including snapshots consumed during a query. Preserve catalog error rendering and the existing final theme-history loop. Retain remote ignored-entry, zero-budget and ordering checks through the bounded scan API. No worker scanning or bridge API changes; source and diff review only, execution remains with integration."
+    },
+    {
+      "local": "fe961dfdf928179b4e4c5e2fe3e0dbafcd38b094",
+      "remote": "456fb409e2fc21e6d93bc2b99edfe95c996ef843",
+      "tree": "4d537e0cd94b033fc61527b6781728a359c3e0c9",
+      "message": "feat(blueprint): reconcile validation preview and cancellation contracts"
+    },
+    {
+      "local": "4dcd584f995c261b189774ea8f416fda40ad97a0",
+      "remote": "c6beb37b0851dd07f752464920d4f359e8b8af21",
+      "tree": "15ec5fe8522c2721befc9ee5e017dcd527cdc756",
+      "message": "test(ui): execute reconciled blueprint panel regressions"
+    },
+    {
+      "local": "8ff0adfea571e977adec128622209f63bf997d1d",
+      "remote": "65b3a259c5dc657e59adea3a2df8a2efbb82e155",
+      "tree": "476353329e03b5b9657af170cf735ac9ddc00163",
+      "message": "test(presets): publish a replacement snapshot during query lookup"
+    },
+    {
+      "local": "68b29c3d0ab51a71602988dabd591fa5692c4e87",
+      "remote": "338e952f2a69c401035adf0e0101e33ff181a2f5",
+      "tree": "62f13b9933871cfd2a239be0ad00c9a27700c000"
+    },
+    {
+      "local": "5e7057e8be7d554a25cf254a73ddabaf82a57f2c",
+      "remote": "22e93a272c3f841111da5c250f8a61e6a1373237",
+      "tree": "aa7f71e2bbc731665f803ca483d804e070532445",
+      "parents": [
+        "338e952f2a69c401035adf0e0101e33ff181a2f5",
+        "ecae510b72c0ef4327bacfb6e4aa35d08eea2748"
+      ],
+      "message": "merge: preserve original GIF branch history before reviewed integration\n\nKeep the qualified consolidation source as the initial baseline. Retain the original GIF audit and both histories; follow-up commits import the independently reviewed backend, UI and resource repairs. This intermediate merge is not a GIF qualification checkpoint."
+    },
+    {
+      "local": "eb97e54ec15ac95eec268e4b516ada1713caa70c",
+      "remote": "f4b0243d530bd0424cf2937cb904d42d33e230b5",
+      "tree": "84afb9ab41cd2566d1b1befa78e05a314cc7aac1",
+      "parents": [
+        "22e93a272c3f841111da5c250f8a61e6a1373237"
+      ],
+      "message": "Bound GIF encoding storage and add zero-copy atomic byte output"
+    },
+    {
+      "local": "d083d383baa481715d887b71a6a5d45b609827b2",
+      "remote": "813885239d7b533b0cdc7b44b7489b8ff4248357",
+      "tree": "9a98882e7cb61fe1b92daf97055f1d14bd4448cb",
+      "parents": [
+        "f4b0243d530bd0424cf2937cb904d42d33e230b5"
+      ],
+      "message": "fix(capture): own GIF timing and drain final frame safely"
+    },
+    {
+      "local": "3d73b2d425cc6962aa283f196726631dedec5d5d",
+      "remote": "ea3d993dfd70c8d316ffa5f5e867c36c66aaf179",
+      "tree": "cba3544e1fc78910ecfab30c948b7aadeaa94f81",
+      "parents": [
+        "813885239d7b533b0cdc7b44b7489b8ff4248357"
+      ],
+      "message": "fix(capture): own frame rendering in editor shell"
+    },
+    {
+      "local": "50fcb0e18f1d3fd390c80ebe7a9bfa209cbc3371",
+      "remote": "8a0d8ec789a9fe80ab7c7d3b1450ab25c2671c3f",
+      "tree": "536182c187b6c7d3fd9f13bd6b036bf8d297f495",
+      "parents": [
+        "ea3d993dfd70c8d316ffa5f5e867c36c66aaf179"
+      ],
+      "message": "fix(capture): contain editor teardown failures"
+    },
+    {
+      "local": "7aa5654c1dc61a049a41129bccbad64c9f3fb3ca",
+      "remote": "cf5c64d0144d82e0d4885efe8e1e45a9da642702",
+      "tree": "ee4dcc742e9a2ee5d933bd51a339c14cffc18c01",
+      "parents": [
+        "8a0d8ec789a9fe80ab7c7d3b1450ab25c2671c3f"
+      ],
+      "message": "test(capture): execute integrated GIF session regressions"
+    },
+    {
+      "local": "c0126227f3822268e725bb7f6daf7392153f0d0b",
+      "remote": "14c974c1159b6b85c408d906eb9983fab3e67f12",
+      "tree": "2b25c748440c9fd7e8bd323944d662a9373a9fee",
+      "parents": [
+        "cf5c64d0144d82e0d4885efe8e1e45a9da642702"
+      ],
+      "message": "fix(capture): discard stale status message updates"
+    },
+    {
+      "local": "aedef7b69029132716ef5ae11e588263e1fb9f44",
+      "remote": "32d5d3bf29e14964b9b041f84e7b3fb0b538c1c7",
+      "tree": "1144ea0ba2990ac00a9c231f3fdae57d248dfab9",
+      "parents": [
+        "14c974c1159b6b85c408d906eb9983fab3e67f12"
+      ],
+      "message": "test(media): require complete GIF LZW end codes"
+    },
+    {
+      "local": "dbf5e3de7cb644d9bf39f9d6605ba5a8eab94a7c",
+      "remote": "8daa343e52d41ff87eb48c385523e048dd7f711a",
+      "tree": "fb996f57504b2fcd76bc729ab9c51fb3d2e5c4fc",
+      "parents": [
+        "32d5d3bf29e14964b9b041f84e7b3fb0b538c1c7"
+      ],
+      "message": "fix(ui): register editor core after successful priming"
+    },
+    {
+      "local": "38fd259ee2ca102dda185ef2b0b5b5a21d98c704",
+      "remote": "6e9af85b048d6d38a9ee07f7dea26efb8c0b5f89",
+      "tree": "84b5d5f25e14f063e60c3dbb8373e960aa55f516",
+      "parents": [
+        "8daa343e52d41ff87eb48c385523e048dd7f711a"
+      ],
+      "message": "fix(capture): warn when repeated frames exceed two percent"
+    },
+    {
+      "local": "ef115d26d9c5e9da8a76040a80dd769baa4cc3d1",
+      "remote": "890b3ef314136504d57c6871d7bb3f2ce375941d",
+      "tree": "5de554de646e38ffe8673e69efd31fefbf84ca94",
+      "parents": [
+        "6e9af85b048d6d38a9ee07f7dea26efb8c0b5f89"
+      ],
+      "message": "fix(capture): preserve explicitly selected output paths"
+    },
+    {
+      "local": "f0e2101bc186a1d7b564183476887acc34c8f0dd",
+      "remote": "469141a3d5d6d0e31aac73cfcc4ba5eb2c4f6495",
+      "tree": "88797bbeea9fd6db10d9983c30144ac404cb2d0f",
+      "parents": [
+        "890b3ef314136504d57c6871d7bb3f2ce375941d"
+      ],
+      "message": "test(ui): stop capture checks after a stale registry lookup"
+    },
+    {
+      "local": "a512cd75081184f8af507c3706951bda72dc9fc9",
+      "remote": "d8081cdc800608d549fa22c8eca1e3b6263af8a4",
+      "tree": "84f580e6f64371707b418e9dcdcc7aff3b76c7de",
+      "parents": [
+        "469141a3d5d6d0e31aac73cfcc4ba5eb2c4f6495"
+      ],
+      "message": "fix(capture): disambiguate empty JUCE file assignment"
+    },
+    {
+      "local": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+      "remote": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
+      "tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+      "parents": [
+        "d8081cdc800608d549fa22c8eca1e3b6263af8a4"
+      ],
+      "message": "fix(capture): lay out the first local action result"
+    },
+    {
+      "local": "214cccd3480b5425b87040fba330597d4cbe8b48",
+      "remote": "83c107e45f767d0448ede712bef0a96b7bdff641",
+      "tree": "62b859527cd09f17b6babac9468fad1062376f68",
+      "parents": [
+        "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20"
+      ],
+      "message": "docs: qualify GIF integration and hand off fresh build-gate reviews"
+    },
+    {
+      "local": "041b672b3be3b1cf72fb3cf3a6262106ad8f3e2c",
+      "remote": "f0c436a4f170e560e985691daf21d6455c90622a",
+      "tree": "89a83099dae50ef17d539bb3a760018b0385cd4f",
+      "parents": [
+        "83c107e45f767d0448ede712bef0a96b7bdff641"
+      ],
+      "message": "fix(ci): share the completed Windows plugin validation gate"
+    },
+    {
+      "local": "6ae78a59890e6a69d2b56cf6a9fadd53191d2592",
+      "remote": "5bac66f05991215aa3df89bea84175fad956fff9",
+      "tree": "b4b39b68f773616ec76918f52b54e276d6be3c18",
+      "parents": [
+        "f0c436a4f170e560e985691daf21d6455c90622a"
+      ],
+      "message": "fix(build): verify pinned dependency sources before configuration"
+    },
+    {
+      "local": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
+      "remote": "0c425f815320ebbc2568af8e6428d536fa6e76c4",
+      "tree": "57c2368dc5cb4e2bd8540c54a2ab3dbd7a0b5431",
+      "parents": [
+        "5bac66f05991215aa3df89bea84175fad956fff9"
+      ],
+      "message": "fix(build): isolate legacy FetchContent cache settings"
+    },
+    {
+      "local": "854e4e3567ea903eff5493c280edda5cdfe015a9",
+      "remote": "ff70dae7b957bcffa2b7344eaa9be5687b396ee4",
+      "tree": "f5db3a329cf4152ebf1dff2b36355a25d796d8b6",
+      "parents": [
+        "0c425f815320ebbc2568af8e6428d536fa6e76c4"
+      ],
+      "message": "docs: record build-gate qualification and host-restore handoff"
+    },
+    {
+      "local": "aae757197c16e21d6a85e28e53c862349763c12b",
+      "remote": "2bd5ad6bbccb6fef5c36f1869412372d05e342ce",
+      "tree": "ea20b70b28d0f7730585f5bd840f87d1fc20ec4a",
+      "parents": [
+        "ff70dae7b957bcffa2b7344eaa9be5687b396ee4"
+      ],
+      "message": "test(plugin): pause host restores across audio parameter snapshots"
+    },
+    {
+      "local": "b47f4fb623f5360a300118f62b7aea07dfc71017",
+      "remote": "650985f34da8d6ef45adbfd4f76f59c517311612",
+      "tree": "20255ea5c53898919bb3e0d4dc7bd147c383f386",
+      "parents": [
+        "2bd5ad6bbccb6fef5c36f1869412372d05e342ce"
+      ],
+      "message": "docs: preserve the deterministic host-restore baseline"
+    },
+    {
+      "local": "90d647d71ce57ea80e0e5f5f03519f969e4f2113",
+      "remote": "f83a0ded07f615529933462ccd1d1f7ebb259939",
+      "tree": "3a95bd0fd214a3902900c1cfea4d3970260ce91c",
+      "parents": [
+        "650985f34da8d6ef45adbfd4f76f59c517311612"
+      ],
+      "message": "fix(plugin): publish coherent host-restored parameter snapshots"
+    },
+    {
+      "local": "92400745f92866cb30145c427775a7cc896d80b9",
+      "remote": "bd0abdf70b66bd6cc73a4ecc68eae310c4cb74e6",
+      "tree": "5efa28bf1bb49f05b382d35b714bc4d82ae3d80a",
+      "parents": [
+        "f83a0ded07f615529933462ccd1d1f7ebb259939"
+      ],
+      "message": "test(plugin): retain stopped-audio restores across later notification failure"
+    },
+    {
+      "local": "1a3f8f35efd5080f60caf18172ec4454c26dea19",
+      "remote": "452bd97b36dd1bb0227a633ed2a42b558261a9e8",
+      "tree": "7af2c5b76ccf7badead4c314261b6eb7cf7d9f67",
+      "parents": [
+        "bd0abdf70b66bd6cc73a4ecc68eae310c4cb74e6"
+      ],
+      "message": "fix(plugin): publish the complete host fallback to resumed audio"
+    },
+    {
+      "local": "db3a2194ca88ff40c956ded1ba9be97ae2b31674",
+      "remote": "6f26b38827b849e9f89c15613f63726036e8c26b",
+      "tree": "872fb0f565a573ad31f4c4f53da209d185b1ed06",
+      "parents": [
+        "452bd97b36dd1bb0227a633ed2a42b558261a9e8"
+      ],
+      "message": "docs: qualify coherent host restoration and hand off control checkpoints"
+    },
+    {
+      "local": "73333e82e79abee4a00b8c75b202404fbd6049b9",
+      "remote": "1a0f00e04a68f457aa9b02e4b986259053997719",
+      "tree": "8d442a7c1533f23c669793cd4ce2510ddd648337",
+      "parents": [
+        "6f26b38827b849e9f89c15613f63726036e8c26b"
+      ],
+      "message": "test(runtime): pin ignored MIDI processing invariance"
+    },
+    {
+      "local": "e6c265b432d70c29ac759c462f8ffd2036f79196",
+      "remote": "64fb7c7f018fab14845377f1fcd0f1fd91d42aa9",
+      "tree": "2debd1a6bfd7c4395b71a320883665d14997aa2e",
+      "parents": [
+        "1a0f00e04a68f457aa9b02e4b986259053997719"
+      ],
+      "message": "test: regress key reconfiguration glide and admitted cutoff octaves"
+    },
+    {
+      "local": "2285d8583987b432a4b1f6072e8fe6c904157f9a",
+      "remote": "d8d8df60f46e39357bb3aa8ac063002c3ec18973",
+      "tree": "d031fd965f8e88a80dbe21e38461f39dd296e809",
+      "parents": [
+        "64fb7c7f018fab14845377f1fcd0f1fd91d42aa9"
+      ],
+      "message": "test(runtime): execute key-lock integration regressions"
+    },
+    {
+      "local": "b7ee32bf83171d3f6a92758d5cc62365f5c67da6",
+      "remote": "e35db1808d9f128b6e7a9a6c4d8d06ccb12ee073",
+      "tree": "eab4a823c78dba173551873cc49c1915c2f451c4",
+      "parents": [
+        "d8d8df60f46e39357bb3aa8ac063002c3ec18973"
+      ],
+      "message": "test(control): cover sidechain history and numerical admission"
+    },
+    {
+      "local": "f5a44bb0eb6193803280b88f731c8e5d01c58b7e",
+      "remote": "ced2afa7bae0d1b8aec1c79ae04d6b180cbe7485",
+      "tree": "c507598b68682d47276aaf32b1c79249355b6689",
+      "parents": [
+        "e35db1808d9f128b6e7a9a6c4d8d06ccb12ee073"
+      ],
+      "message": "fix(runtime): keep ignored MIDI out of control boundaries"
+    },
+    {
+      "local": "056009e0967c33e4a46f5af0c955bf711975a3a3",
+      "remote": "339939aac384ebffedf4f516c9323bc296fc8718",
+      "tree": "190093f3615c246425127b6adb6560c62d41dd3d",
+      "parents": [
+        "ced2afa7bae0d1b8aec1c79ae04d6b180cbe7485"
+      ],
+      "message": "fix(control): preserve and bound sidechain detector state"
+    },
+    {
+      "local": "00e29571bd6cb6b60aca30d28278505885ca35b2",
+      "remote": "9ef876707e6827775ee10228e3ea59e50ad2e48f",
+      "tree": "c63d9b95c3740d484afba05dc68319befa4c815d",
+      "parents": [
+        "339939aac384ebffedf4f516c9323bc296fc8718"
+      ],
+      "message": "fix: preserve key glide and select notes in effective cutoff domain"
+    },
+    {
+      "local": "e8b093a23d9bd157710175598a4d65f84c9981fe",
+      "remote": "7ff7f7fca9b62a05da9bffe16574bf9c66a89aca",
+      "tree": "c656fdc2da7ea0c6df3f427d3f3c4fc91d0dbb61",
+      "parents": [
+        "9ef876707e6827775ee10228e3ea59e50ad2e48f"
+      ],
+      "message": "test(engine): reject the legacy cutoff checkpoint identity"
+    },
+    {
+      "local": "bef8d07d4eead19856a29442ee9ea37b4dd45dd2",
+      "remote": "57cc8346ac8559c6d67e68eacff4919704b83f35",
+      "tree": "4aeb9083dd94c8aa23ea3f5a6aa503a82405992a",
+      "parents": [
+        "7ff7f7fca9b62a05da9bffe16574bf9c66a89aca"
+      ],
+      "message": "fix(engine): version the revised cutoff checkpoint algorithm"
+    },
+    {
+      "local": "b7b6e04f49f97a24c43fd7796415fa2eae716880",
+      "remote": "06e5b65e575dd4677ff7445dc00f42d155871ba8",
+      "tree": "7bb2dbd5b29f64da09248b3e5fd78fdc951ea0e9",
+      "parents": [
+        "9ef876707e6827775ee10228e3ea59e50ad2e48f"
+      ],
+      "message": "feat(control): add validated fixed-size leaf snapshots"
+    },
+    {
+      "local": "3bbfbce25a0905464ac4b9671f215a9b429dd60c",
+      "remote": "2b9325821cf3ee674def924b4e0ee846fdb0bc2a",
+      "tree": "222cea284311dfb216789fc1af925d445dccfaa6",
+      "parents": [
+        "06e5b65e575dd4677ff7445dc00f42d155871ba8"
+      ],
+      "message": "feat(control): snapshot quantizer and sidechain continuation state"
+    },
+    {
+      "local": "334ab0571020ea3cc22496e0f1ee19d693fe1441",
+      "remote": "7535125e2c5bd2d872a007339d461128c07482ec",
+      "tree": "acb645c6e32a6c95cc2d4d44362197793033b011",
+      "parents": [
+        "2b9325821cf3ee674def924b4e0ee846fdb0bc2a"
+      ],
+      "message": "test(control): cover snapshot continuation and atomic rejection"
+    },
+    {
+      "local": "921240bd1d5442b8b64312d5bc5beca0fc5b2f0e",
+      "remote": "2f6631d45419462df543f1b6ba36001a4dac5b04",
+      "tree": "11a20362d842bb0c5af0acf308ce806c53812f13",
+      "parents": [
+        "57cc8346ac8559c6d67e68eacff4919704b83f35",
+        "7535125e2c5bd2d872a007339d461128c07482ec"
+      ],
+      "message": "merge: integrate reviewed control snapshot leaves and independent regressions"
+    },
+    {
+      "local": "18b5d8f7cd062daaeb6dc9a4f8cfeeab3e0cfe69",
+      "remote": "5e0cf4c68fe1fbd5e4a7dfc9ff14526c12e2a125",
+      "tree": "1ddf3a3547f101ce2bb440ab0d756f777c6154c7",
+      "parents": [
+        "7535125e2c5bd2d872a007339d461128c07482ec"
+      ],
+      "message": "fix(control): bind drift snapshots to their effective sample rate"
+    },
+    {
+      "local": "09f0024b3f764f9d07c2e396ea8f9b868d7d4ab2",
+      "remote": "24be0fc220e9362d3f538a0c80515151bad5d487",
+      "tree": "5cd5509a897de11bced6a07acc8d3fb3faea2762",
+      "parents": [
+        "5e0cf4c68fe1fbd5e4a7dfc9ff14526c12e2a125"
+      ],
+      "message": "feat(control): compose bounded manual and MIDI continuation snapshots"
+    },
+    {
+      "local": "3fb0846ff0673ea70bb94c404e6f68ce7045cc28",
+      "remote": "964eb787e538fc1260098d01e096e3ca5fb51d17",
+      "tree": "460f96bdf87dbfa3f063969027c75f127246e8a4",
+      "parents": [
+        "2f6631d45419462df543f1b6ba36001a4dac5b04",
+        "24be0fc220e9362d3f538a0c80515151bad5d487"
+      ],
+      "message": "merge: integrate rate-qualified aggregate control snapshots"
+    }
+  ]
+}

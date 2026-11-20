@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="3"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="15"
+	timestamp="2026-11-20T11:00:39"
+	>
+	<testcase name="control_key" classname="control_key" time="0.103703" status="fail">
+		<failure message="Failed"/>
+		<properties/>
+		<system-out>FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:97 q.update(afterPitch, 0.0) == before | reconfiguration advances no glide time
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:99 std::fabs(q.update(afterPitch, 0.025) - (before + nextNote) * 0.5) &lt; 1e-12 | reconfigured note halfway at 25 ms: 69
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:97 q.update(afterPitch, 0.0) == before | reconfiguration advances no glide time
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:99 std::fabs(q.update(afterPitch, 0.025) - (before + nextNote) * 0.5) &lt; 1e-12 | reconfigured note halfway at 25 ms: 70
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:97 q.update(afterPitch, 0.0) == before | reconfiguration advances no glide time
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:99 std::fabs(q.update(afterPitch, 0.025) - (before + nextNote) * 0.5) &lt; 1e-12 | reconfigured note halfway at 25 ms: 69
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:111 q.update(70.0, 0.0) == 65.0 &amp;&amp; q.note() == 69 | mid-glide scale change keeps current pitch
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:112 q.update(70.0, 0.025) == 67.0 | replacement glide starts from interrupted position
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:317 out.slot[0].creativeCutoffOct &gt;= -2.0 &amp;&amp; out.slot[0].creativeCutoffOct &lt;= 2.0 | bounded emitted offset for Fs=48000 base=18000: -6.10435
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:319 gotHz &gt;= lo - 1e-8 &amp;&amp; gotHz &lt;= hi + 1e-8 | locked cutoff stays in admitted range: 261.626 [4500,21600]
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=48000 base=18000 note=110 got=261.626
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:317 out.slot[0].creativeCutoffOct &gt;= -2.0 &amp;&amp; out.slot[0].creativeCutoffOct &lt;= 2.0 | bounded emitted offset for Fs=48000 base=2000: 2.64891
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:319 gotHz &gt;= lo - 1e-8 &amp;&amp; gotHz &lt;= hi + 1e-8 | locked cutoff stays in admitted range: 12543.9 [500,8000]
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=48000 base=2000 note=119 got=12543.9
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:317 out.slot[0].creativeCutoffOct &gt;= -2.0 &amp;&amp; out.slot[0].creativeCutoffOct &lt;= 2.0 | bounded emitted offset for Fs=48000 base=2000: -2.93442
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:319 gotHz &gt;= lo - 1e-8 &amp;&amp; gotHz &lt;= hi + 1e-8 | locked cutoff stays in admitted range: 261.626 [500,8000]
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=48000 base=2000 note=72 got=261.626
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=8000 base=20000 note=105 got=3584.18
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=8000 base=20000 note=105 got=2257.89
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:317 out.slot[0].creativeCutoffOct &gt;= -2.0 &amp;&amp; out.slot[0].creativeCutoffOct &lt;= 2.0 | bounded emitted offset for Fs=8000 base=18000: -6.10435
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:319 gotHz &gt;= lo - 1e-8 &amp;&amp; gotHz &lt;= hi + 1e-8 | locked cutoff stays in admitted range: 52.3251 [900,3600]
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=8000 base=18000 note=82 got=52.3251
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:317 out.slot[0].creativeCutoffOct &gt;= -2.0 &amp;&amp; out.slot[0].creativeCutoffOct &lt;= 2.0 | bounded emitted offset for Fs=48000 base=18000: -6.10435
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:319 gotHz &gt;= lo - 1e-8 &amp;&amp; gotHz &lt;= hi + 1e-8 | locked cutoff stays in admitted range: 261.626 [4500,21600]
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=48000 base=18000 note=120 got=261.626
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:320 std::fabs(th::cents(gotHz, scale::midiToHz(expected))) &lt; 0.01 | nearest admitted note Fs=8000 base=20000 note=97 got=1596.57
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=4.94066e-324 offset=0.114291
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=4.94066e-324 source=0
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=4.94066e-324 offset=-1088.89
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=4.94066e-324 source=1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=2.22507e-308 offset=0.114291
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=2.22507e-308 source=0
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=2.22507e-308 offset=-1036.89
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=2.22507e-308 source=1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=1.79769e+308 offset=0.114291
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=1.79769e+308 source=0
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=1.79769e+308 offset=1009.11
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=1.79769e+308 source=1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=1 offset=0.114291
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=1 source=0
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=1 offset=-14.8857
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=1 source=1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=432 source=0
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=432 offset=-6.13082
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=432 source=1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=440 source=0
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:341 std::isfinite(gotOffset) &amp;&amp; gotOffset &gt;= -2.0 &amp;&amp; gotOffset &lt;= 0.0 | positive finite A4 retains bounded cutoff: A4=440 offset=-6.10435
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_key.cpp:344 std::fabs(manual + 12.0 * gotOffset - expected) * 100.0 &lt; 0.01 | positive finite A4 settles to admitted note: A4=440 source=1
+key: 48 failure(s)
+</system-out>
+	</testcase>
+	<testcase name="control_dynamics" classname="control_dynamics" time="0.241239" status="fail">
+		<failure message="Failed"/>
+		<properties/>
+		<system-out>FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:51 flushed.lastEnergyRatio() == before &amp;&amp; untouched[0] == -71.0 &amp;&amp; untouched[1] == 29.0 | no-bus zero-frame call preserves energy and writes no samples, source 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:55 flushed.lastEnergyRatio() == before | zero-frame Main selection preserves detector history
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:60 actual == expected &amp;&amp; flushed.lastEnergyRatio() == uninterrupted.lastEnergyRatio() | all suffix currents and final ratio are identical after zero-frame calls, source 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:51 flushed.lastEnergyRatio() == before &amp;&amp; untouched[0] == -71.0 &amp;&amp; untouched[1] == 29.0 | no-bus zero-frame call preserves energy and writes no samples, source 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:55 flushed.lastEnergyRatio() == before | zero-frame Main selection preserves detector history
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:60 actual == expected &amp;&amp; flushed.lastEnergyRatio() == uninterrupted.lastEnergyRatio() | all suffix currents and final ratio are identical after zero-frame calls, source 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:123 std::equal(expected.externalLoadA, expected.externalLoadA + kFrames, actual.externalLoadA) | control suffix currents exactly survive no-bus zero-frame calls, source 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:123 std::equal(expected.externalLoadA, expected.externalLoadA + kFrames, actual.externalLoadA) | control suffix currents exactly survive no-bus zero-frame calls, source 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:165 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) | malformed samples act exactly like zero before HPF mutation, source 1 channels 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:167 actual == mirrored | malformed-input stereo linking is symmetric, source 1 channels 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:170 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) &amp;&amp; std::isfinite(detector.lastEnergyRatio()) &amp;&amp; detector.lastEnergyRatio() &gt; 0.0 | finite suffix recovers with exactly the zero-reference history, source 1 channels 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:165 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) | malformed samples act exactly like zero before HPF mutation, source 1 channels 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:167 actual == mirrored | malformed-input stereo linking is symmetric, source 1 channels 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:170 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) &amp;&amp; std::isfinite(detector.lastEnergyRatio()) &amp;&amp; detector.lastEnergyRatio() &gt; 0.0 | finite suffix recovers with exactly the zero-reference history, source 1 channels 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:165 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) | malformed samples act exactly like zero before HPF mutation, source 1 channels 3
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:170 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) &amp;&amp; std::isfinite(detector.lastEnergyRatio()) &amp;&amp; detector.lastEnergyRatio() &gt; 0.0 | finite suffix recovers with exactly the zero-reference history, source 1 channels 3
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:165 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) | malformed samples act exactly like zero before HPF mutation, source 2 channels 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:167 actual == mirrored | malformed-input stereo linking is symmetric, source 2 channels 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:170 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) &amp;&amp; std::isfinite(detector.lastEnergyRatio()) &amp;&amp; detector.lastEnergyRatio() &gt; 0.0 | finite suffix recovers with exactly the zero-reference history, source 2 channels 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:165 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) | malformed samples act exactly like zero before HPF mutation, source 2 channels 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:167 actual == mirrored | malformed-input stereo linking is symmetric, source 2 channels 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:170 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) &amp;&amp; std::isfinite(detector.lastEnergyRatio()) &amp;&amp; detector.lastEnergyRatio() &gt; 0.0 | finite suffix recovers with exactly the zero-reference history, source 2 channels 2
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:165 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) | malformed samples act exactly like zero before HPF mutation, source 2 channels 3
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:170 actual == expected &amp;&amp; finiteCurrent(actual, 4.0 * kBudget) &amp;&amp; std::isfinite(detector.lastEnergyRatio()) &amp;&amp; detector.lastEnergyRatio() &gt; 0.0 | finite suffix recovers with exactly the zero-reference history, source 2 channels 3
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:192 detector.budgetAmps() == 0.0 | nonfinite/nonpositive current budget is disabled
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:194 exactZero(output) | disabled budget produces exact finite zero
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:203 finiteCurrent(output, 8.0 * admitted) &amp;&amp; output.back() == 8.0 * admitted | maximum depth and energy ratio produce the finite formula without intermediate overflow
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:201 detector.budgetAmps() == admitted | finite budget is bounded only by representable maximum current
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:203 finiteCurrent(output, 8.0 * admitted) &amp;&amp; output.back() == 8.0 * admitted | maximum depth and energy ratio produce the finite formula without intermediate overflow
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:240 output == expected &amp;&amp; detector.lastEnergyRatio() == reference.lastEnergyRatio() | unsupported/nonfinite sample rate prepares a clean coherent 48 kHz detector: 1
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:240 output == expected &amp;&amp; detector.lastEnergyRatio() == reference.lastEnergyRatio() | unsupported/nonfinite sample rate prepares a clean coherent 48 kHz detector: 7999
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:240 output == expected &amp;&amp; detector.lastEnergyRatio() == reference.lastEnergyRatio() | unsupported/nonfinite sample rate prepares a clean coherent 48 kHz detector: 768001
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:240 output == expected &amp;&amp; detector.lastEnergyRatio() == reference.lastEnergyRatio() | unsupported/nonfinite sample rate prepares a clean coherent 48 kHz detector: 4.94066e-324
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:240 output == expected &amp;&amp; detector.lastEnergyRatio() == reference.lastEnergyRatio() | unsupported/nonfinite sample rate prepares a clean coherent 48 kHz detector: 1.79769e+308
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/SidechainRobustnessTests.h:240 output == expected &amp;&amp; detector.lastEnergyRatio() == reference.lastEnergyRatio() | unsupported/nonfinite sample rate prepares a clean coherent 48 kHz detector: inf
+dynamics: 35 failure(s)
+</system-out>
+	</testcase>
+	<testcase name="runtime_processor" classname="runtime_processor" time="14.6785" status="fail">
+		<failure message="Failed"/>
+		<properties/>
+		<system-out>FAIL key lock low MIDI / high base: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock low MIDI / high base: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock high MIDI / low base: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock high MIDI / low base: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock effective cutoff below knob minimum: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock effective cutoff below knob minimum: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock manual / low-Fs ceiling: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock manual / low-Fs ceiling: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock high MIDI / low-Fs ceiling: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock high MIDI / low-Fs ceiling: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock low MIDI / low-Fs high base: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock low MIDI / low-Fs high base: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock restrictive C-only scale: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock restrictive C-only scale: actual filter audio matches the independent selected-cutoff engine
+FAIL key lock restrictive C# / low-Fs ceiling: settled engine cutoff matches nearest allowed note within T12 0.01 cents
+FAIL key lock restrictive C# / low-Fs ceiling: actual filter audio matches the independent selected-cutoff engine
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+FAIL line 45: peakDifference &lt;= 1e-12
+FAIL line 58: std::fabs(at.creativeCutoffOct - bt.creativeCutoffOct) &lt;= 1e-12
+FAIL line 65: actualFrame.generation == expectedFrame.generation
+runtime_processor: FAILED (46 failures)
+</system-out>
+	</testcase>
+</testsuite>

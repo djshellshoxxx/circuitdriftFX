@@ -31,8 +31,16 @@ code/defensive review. Windows harness/pluginval execution remains open. The
 [session audit](audits/SESSION_PUBLICATION_2026-11-20_R25.md) records the repaired
 partial host-state publication and stopped-audio exception edge. Final source
 1a3f8f3 passes 6/6 native suites in 59.50 s, and all R28 reviewers completed
-without new actionable findings in scope. Fresh R29 workers inspect the next
-control-snapshot prerequisite. Complete sound-preset transactions, Blueprint Apply, dynamic
+without new actionable findings in scope. The [control continuation audit](audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md)
+records R30 ignored-MIDI, key-glide/cutoff and sidechain repairs (11/11 sanitized
+suites, 129.24 s at 00e2957), followed by versioned engine checkpoint rejection.
+The new [typed control snapshot API](engineering/CONTROL_SNAPSHOTS.md) supports
+Manual/MIDI without harmonic maps. Independent component tests reproduced and
+fixed drift's missing rate identity; 10/10 component/affected suites pass in
+21.15 s at 3fb0846. All R29–R32 workers completed. Fresh R33 aggregate reviews and
+independent test authoring are active; aggregate behavior is not yet qualified.
+Six native plugin/editor suites pass in 57.40 s at the same source 3fb0846.
+Complete sound-preset transactions, Blueprint Apply, dynamic
 session/seed continuity, MP4 and remaining services, physical calibration and
 real-host/performance qualification remain open. Historical claims below retain
 older provenance and do not describe current test status.

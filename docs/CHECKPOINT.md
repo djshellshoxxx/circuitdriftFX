@@ -16,8 +16,22 @@ fallback handoff for stopped-audio notification failures. Exact source 1a3f8f3
 passes 6/6 native suites in 59.50 s; all three fresh R28 reviews completed without
 new actionable findings in scope. See the [host-state evidence](evidence/host-restore-2026-11-20-r26.json).
 
-The fresh R29 code, bug and defensive set is inspecting the fixed-size control
-snapshot prerequisite. Full dynamic session/seed continuity, coordinated sound
+R30 repairs preserve ignored-MIDI processing, key glides/reachable cutoff notes
+and sidechain history/numeric bounds. Source 00e2957 passed 11/11 sanitized suites
+in 129.24 s. The revised engine algorithm identity rejects legacy checkpoints.
+New fixed-size control snapshots support Manual/MIDI with no harmonic maps;
+Audio selection is explicitly excluded. The independent component baseline
+exposed missing drift sample-rate identity, which is repaired. Source 3fb0846
+passes the component suite and nine affected suites: 10/10 in 21.15 s. See the
+[control audit](audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md) and
+[API contract](engineering/CONTROL_SNAPSHOTS.md).
+
+All R29–R32 workers completed. Fresh R33 code, aggregate bug/test and defensive
+workers are active; the aggregate compiles, and its independent behavioral suite
+is pending. The current six native plugin/editor suites pass in 57.40 s at the
+same source 3fb0846. Root owns builds and integration.
+The published PR checkpoint remains 6f26b388 until this work qualifies and the
+guarded update is verified. Full dynamic session/seed continuity, coordinated sound
 presets and dynamic A/B, graph Apply, remaining providers/MP4, physical calibration,
 Windows validator/pluginval and real-host/performance qualification remain open.
 Historical claims below retain older provenance and are not current test status.

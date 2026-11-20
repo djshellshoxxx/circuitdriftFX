@@ -1,20 +1,44 @@
 # CircuitDriftFX consolidation handoff — 2026-11-20
 
-## Current checkpoint — coherent host-state publication
+## Current checkpoint — control repairs and bounded snapshots
 
 Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
 `codex/cdfx-consolidation-20261119`, is the integration and CI authority.
 Read its live head before a guarded forward update. Original source branches
 and `main` at `44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6` are preserved.
 
-Current tested source is local `1a3f8f35efd5080f60caf18172ec4454c26dea19`,
-corresponding remote source `452bd97b36dd1bb0227a633ed2a42b558261a9e8`, tree
-`7af2c5b76ccf7badead4c314261b6eb7cf7d9f67`. It includes GIF capture, build-gate
-repairs and coherent host-parameter restoration, including the stopped-audio
-exception fallback. The complete native set passed **6/6 in 59.50 s**. Original
-partial-publication and later three-state failure baselines each reproduced four
-assertions before their respective repairs. All R28 code, bug and defensive
-reviewers completed without a new actionable finding in assigned scopes.
+Current local source is `3fb0846ff0673ea70bb94c404e6f68ce7045cc28`, corresponding
+remote Git object `964eb787e538fc1260098d01e096e3ca5fb51d17`, tree
+`460f96bdf87dbfa3f063969027c75f127246e8a4`. The published branch still points to
+`6f26b38827b849e9f89c15613f63726036e8c26b` while aggregate qualification is active.
+The [control source map](../evidence/commit-map-control-checkpoints-2026-11-20.json)
+records exact complete tree equality; creating source objects has not moved the branch.
+
+R30 repaired ignored-MIDI processing boundaries, preserved scale/root glides,
+selected notes in the effective cutoff domain, and preserved/bounded sidechain
+history. Its test-only baseline reproduced 129 assertions across three suites;
+the repair passed **11/11 sanitized suites in 129.24 s** at 00e2957. R31 found
+the changed engine algorithm still accepted the old checkpoint identity. The
+two-assertion baseline now passes with revision `C0DE0002`, rejecting without mutation.
+
+Fixed-size [control snapshots](CONTROL_SNAPSHOTS.md) now compose six components
+for Manual/MIDI with no harmonic-map lifetime. All R32 reviewers completed;
+their shared drift-rate finding reproduced 28 assertions before repair. The
+fixed component suite and nine affected suites pass **10/10 in 21.15 s** at
+3fb0846. The aggregate compiles; fresh R33 code/security review and aggregate
+behavioral test authoring are active. Six native plugin/editor suites pass
+**6/6 in 57.40 s** at the same source 3fb0846; aggregate behavior remains a
+separate pending gate.
+Root owns all compiler/test execution and integration. Read the
+[R29–R33 audit](../audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md) and
+[execution evidence](../evidence/control-checkpoints-2026-11-20-r30-r33.json).
+
+The preceding published source `1a3f8f35efd5080f60caf18172ec4454c26dea19`, remote
+`452bd97b36dd1bb0227a633ed2a42b558261a9e8`, tree
+`7af2c5b76ccf7badead4c314261b6eb7cf7d9f67`, includes GIF/build-gate work and
+coherent host restoration with the stopped-audio exception fallback. Its native
+set passed **6/6 in 59.50 s**. Both failure baselines reproduced four assertions.
+All R28 reviewers completed without a new actionable finding in assigned scopes.
 
 The [host-restore source map](../evidence/commit-map-host-restore-2026-11-20.json)
 records verified local/remote tree equality through this source. The containing
@@ -35,10 +59,9 @@ reread at ecae510 and remains intact.
 
 The preceding publication 338e952 has separate 31/31 sanitized core and 6/6 native
 baseline evidence. Those results are not relabeled as a new full-core GIF run.
-All R25–R28 workers completed. R26 build-gate review and R28 host-fallback
-review found no new actionable issue in their assigned scopes. The fresh R29
-code, bug and defensive set is inspecting fixed-size control snapshots for G12;
-root owns implementation, compilers and integration.
+All R25–R32 worker sets completed before their successors began. R26 build-gate
+and R28 host-fallback reviews found no new actionable issue in assigned scopes.
+Current R33 ownership and remaining snapshot boundaries are described above.
 
 ## Consolidated sources and ownership
 
@@ -217,12 +240,12 @@ PowerShell is unavailable. Exact-source Windows and real pluginval remain open.
 1. Read the live PR #16 head and exact-head CI; repair concrete failures without
    relaxing assertions or acceptance gates. Use an expected old SHA and forward
    ref update, preserving concurrent work and original branches.
-2. Complete the fresh R29 code, bug and defensive handoff on fixed-size control
-   snapshots before implementing the bounded next G12 increment. Preserve exact
-   continuation, validation-before-mutation, preparation/map identity and explicit
-   audio-pitch worker ownership. Read the [session audit](../audits/SESSION_PUBLICATION_2026-11-20_R25.md).
-   The host restoration repair is complete and locally qualified; its R28 set
-   finished before these successors began. Root owns builds and integration.
+2. Complete fresh R33 aggregate reviews and independent continuation/rejection
+   tests, execute the current native gate, and publish the qualified checkpoint.
+   Preserve validation-before-mutation, preparation/reset identity, pending-setting
+   history and explicit audio/map exclusions. The component tests already pass;
+   do not relabel that result as aggregate behavior or full G12 completion.
+   The host restoration repair remains complete at its recorded source.
 3. Complete runtime/control/engine/seed checkpoint capture, host-thread handoff,
    stopped-audio restore, compatibility/migration and coordinated dynamic A/B.
    Sound-preset Load/Save and complete scene transactions depend on that contract.
