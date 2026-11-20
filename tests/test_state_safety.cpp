@@ -276,6 +276,68 @@ void exactIdentitiesAndFeatures() {
     CHECK(state::loadState(state::saveState(doc), back, error));
 }
 
+// Directly assembled documents must not generate local files the v1 reader
+// cannot load, or silently erase/replace fields during serialization.
+void wholeDocumentWriterBoundary() {
+    state::StateDocument doc, back;
+    std::string error;
+    CHECK(state::loadState(kScene, doc, error));
+    const auto original = doc;
+    const auto baseline = state::saveState(doc);
+    const auto rejects = [&]() {
+        try { (void)state::saveState(doc); return false; }
+        catch (const std::invalid_argument&) { return true; }
+    };
+    doc.createdAt = "not-a-date";
+    CHECK(rejects());
+    doc = original;
+    doc.engineModelVersion = "unsupported-engine";
+    CHECK(rejects());
+    doc = original;
+    doc.title.assign(257, 'x');
+    CHECK(rejects());
+    doc = original;
+    doc.requiredFeatures.push_back("CD-F99");
+    CHECK(rejects());
+    doc = original;
+    doc.baseParameters.emplace_back("hpf.frequency", 42.0);
+    CHECK(rejects());
+    doc = original;
+    doc.baseParameters.emplace_back("not.a.registered.param", 0.0);
+    CHECK(rejects());
+    doc = original;
+    doc.baseParameters[0].second = std::numeric_limits<double>::infinity();
+    CHECK(rejects());
+    doc = original;
+    doc.metadata.emplace_back("title", core::JsonValue::makeString("override"));
+    CHECK(rejects());
+    doc = original;
+    doc.metadata.emplace_back("x-token", core::JsonValue::makeString("duplicate"));
+    CHECK(rejects());
+    doc = original;
+    doc.metadata.emplace_back("x-large", core::JsonValue::makeString(std::string(65536, 'x')));
+    CHECK(rejects());
+    doc = original;
+    doc.blueprints[0].get("components")->array[0].set("modelId", core::JsonValue::makeString("not-a-fixture"));
+    CHECK(rejects());
+    doc = original;
+    doc.macros = core::JsonValue::makeArray();
+    CHECK(rejects());
+    doc = original;
+    doc.timeline = core::JsonValue::makeNumber(1);
+    CHECK(rejects());
+    doc = original;
+    doc.faults = core::JsonValue::makeString("lost");
+    CHECK(rejects());
+    doc = original;
+    doc.ui = core::JsonValue::makeArray();
+    CHECK(rejects());
+    doc = original;
+    CHECK(state::saveState(doc) == baseline);
+    CHECK(state::loadState(state::saveState(doc), back, error));
+    CHECK(back.metadata == original.metadata);
+}
+
 void manyObjectKeys() {
     std::string text = "{";
     constexpr int count = 20000;
@@ -414,7 +476,7 @@ void atomicFiles() {
 int main() {
     migratedUtf8Boundary();
     utf8WriterBoundary();
-    localeNumbers(); exactIdentitiesAndFeatures(); manyObjectKeys(); publicationBoundary(); atomicFiles();
+    localeNumbers(); exactIdentitiesAndFeatures(); wholeDocumentWriterBoundary(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
 }

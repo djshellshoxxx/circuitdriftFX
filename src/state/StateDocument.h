@@ -68,8 +68,10 @@ struct LoadReport { int sourceVersion = 0; int migrationsApplied = 0; };
 bool loadState(std::string_view text, StateDocument& out, std::string& error,
                const MigrationChain& chain = productionMigrations(), LoadReport* report = nullptr);
 // Numeric seed/sampleIndex identities are limited to [0, 2^53] by schema v1.
-// Throws std::invalid_argument for unrepresentable numeric identities, invalid
-// in-memory checkpoint scalars/layouts, or checkpoints attached to scenes.
+// Throws std::invalid_argument if the complete schema-v1 envelope could not
+// be read back (including size, blueprint, parameter and feature limits), for
+// duplicate/reserved metadata or parameter IDs, or for invalid checkpoint state.
+// Only for worker/UI threads: serializes and validates; never call on audio.
 std::string saveState(const StateDocument& doc);
 // Community/scene export: requires kind Scene; strips checkpoint, UI preferences and metadata.
 // Until P05/P10/P11 provide complete validators, only the minimal synthetic blueprint

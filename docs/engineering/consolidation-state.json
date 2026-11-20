@@ -505,5 +505,20 @@
     "verification": "source preflight and JSON parse; child exact-head CI pending; no native local execution",
     "independent_reviews": "requested; separate reviewer workers not available through connector",
     "incomplete": "Full runtime/control/seed checkpoint capture, stopped-audio host restore and G12 migration remain outstanding"
+  },
+  "session_writer_roundtrip_20261120": {
+    "parent_pr": 23,
+    "parent_head": "b9994290a8db03b50535f597ab76649e4b347b2f",
+    "parent_ci_run": 44749975047,
+    "parent_linux": "passed",
+    "parent_windows_pluginval": "passed",
+    "branch": "codex/cdfx-writer-roundtrip-20261120-r12",
+    "scope": "Complete schema-v1 session writer/reader symmetry with fail-closed in-memory container and identity checks",
+    "tests": "state_safety malformed-envelope regressions; valid fixture serialization unchanged",
+    "audit": "docs/audits/SESSION_WRITER_ROUNDTRIP_2026-11-20.md",
+    "verification": "Static source preflight only; exact-head Linux/Windows/pluginval required",
+    "independent_review": "No separate worker-spawn facility exposed; review remains required",
+    "limits": "G12 dynamic capture/restore, host state, blueprint seed transactions, older PR item review and physical gates remain open",
+    "preserve": "PR16/PR19-23/main/source branches unchanged"
   }
 }

@@ -368,7 +368,31 @@ bool loadState(std::string_view text, StateDocument& out, std::string& error, co
     return true;
 }
 
-std::string saveState(const StateDocument& doc) { return core::writeJson(toJson(doc, false)); }
+std::string saveState(const StateDocument& doc) {
+    // StateDocument may be assembled directly by a worker without loadState().
+    // Reject fields that toJson would otherwise silently normalize or overwrite.
+    if (!doc.macros.isObject() || !(doc.timeline.isObject() || doc.timeline.isArray()) ||
+        !(doc.faults.isObject() || doc.faults.isArray()))
+        throw std::invalid_argument("state writer requires valid macro/timeline/fault containers");
+    std::set<std::string> identities;
+    for (const auto& param : doc.baseParameters)
+        if (!identities.insert(param.first).second)
+            throw std::invalid_argument("duplicate in-memory parameter identity");
+    identities.clear();
+    for (const auto& field : doc.metadata)
+        if (knownKeys().count(field.first) || !identities.insert(field.first).second)
+            throw std::invalid_argument("duplicate or reserved metadata identity");
+
+    // Writer and reader must agree on the *complete* schema-v1 envelope,
+    // including size, blueprint, parameter, feature and metadata bounds.
+    // This is a worker/UI-thread operation, never part of audio processing.
+    std::string encoded = core::writeJson(toJson(doc, false));
+    StateDocument checked;
+    std::string why;
+    if (!loadState(encoded, checked, why))
+        throw std::invalid_argument("state writer produced invalid document: " + why);
+    return encoded;
+}
 
 bool publishScene(const StateDocument& doc, std::string& out, std::string& error) {
     if (doc.kind != DocKind::Scene) { error = "only scenes are published"; return false; }
