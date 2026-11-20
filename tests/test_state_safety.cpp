@@ -187,6 +187,29 @@ void exactIdentitiesAndFeatures() {
     CHECK(state::loadState(state::saveState(doc), back, error));
     const state::RuntimeIdentity runtime{"0.0.1-dev", "fixture-v1", 48000, 4, 0, 0};
     CHECK(state::decideRestore(back, runtime, error) == state::RestoreDecision::ResetWarm);
+    // A matching engine/layout with incompatible RNG shape is not an exact
+    // stochastic continuation. Programmatic checkpoints must also be finite.
+    doc.checkpoint->engineModelVersion = "0.0.1-dev";
+    state::RuntimeIdentity exact{"0.0.1-dev", "fixture-v1", 48000, 4, 0, 0, 1};
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::Restore && error.empty());
+    state::RuntimeIdentity wrongRng = exact;
+    wrongRng.rngSize = 2;
+    CHECK(state::decideRestore(doc, wrongRng, error) == state::RestoreDecision::ResetWarm);
+    CHECK(error.find("rng") != std::string::npos);
+    doc.checkpoint->electrical = {std::numeric_limits<double>::quiet_NaN()};
+    exact.electricalSize = 1;
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
+    CHECK(error.find("invalid checkpoint") != std::string::npos);
+    doc.checkpoint->electrical = {0.25};
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::Restore);
+    doc.checkpoint->sampleIndex = 9007199254740993ULL;
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
+    doc.checkpoint->sampleIndex = 9007199254740992ULL;
+    exact.rngSize = 0;
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::ResetWarm);
+    doc.checkpoint.reset();
+    CHECK(state::decideRestore(doc, exact, error) == state::RestoreDecision::NoCheckpoint);
+    doc.checkpoint = state::EngineCheckpoint{"0.0.1-dev", "fixture-v1", 48000, 4, 9007199254740992ULL, {}, {}, {42}};
     std::string unsafe = safe;
     unsafe.replace(unsafe.find("\"sampleIndex\":9007199254740992"), 30, "\"sampleIndex\":9007199254740993");
     CHECK(!state::loadState(unsafe, back, error));

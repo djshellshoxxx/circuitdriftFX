@@ -93,7 +93,9 @@ struct RuntimeIdentity {
     std::string engineModelVersion, modelRevision;
     double sampleRate = 0;
     int oversampling = 1;
-    std::size_t electricalSize = 0, thermalSize = 0;
+    // The stochastic state layout is part of exact dynamic continuation.
+    // Callers supply the prepared runtime's expected RNG size; zero means none.
+    std::size_t electricalSize = 0, thermalSize = 0, rngSize = 0;
 };
 enum class RestoreDecision : unsigned char { Restore, ResetWarm, NoCheckpoint };
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason);

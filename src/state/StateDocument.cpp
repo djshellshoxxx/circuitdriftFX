@@ -461,7 +461,14 @@ RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& r
     else if (c.modelRevision != rt.modelRevision) reason = "model revision differs";
     else if (c.sampleRate != rt.sampleRate) reason = "sample rate differs";
     else if (c.oversampling != rt.oversampling) reason = "oversampling differs";
-    else if (c.electrical.size() != rt.electricalSize || c.thermal.size() != rt.thermalSize) reason = "state layout differs";
+    else if (c.electrical.size() != rt.electricalSize || c.thermal.size() != rt.thermalSize ||
+             c.rng.size() != rt.rngSize) reason = "state layout differs (including rng)";
+    else if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||
+             c.oversampling < 1 || c.oversampling > 16 || (c.oversampling & (c.oversampling - 1)) ||
+             c.sampleIndex > 9007199254740992ULL ||
+             !std::all_of(c.electrical.begin(), c.electrical.end(), [](double x) { return std::isfinite(x); }) ||
+             !std::all_of(c.thermal.begin(), c.thermal.end(), [](double x) { return std::isfinite(x); }))
+        reason = "invalid checkpoint scalar or dynamic state";
     else { reason.clear(); return RestoreDecision::Restore; }
     reason += "; dynamic state reset to prepared warm initialisation";
     return RestoreDecision::ResetWarm;

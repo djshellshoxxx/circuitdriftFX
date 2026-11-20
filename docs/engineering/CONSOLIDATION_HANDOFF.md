@@ -360,3 +360,32 @@ and the Windows filesystem's no-replace semantics. This does not complete
 full runtime/seed/session persistence or the live sound-load transaction.
 Separate independent reviewers are not available in this connector execution.
 Do not promote over PR #19 while its exact-head Windows validation is active.
+
+## G12 child: fail-closed checkpoint compatibility — 2026-11-20
+
+Isolated branch `codex/cdfx-session-checkpoint-guard-20261120` starts from exact PR #20 source `8deb187da5cb8e0428b61d50b4a19be7307e6385`.
+PR #16/#19/#20 and main remain unchanged. The `decideRestore` gate
+checked electrical and thermal sizes but not the RNG count, so it could
+incorrectly authorize exact stochastic continuation with an incompatible
+prepared RNG layout. Programmatic in-memory checkpoints also bypass the JSON
+parser's finite and sample-index admission checks.
+
+The child adds explicit `RuntimeIdentity::rngSize` (zero is *not* a wildcard),
+requires all three prepared vector sizes to match, and rejects invalid
+in-memory dynamic scalars or schema-v1 sample-index overflow. An incompatible
+checkpoint chooses `ResetWarm`, never partial restoration. `test_state_safety`
+now covers success, RNG mismatch, nonfinite dynamic state, sample-index
+overflow and absent checkpoint. The review note is
+[SESSION_RESTORE_GUARD_2026-11-20.md](../audits/SESSION_RESTORE_GUARD_2026-11-20.md).
+
+Source-replacement assertions and JSON preflight passed. Full compilation,
+exact-head CI, pluginval and independent code/bug/security review **have not
+yet run** for this child. PR #20 Linux passed and Windows was still building
+at inspection, but neither qualifies this new commit.
+
+This is an incremental G12 restore guard, **not** complete runtime/seed/session
+persistence. Engine/control capture, prepared seed identification, audio-owner
+snapshot publication, host persistence and stopped-audio restore transactions
+remain unimplemented. Fresh review workers were unavailable in this runtime.
+Next owner: check exact-head Linux state_safety/Windows pluginval, review caller
+RNG size and state integrity, then integrate only after a guarded live-ref check.

@@ -455,5 +455,21 @@
     "independent_review": "unavailable in connector environment",
     "remaining": "G12 runtime/control/seed persistence; sound load transactions; PR 9/10/14 reconciliation; physical and DAW gates",
     "integration": "isolated draft child; do not move PR 16/19 during validation"
+  },
+  "session_checkpoint_restore_guard_20261120": {
+    "branch": "codex/cdfx-session-checkpoint-guard-20261120",
+    "base_sha": "8deb187da5cb8e0428b61d50b4a19be7307e6385",
+    "parent_pr": 20,
+    "scope": "G12 checkpoint restore compatibility: exact RNG layout, bounds and finite in-memory state",
+    "changed_paths": [
+      "src/state/StateDocument.cpp",
+      "src/state/StateDocument.h",
+      "tests/test_state_safety.cpp"
+    ],
+    "qualification": "source-only preflight; exact-head Linux state_safety and Windows/pluginval required",
+    "parent_ci": "PR20 source Linux passed; Windows still building at inspection",
+    "review_workers": "unavailable in GitHub connector runtime",
+    "not_done": "No dynamic runtime/control/seed capture, serialized host-state session or stopped-audio apply; G12 remains open",
+    "next": "Qualify exact source, review compatibility and independently audit; implement audio-owner checkpoint handoff, host-thread capture and safe stopped-audio restore"
   }
 }
