@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -234,13 +235,19 @@ bool validateV1(const JsonValue& v, StateDocument& d, std::string& why) {
 // A version mismatch with the prepared runtime is permitted on disk: restore
 // compatibility is decided separately by decideRestore().
 bool validCheckpointIdentity(const EngineCheckpoint& c) {
-    return !c.engineModelVersion.empty() && c.engineModelVersion.size() <= 64 &&
-           !c.modelRevision.empty() && c.modelRevision.size() <= 64;
+    if (c.engineModelVersion.empty() || c.engineModelVersion.size() > 64 ||
+        c.modelRevision.empty() || c.modelRevision.size() > 64) return false;
+    // Reuse the shared UTF-8 validator on these already bounded strings.
+    try {
+        (void)core::writeJson(JsonValue::makeString(c.engineModelVersion));
+        (void)core::writeJson(JsonValue::makeString(c.modelRevision));
+    } catch (const std::invalid_argument&) { return false; }
+    return true;
 }
 
 void validateCheckpointForSave(const EngineCheckpoint& c) {
     if (!validCheckpointIdentity(c))
-        throw std::invalid_argument("checkpoint identity must be nonempty and at most 64 bytes");
+        throw std::invalid_argument("checkpoint identity must be nonempty UTF-8 and at most 64 bytes");
     if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||
         c.oversampling < 1 || c.oversampling > 16 ||
         (c.oversampling & (c.oversampling - 1)) != 0 ||
@@ -250,6 +257,112 @@ void validateCheckpointForSave(const EngineCheckpoint& c) {
         !std::all_of(c.electrical.begin(), c.electrical.end(), [](double v) { return std::isfinite(v); }) ||
         !std::all_of(c.thermal.begin(), c.thermal.end(), [](double v) { return std::isfinite(v); }))
         throw std::invalid_argument("invalid checkpoint dynamic vector for schema v1");
+}
+
+// Inspect caller-owned JSON before toJson() recursively copies it. A reader
+// roundtrip alone applies limits too late, after those copies and serialization.
+// Count encoded subtree and scalar payload bytes without allocating an encoded
+// string; remaining envelope keys/punctuation are checked by the final reader.
+struct JsonWriteBudget {
+    std::size_t remaining;
+
+    void consume(std::size_t bytes) {
+        if (bytes > remaining) throw std::invalid_argument("state writer JSON payload exceeds byte bound");
+        remaining -= bytes;
+    }
+    void string(const std::string& s) {
+        consume(2);  // quotes
+        if (s.size() > remaining) throw std::invalid_argument("state writer JSON string exceeds byte bound");
+        for (unsigned char c : s) consume(c < 0x20 ? 6 : (c == '"' || c == '\\') ? 2 : 1);
+    }
+    void number(double d) {
+        if (!std::isfinite(d)) throw std::invalid_argument("cannot write non-finite JSON number");
+        char bytes[32];
+        const auto result = std::to_chars(bytes, bytes + sizeof bytes, d, std::chars_format::general, 17);
+        if (result.ec != std::errc{}) throw std::invalid_argument("cannot write JSON number");
+        consume(std::size_t(result.ptr - bytes));
+    }
+    void value(const JsonValue& v, int depth) {
+        // JsonValue owns all storage members. Even inactive storage is copied,
+        // so malformed tagged values must not hide unchecked nested payloads.
+        if ((!v.isString() && !v.string.empty()) || (!v.isArray() && !v.array.empty()) ||
+            (!v.isObject() && !v.object.empty()))
+            throw std::invalid_argument("state writer JSON has inactive payload storage");
+        if ((v.isArray() || v.isObject()) && depth >= core::JsonLimits{}.maxDepth)
+            throw std::invalid_argument("state writer JSON nesting exceeds reader bound");
+        switch (v.type) {
+            case JsonValue::Type::Null: consume(4); break;
+            case JsonValue::Type::Bool: consume(v.boolean ? 4 : 5); break;
+            case JsonValue::Type::Number: number(v.number); break;
+            case JsonValue::Type::String: string(v.string); break;
+            case JsonValue::Type::Array:
+                consume(2);
+                for (std::size_t i = 0; i < v.array.size(); ++i) {
+                    if (i) consume(1);
+                    value(v.array[i], depth + 1);
+                }
+                break;
+            case JsonValue::Type::Object:
+                consume(2);
+                for (std::size_t i = 0; i < v.object.size(); ++i) {
+                    if (i) consume(1);
+                    string(v.object[i].first);
+                    consume(1);
+                    value(v.object[i].second, depth + 1);
+                }
+                break;
+            default: throw std::invalid_argument("state writer JSON has invalid type");
+        }
+    }
+};
+
+void validatePayloadBounds(const StateDocument& d, bool forPublish) {
+    JsonWriteBudget budget{d.kind == DocKind::Scene ? kSceneMaxBytes : kSessionMaxBytes};
+    for (const auto* s : {&d.engineModelVersion, &d.author, &d.title, &d.createdAt}) budget.string(*s);
+    for (const auto* list : {&d.tags, &d.requiredFeatures})
+        for (const auto& s : *list) budget.string(s);
+    for (const auto& b : d.blueprints) {
+        const auto available = std::min(budget.remaining, kBlueprintMaxBytes);
+        JsonWriteBudget blueprint{available};
+        blueprint.value(b, d.kind == DocKind::Scene ? 1 : 2);
+        budget.consume(available - blueprint.remaining);
+    }
+    for (const auto& p : d.baseParameters) { budget.string(p.first); budget.number(p.second); }
+    for (const auto* v : {&d.macros, &d.timeline, &d.faults}) budget.value(*v, 1);
+    if (!forPublish && d.ui) budget.value(*d.ui, 1);
+    if (!forPublish && d.checkpoint) {
+        validateCheckpointForSave(*d.checkpoint);
+        const auto& c = *d.checkpoint;
+        budget.string(c.engineModelVersion);
+        budget.string(c.modelRevision);
+        budget.number(c.sampleRate);
+        for (const auto* values : {&c.electrical, &c.thermal})
+            for (double v : *values) budget.number(v);
+        budget.consume(c.rng.size() * 18);  // sixteen hex digits and quotes per word
+    }
+    if (forPublish) return;  // local-only fields are intentionally stripped
+    std::size_t metadataRemaining = kMetadataMaxBytes;
+    for (const auto& field : d.metadata) {
+        if (field.first.size() > metadataRemaining)
+            throw std::invalid_argument("unknown metadata exceeds bound");
+        metadataRemaining -= field.first.size();
+        budget.string(field.first);
+        const auto available = std::min(budget.remaining, metadataRemaining);
+        JsonWriteBudget value{available};
+        value.value(field.second, 1);
+        const auto used = available - value.remaining;
+        budget.consume(used);
+        metadataRemaining -= used;
+    }
+}
+
+void validateParameterIdentities(const StateDocument& d) {
+    if (d.baseParameters.size() > core::kParamCount)
+        throw std::invalid_argument("too many in-memory parameter identities");
+    std::set<std::string> identities;
+    for (const auto& param : d.baseParameters)
+        if (!identities.insert(param.first).second)
+            throw std::invalid_argument("duplicate in-memory parameter identity");
 }
 
 JsonValue toJson(const StateDocument& d, bool forPublish) {
@@ -390,11 +503,9 @@ std::string saveState(const StateDocument& doc) {
     } else {
         throw std::invalid_argument("invalid document kind");
     }
+    validatePayloadBounds(doc, false);
+    validateParameterIdentities(doc);
     std::set<std::string> identities;
-    for (const auto& param : doc.baseParameters)
-        if (!identities.insert(param.first).second)
-            throw std::invalid_argument("duplicate in-memory parameter identity");
-    identities.clear();
     for (const auto& field : doc.metadata)
         if (knownKeys().count(field.first) || !identities.insert(field.first).second)
             throw std::invalid_argument("duplicate or reserved metadata identity");
@@ -414,7 +525,11 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
     if (doc.kind != DocKind::Scene) { error = "only scenes are published"; return false; }
     if (!publishableContent(doc, error)) return false;
     std::string candidate;
-    try { candidate = core::writeJson(toJson(doc, true)); }
+    try {
+        validatePayloadBounds(doc, true);
+        validateParameterIdentities(doc);
+        candidate = core::writeJson(toJson(doc, true));
+    }
     catch (const std::invalid_argument& e) { error = e.what(); return false; }
     StateDocument check;
     if (!loadState(candidate, check, error)) return false;  // publishing never emits an unreadable scene

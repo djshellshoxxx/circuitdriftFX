@@ -71,6 +71,7 @@ bool loadState(std::string_view text, StateDocument& out, std::string& error,
 // Throws std::invalid_argument if the complete schema-v1 envelope could not
 // be read back (including size, blueprint, parameter and feature limits), for
 // duplicate/reserved metadata or parameter IDs, or for invalid checkpoint state.
+// Caller-owned JSON payloads are bounded before recursive copying/serialization.
 // Only for worker/UI threads: serializes and validates; never call on audio.
 std::string saveState(const StateDocument& doc);
 // Community/scene export: requires kind Scene; strips checkpoint, UI preferences and metadata.
@@ -89,6 +90,9 @@ bool saveStateFileAtomic(const std::string& path, const std::string& text, std::
 // Exclusively installs a new file without ever replacing an existing target, including
 // a dangling symlink. The existence decision is made atomically at installation,
 // not by a prior filesystem check; suitable for no-overwrite preset imports.
+// After a successful POSIX install, temporary hard-link cleanup is best effort:
+// cleanup failure may leave that extra link, while success and the committed
+// destination are preserved (the installed destination is never rolled back).
 // Same trusted-directory, non-audio and durability constraints as above.
 bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& text, std::string& error);
 

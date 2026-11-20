@@ -294,7 +294,7 @@ void checkpointAdmissionBoundary() {
         CHECK(state::decideRestore(doc, runtime, error) == state::RestoreDecision::ResetWarm);
         CHECK(!error.empty());
     }
-    for (const std::string identity : {std::string{}, std::string(65, 'x')}) {
+    for (const std::string identity : {std::string{}, std::string(65, 'x'), std::string("\x80", 1)}) {
         for (const bool engineIdentity : {false, true}) {
             doc = original;
             auto matchingRuntime = runtime;
@@ -317,6 +317,7 @@ void checkpointAdmissionBoundary() {
         auto& cp = *doc.checkpoint;
         cp.engineModelVersion.assign(64, 'e');
         cp.modelRevision.assign(64, 'r');
+        if (rate == 768000.0) cp.modelRevision.replace(62, 2, "\xc3\xa9");
         cp.sampleRate = rate;
         cp.oversampling = rate == 8000.0 ? 1 : 16;
         cp.sampleIndex = 9007199254740992ULL;
@@ -430,6 +431,91 @@ void wholeDocumentWriterBoundary() {
           back.metadata[0].second.isString() && back.metadata[0].second.string == "SYNTHETIC_TOKEN");
 }
 
+void writerPayloadLimits() {
+    using core::JsonValue;
+    state::StateDocument doc, back;
+    std::string error;
+    CHECK(state::loadState(kScene, doc, error));
+    const auto original = doc;
+    const auto rejects = [&]() {
+        try { (void)state::saveState(doc); return false; }
+        catch (const std::invalid_argument&) { return true; }
+    };
+    const auto nested = [](int containers) {
+        auto value = JsonValue::makeString("synthetic");
+        for (int i = 0; i < containers; ++i) {
+            auto parent = JsonValue::makeObject();
+            parent.set("child", std::move(value));
+            value = std::move(parent);
+        }
+        return value;
+    };
+
+    // The document root counts toward depth 20, as does the extra blueprints
+    // array in a session. Exercise only the exact limit and one level beyond it.
+    doc.macros = nested(19);
+    CHECK(state::loadState(state::saveState(doc), back, error));
+    CHECK(core::writeJson(back.macros) == core::writeJson(doc.macros));
+    doc.macros = nested(20);
+    CHECK(rejects());
+    for (const auto kind : {state::DocKind::Scene, state::DocKind::Session}) {
+        doc = original;
+        doc.kind = kind;
+        const int payloadDepth = kind == state::DocKind::Scene ? 18 : 17;
+        doc.blueprints[0].set("extension", nested(payloadDepth));
+        CHECK(state::loadState(state::saveState(doc), back, error));
+        CHECK(core::writeJson(back.blueprints[0]) == core::writeJson(doc.blueprints[0]));
+        doc.blueprints[0].set("extension", nested(payloadDepth + 1));
+        CHECK(rejects());
+    }
+    doc = original;
+    doc.metadata.emplace_back("x-depth", nested(19));
+    CHECK(state::loadState(state::saveState(doc), back, error));
+    doc.metadata.back().second = nested(20);
+    CHECK(rejects());
+    doc = original;
+    auto malformed = JsonValue::makeString("visible");
+    malformed.array.push_back(JsonValue::makeString("inactive"));
+    doc.metadata.emplace_back("x-value", std::move(malformed));
+    CHECK(rejects());
+
+    // Inclusive byte limits remain readable, and adding one byte is rejected.
+    // Use ordinary bounded fixtures rather than large-depth/stack tests.
+    for (const auto kind : {state::DocKind::Scene, state::DocKind::Session}) {
+        doc = original;
+        doc.kind = kind;
+        doc.macros.set("padding", JsonValue::makeString(""));
+        const auto overhead = state::saveState(doc).size();
+        const auto limit = kind == state::DocKind::Scene ? state::kSceneMaxBytes : state::kSessionMaxBytes;
+        doc.macros.get("padding")->string.assign(limit - overhead, 'x');
+        const auto encoded = state::saveState(doc);
+        CHECK(encoded.size() == limit && state::loadState(encoded, back, error));
+        doc.macros.get("padding")->string.push_back('x');
+        CHECK(rejects());
+    }
+    doc = original;
+    doc.blueprints[0].set("padding", JsonValue::makeString(""));
+    const auto blueprintOverhead = core::writeJson(doc.blueprints[0]).size();
+    doc.blueprints[0].get("padding")->string.assign(state::kBlueprintMaxBytes - blueprintOverhead, 'x');
+    CHECK(state::loadState(state::saveState(doc), back, error));
+    doc.blueprints[0].get("padding")->string.push_back('x');
+    CHECK(rejects());
+
+    // Metadata accounts for raw key bytes and encoded value bytes. Escaped
+    // controls therefore test both the writer byte count and reader symmetry.
+    doc = original;
+    doc.metadata.clear();
+    const std::string key = "x-\n";
+    const auto paddingBytes = state::kMetadataMaxBytes - key.size() - 2;
+    std::string padding(paddingBytes / 6, '\n');
+    padding.append(paddingBytes % 6, 'x');
+    doc.metadata.emplace_back(key, JsonValue::makeString(std::move(padding)));
+    CHECK(state::loadState(state::saveState(doc), back, error));
+    CHECK(back.metadata.size() == 1 && back.metadata[0].first == key);
+    doc.metadata[0].second.string.push_back('x');
+    CHECK(rejects());
+}
+
 void manyObjectKeys() {
     std::string text = "{";
     constexpr int count = 20000;
@@ -471,6 +557,10 @@ void publicationBoundary() {
     doc.macros.set("age", core::JsonValue::makeNumber(0.5));
     out = "unchanged";
     CHECK(!state::publishScene(doc, out, error) && out == "unchanged"); // do not drop even benign unvalidated controls
+    CHECK(state::loadState(kScene, doc, error));
+    doc.baseParameters.emplace_back("hpf.frequency", 200.0);
+    out = "unchanged";
+    CHECK(!state::publishScene(doc, out, error) && out == "unchanged" && !error.empty());
 }
 
 std::string readFile(const std::filesystem::path& path) {
@@ -568,7 +658,7 @@ void atomicFiles() {
 int main() {
     migratedUtf8Boundary();
     utf8WriterBoundary();
-    localeNumbers(); exactIdentitiesAndFeatures(); checkpointAdmissionBoundary(); wholeDocumentWriterBoundary(); manyObjectKeys(); publicationBoundary(); atomicFiles();
+    localeNumbers(); exactIdentitiesAndFeatures(); checkpointAdmissionBoundary(); wholeDocumentWriterBoundary(); writerPayloadLimits(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
 }
