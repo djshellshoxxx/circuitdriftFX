@@ -7,6 +7,9 @@
 #include "ui/workbench/ParamOps.h"
 #include "BlueprintValidationRegressions.h"
 #include <cmath>
+#include <chrono>
+#include <cstring>
+#include <thread>
 #include <cstdio>
 #include <memory>
 #include <filesystem>
@@ -202,6 +205,62 @@ int main() {
         error.clear();
         check(!catalog.savePng(juce::Image{}, screenshot, error) && screenshot.existsAsFile(),
               "invalid capture does not destroy an existing file");
+
+        // Exercise real GIF worker/queue/atomic destination through the same
+        // production bridge. The format encoder has separate decoded-pixel tests.
+        CaptureRequest gifRequest;
+        gifRequest.format = CaptureFormat::Gif;
+        gifRequest.framing = CaptureFraming::Square1x1;
+        gifRequest.seconds = 1.0;
+        gifRequest.includeAudio = false;
+        gifRequest.destination = tempRoot.getChildFile("silent.gif");
+        error.clear();
+        check(catalog.startCapture(gifRequest, error), "start real silent GIF recording");
+        juce::Image square(juce::Image::ARGB, 480, 480, true);
+        {
+            juce::Graphics graphics(square);
+            graphics.fillAll(juce::Colours::darkgreen);
+        }
+        for (int frame = 0; frame < 3; ++frame)
+            catalog.submitCaptureFrame(square);
+        catalog.stopCapture();
+        CaptureStatus gifStatus;
+        for (int attempt = 0; attempt < 250; ++attempt) {
+            gifStatus = catalog.captureStatus();
+            if (gifStatus.state == CaptureState::Completed ||
+                gifStatus.state == CaptureState::Failed) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        check(gifStatus.state == CaptureState::Completed && gifStatus.progress == 1.0 &&
+              gifStatus.framesWritten == 3 && gifStatus.framesRepeated <= 3,
+              "silent GIF worker drains and finalizes three timed frames");
+        const auto gifFile = gifRequest.destination;
+        check(gifFile.existsAsFile(), "silent GIF saved to the selected local destination");
+        const auto originalSize = gifFile.getSize();
+        juce::FileInputStream gifStream(gifFile);
+        char signature[6] = {};
+        check(gifStream.openedOk() && gifStream.read(signature, 6) == 6 &&
+              std::memcmp(signature, "GIF89a", 6) == 0, "GIF output has GIF89a signature");
+        if (gifStream.openedOk() && gifStream.getTotalLength() > 6) {
+            gifStream.setPosition(gifStream.getTotalLength() - 1);
+            check(gifStream.readByte() == 0x3B, "finalized GIF has trailer");
+        }
+
+        error.clear();
+        gifRequest.includeAudio = true;
+        check(!catalog.startCapture(gifRequest, error) && error.isNotEmpty(),
+              "GIF cannot silently enable an audio capture path");
+        gifRequest.includeAudio = false;
+        gifRequest.seconds = 16.0;
+        error.clear();
+        check(!catalog.startCapture(gifRequest, error) && error.isNotEmpty(),
+              "GIF recording rejects durations above the 15 second cap");
+        gifRequest.seconds = 1.0;
+        error.clear();
+        check(catalog.startCapture(gifRequest, error), "start second bounded GIF recording");
+        catalog.submitCaptureFrame(juce::Image(juce::Image::ARGB, 4, 4, true));
+        check(catalog.captureStatus().state == CaptureState::Failed &&
+              gifFile.getSize() == originalSize, "invalid-frame failure preserves prior GIF");
     }
     check(tempRoot.deleteRecursively(), "remove isolated preset test directory");
     // Surface directory enumeration errors and clear them after recovery.
