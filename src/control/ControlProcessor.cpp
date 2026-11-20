@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "control/MacroMapper.h"
+#include "core/CutoffDomain.h"
 
 namespace cd::control {
 namespace {
@@ -41,6 +42,24 @@ double referencePitch(double hz, double a4Hz) noexcept {
     const double octaves = std::isfinite(ratio) && ratio > 0.0 ? std::log2(ratio)
                                                              : std::log2(hz) - std::log2(a4Hz);
     return 69.0 + 12.0 * octaves;
+}
+double admittedTargetPitch(double target, const core::CutoffDomain& domain,
+                           double a4Hz, uint16_t mask, int root) noexcept {
+    // Positive finite A4 and the prepared filter domain (500..80000 Hz) keep
+    // both pitch bounds inside +/-14000, including subnormal reference tuning.
+    const int first = int(std::ceil(referencePitch(domain.minHz, a4Hz)));
+    const int last = int(std::floor(referencePitch(domain.maxHz, a4Hz)));
+    int low = first, high = last;
+    for (int i = 0; i < 12; ++i) {
+        if (scale::isAllowed(mask, root, first + i)) { low = first + i; break; }
+    }
+    for (int i = 0; i < 12; ++i) {
+        if (scale::isAllowed(mask, root, last - i)) { high = last - i; break; }
+    }
+    // The domain spans at least two octaves, so low <= high for every nonzero
+    // scale. Keeping the original pitch between these allowed endpoints retains
+    // midpoint ties and 0.15-semitone hysteresis throughout the admitted range.
+    return std::clamp(target, double(low), double(high));
 }
 double approach(double cur, double target, double maxStep) noexcept {
     return cur + std::clamp(target - cur, -maxStep, maxStep);
@@ -207,14 +226,19 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
         if (frames > 0) {
             drift_[s].advance(frames);
             const double cutoffM = drift_[s].cutoffOct(d) + lastTempo_.cutoffOct;
-            const double fbase = std::clamp(num(p[kFreqIdx[s]], 1000.0), 20.0, 20000.0);
-            const double pManual = referencePitch(fbase, a4);
+            const auto domain = core::cutoffDomain(p[kFreqIdx[s]], fs_);
+            const double pManual = referencePitch(domain.baseHz, a4);
             if (keyEnabled) {
-                st.quant.configure(scale::maskFor(enumIdx(p[kKeyScale], 5), uint16_t(std::clamp(num(p[kKeyMask], 4095.0), 0.0, 4095.0))),
-                                   enumIdx(p[kKeyRoot], 11));
+                const uint16_t mask = scale::maskFor(enumIdx(p[kKeyScale], 5), uint16_t(std::clamp(num(p[kKeyMask], 4095.0), 0.0, 4095.0)));
+                const int root = enumIdx(p[kKeyRoot], 11);
+                st.quant.configure(mask, root);
                 const double pEff = pManual + key_.weight() * (key_.notePitch() - pManual);
-                const double g = st.quant.update(pEff + 12.0 * cutoffM, dt);
-                st.lastQuantOff = (g - pManual) / 12.0;
+                const double target = admittedTargetPitch(pEff + 12.0 * cutoffM, domain, a4, mask, root);
+                const double g = st.quant.update(target, dt);
+                // A base/rate/tuning edit can move an already running glide
+                // outside the new range. Safety bounds still apply during it.
+                st.lastQuantOff = std::clamp((g - pManual) / 12.0, -core::kCreativeCutoffOctaves,
+                                             std::log2(domain.maxHz / domain.baseHz));
             } else {
                 st.quant.reset();
             }
@@ -264,7 +288,7 @@ void ControlProcessor::processBlock(const core::ParamValues& p, const ControlCon
     status_.pitchDriftHeld = keyEnabled && delayActive;
     status_.keyState = keyEnabled ? key_.state() : KeyState::Off;
     {
-        const double pm = referencePitch(std::clamp(num(p[kFreqIdx[0]], 1000.0), 20.0, 20000.0), a4);
+        const double pm = referencePitch(core::cutoffDomain(p[kFreqIdx[0]], fs_).baseHz, a4);
         status_.referenceNote = pm + key_.weight() * (key_.notePitch() - pm);
     }
     status_.sidechainConnected = scConnected;

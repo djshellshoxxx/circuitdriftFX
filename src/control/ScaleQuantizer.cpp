@@ -1,8 +1,18 @@
 #include "control/ScaleQuantizer.h"
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <limits>
 
 namespace cd::control {
+namespace {
+double boundedPitch(double pitch) noexcept {
+    // Keep every floor/cast and the complete local search inside the int domain.
+    return std::clamp(std::isfinite(pitch) ? pitch : 69.0,
+                      double(std::numeric_limits<int>::min()) + 16.0,
+                      double(std::numeric_limits<int>::max()) - 16.0);
+}
+}  // namespace
 namespace scale {
 namespace {
 constexpr uint16_t bits(std::initializer_list<int> iv) {
@@ -26,10 +36,11 @@ uint16_t maskFor(int idx, uint16_t custom) noexcept {
 
 bool isAllowed(uint16_t mask, int root, int midiNote) noexcept {
     if ((mask & kChromatic) == 0) mask = kChromatic;
-    return (mask >> mod12(midiNote - root)) & 1u;
+    return (mask >> mod12(mod12(midiNote) - mod12(root))) & 1u;
 }
 
 int nearestAllowed(double p, uint16_t mask, int root) noexcept {
+    p = boundedPitch(p);
     const int base = int(std::floor(p));
     int best = base;
     double bestD = 1e300;
@@ -49,11 +60,12 @@ void ResonanceQuantizer::configure(uint16_t mask, int root) noexcept {
     if (m != mask_ || r != root_) {
         mask_ = m;
         root_ = r;
-        if (haveNote_ && !scale::isAllowed(mask_, root_, note_)) haveNote_ = false;  // drop stale memory
+        if (haveNote_ && !scale::isAllowed(mask_, root_, note_)) haveNote_ = false;  // discard decision, retain glide
     }
 }
 
 int ResonanceQuantizer::decide(double p) noexcept {
+    p = boundedPitch(p);
     const int cand = scale::nearestAllowed(p, mask_, root_);
     if (!haveNote_) { note_ = cand; haveNote_ = true; return note_; }
     if (cand != note_) {
@@ -64,16 +76,16 @@ int ResonanceQuantizer::decide(double p) noexcept {
 }
 
 double ResonanceQuantizer::update(double p, double dt) noexcept {
-    const bool first = !haveNote_;
-    const int prev = note_;
     const int n = decide(p);
-    if (first) {
+    if (!haveOutput_) {
         current_ = start_ = double(n);
         glideRemaining_ = 0;
-    } else if (n != prev) {
+        haveOutput_ = true;
+    } else if (n != glideNote_) {
         start_ = current_;
         glideRemaining_ = kGlideS;
     }
+    glideNote_ = n;
     if (glideRemaining_ > 0 && dt > 0) {
         glideRemaining_ -= dt;
         if (glideRemaining_ <= 0) { glideRemaining_ = 0; current_ = double(n); }

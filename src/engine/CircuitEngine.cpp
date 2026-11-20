@@ -1,4 +1,5 @@
 #include "engine/CircuitEngine.h"
+#include "core/CutoffDomain.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -787,7 +788,7 @@ void CircuitEngine::Impl::slotTargets(int s, const core::ParamValues& p, const c
     S.tJn = fin(p[q.jn], -120, -50, -120);
     S.tMicro = fin(p[q.micro], 0, 1, 0);
     S.tLpfOn = en(p[q.lpfOn], 0, 1) != 0;
-    S.tLpfHz = fin(p[q.lpfHz], 2000, 20000, 18000);
+    S.tLpfHz = core::cutoffBaseHz(p[q.lpfHz]);
     S.tShelf = fin(m.hfShelfDb, -24, 24, 0);
     EffectiveTargets& t = S.targets;
     t.family = en(p[q.element], 0, 3);
@@ -809,7 +810,7 @@ void CircuitEngine::Impl::slotTargets(int s, const core::ParamValues& p, const c
     t.saturationFluxWb = d.lambdaS * coreMaterial(t.core).fluxScale / t.fluxDriveFactor;
     t.tempcoScale = std::clamp(S.tDrift * fin(m.thermalSensitivityScale, 0, 10, 1), 0.0, 20.0);
     t.hfShelfDb = S.tShelf;
-    t.creativeCutoffOct = fin(m.creativeCutoffOct, -2, 2, 0);
+    t.creativeCutoffOct = fin(m.creativeCutoffOct, -core::kCreativeCutoffOctaves, core::kCreativeCutoffOctaves, 0);
     t.creativeDelayMs = fin(m.creativeDelayMs, -3, 3, 0);
     t.creativeDelayActive = m.creativeDelayActive && pitchDrift && !zeroLatency;
     t.recoveryTauS = fin(m.recoveryTauS, 0, 60, 0);
@@ -1133,7 +1134,7 @@ void CircuitEngine::Impl::slice(const double* const* in, double* const* out, int
                 S.shelfApplied = sh;
             }
             const double lw = S.lpfOn.next(S.tLpfOn);
-            const double lhz = std::min(S.lpfHz.next(S.tLpfHz) * std::exp2(S.targets.creativeCutoffOct), 0.45 * fs);
+            const double lhz = core::applyCreativeCutoff(S.lpfHz.next(S.tLpfHz), S.targets.creativeCutoffOct, fs);
             if (lhz != S.lpfApplied) {
                 for (auto& f : S.lpf) { const double z1 = f.z1, z2 = f.z2; f.lowpass(fs, lhz); f.z1 = z1; f.z2 = z2; }
                 S.lpfApplied = lhz;

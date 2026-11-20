@@ -18,7 +18,8 @@ inline constexpr uint16_t kChromatic = 0x0FFF;
 // key.scale enum: 0 Chromatic, 1 Major, 2 Natural Minor, 3 Pentatonic Major, 4 Pentatonic Minor, 5 Custom.
 uint16_t maskFor(int scaleIndex, uint16_t customMask) noexcept;
 bool isAllowed(uint16_t mask, int root, int midiNote) noexcept;
-// Stateless nearest allowed note (ties -> lower). Searches +-13 semitones; mask 0 treated as chromatic.
+// Stateless nearest allowed note (ties -> lower). Bounded local search; mask 0 treated as chromatic.
+// Nonfinite pitch uses A4; finite pitches outside the int domain saturate with search headroom.
 int nearestAllowed(double pitch, uint16_t mask, int root) noexcept;
 inline double midiToHz(double midi, double a4Hz = 440.0) noexcept { return a4Hz * std::exp2((midi - 69.0) / 12.0); }
 inline double hzToMidi(double hz, double a4Hz = 440.0) noexcept { return 69.0 + 12.0 * std::log2(hz / a4Hz); }
@@ -30,7 +31,7 @@ public:
     static constexpr double kGlideS = 0.05;
 
     void configure(uint16_t mask, int root) noexcept;
-    void reset() noexcept { haveNote_ = false; glideRemaining_ = 0; }
+    void reset() noexcept { haveNote_ = haveOutput_ = false; glideRemaining_ = 0; }
     // Update with target pitch p (MIDI float) and elapsed time; returns glided pitch (MIDI float).
     // dtSeconds==0 still re-evaluates the note decision but advances no glide time.
     double update(double pitch, double dtSeconds) noexcept;
@@ -43,7 +44,9 @@ private:
     uint16_t mask_ = scale::kChromatic;
     int root_ = 0;
     bool haveNote_ = false;
+    bool haveOutput_ = false;  // scale changes invalidate decisions, never an initialized glide
     int note_ = 69;
+    int glideNote_ = 69;
     double current_ = 69.0, start_ = 69.0, glideRemaining_ = 0.0;
 };
 
