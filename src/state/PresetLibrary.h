@@ -34,6 +34,13 @@ struct PresetInfo {
     std::string error;
 };
 
+struct PresetListReport {
+    std::size_t examinedEntries = 0;  // includes irrelevant files, directories and nonmatches
+    std::size_t readFiles = 0;        // attempted bounded reads of candidate preset files
+    bool truncated = false;          // more directory entries remain after the entry budget
+    std::string error;               // directory enumeration failed; returned entries may be partial
+};
+
 class PresetLibrary {
 public:
     explicit PresetLibrary(std::filesystem::path userDirectory) : dir_(std::move(userDirectory)) {}
@@ -41,7 +48,12 @@ public:
 
     // Factory first (compiled order) then user presets sorted by id. `query` filters by
     // case-insensitive substring over id, title, author and tags (empty = all).
-    std::vector<PresetInfo> list(std::string_view query = {}) const;
+    // At most entryBudget user-directory entries are examined, before filtering;
+    // the budget is capped at kMaxListedPresets. Factory entries do not consume it.
+    // Reports truncation and directory errors when requested. A missing user
+    // directory is an empty library. This bounds work counts, not filesystem latency.
+    std::vector<PresetInfo> list(std::string_view query = {}, PresetListReport* report = nullptr,
+                                 std::size_t entryBudget = kMaxListedPresets) const;
     bool load(const std::string& id, ScenePreset& out, std::string& error) const;
     // Saves under `name` (must pass sanitizeStem). Fails if it exists and !overwrite. Atomic.
     bool save(std::string_view name, const ScenePreset& preset, bool overwrite, std::string& savedId, std::string& error) const;

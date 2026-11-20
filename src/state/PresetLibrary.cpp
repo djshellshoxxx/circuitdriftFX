@@ -81,8 +81,11 @@ fs::path PresetLibrary::pathFor(const std::string& stem) const {
     return dir_ / (stem + std::string(kPresetExtension));
 }
 
-std::vector<PresetInfo> PresetLibrary::list(std::string_view query) const {
+std::vector<PresetInfo> PresetLibrary::list(std::string_view query, PresetListReport* report,
+                                          std::size_t entryBudget) const {
     const std::string q = lower(query);
+    PresetListReport scanned;
+    entryBudget = std::min(entryBudget, kMaxListedPresets);
     std::vector<PresetInfo> out;
     for (const auto& f : factoryPresets()) {
         PresetInfo i = infoFrom("factory:" + f.id, f.scene, true);
@@ -90,7 +93,12 @@ std::vector<PresetInfo> PresetLibrary::list(std::string_view query) const {
     }
     std::vector<PresetInfo> user;
     std::error_code ec;
-    for (fs::directory_iterator it(dir_, ec), end; !ec && it != end && user.size() < kMaxListedPresets; it.increment(ec)) {
+    fs::directory_iterator it(dir_, ec), end;
+    if (ec == std::errc::no_such_file_or_directory) ec.clear();  // save creates the directory on demand
+    for (; !ec && it != end && scanned.examinedEntries < entryBudget; it.increment(ec)) {
+        // Every entry consumes the same budget. Query misses, ignored files,
+        // invalid names and subdirectories must not extend the scan indefinitely.
+        ++scanned.examinedEntries;
         const std::string name = utf8(it->path().filename());
         if (!endsWith(name, kPresetExtension)) continue;
         std::error_code sec;
@@ -103,12 +111,16 @@ std::vector<PresetInfo> PresetLibrary::list(std::string_view query) const {
         i.title = stem;
         std::string text;
         ScenePreset p;
+        ++scanned.readFiles;
         if (readBounded(it->path(), kSceneMaxBytes, text, why) && sceneFromJson(text, p, why)) i = infoFrom(i.id, p, false);
         else { i.valid = false; i.error = why; }
         if (matches(i, q)) user.push_back(std::move(i));
     }
+    scanned.truncated = !ec && it != end;
+    if (ec) scanned.error = "cannot enumerate preset directory: " + ec.message();
     std::sort(user.begin(), user.end(), [](const PresetInfo& a, const PresetInfo& b) { return a.id < b.id; });
     out.insert(out.end(), std::make_move_iterator(user.begin()), std::make_move_iterator(user.end()));
+    if (report) *report = std::move(scanned);
     return out;
 }
 

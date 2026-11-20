@@ -279,6 +279,55 @@ struct TempDir {
 
 std::size_t countEntries(const fs::path& d) { std::size_t n = 0; for (auto it = fs::directory_iterator(d); it != fs::directory_iterator(); ++it) ++n; return n; }
 
+void testCatalogBudget() {
+    TempDir td;
+    const auto userDir = td.path / "catalog";
+    PresetLibrary lib(userDir);
+    PresetListReport report;
+    CHECK(lib.list({}, &report).size() == factoryPresets().size());
+    CHECK(report.examinedEntries == 0 && report.readFiles == 0 && !report.truncated && report.error.empty());
+
+    auto preset = factoryPresets().front().scene;
+    preset.meta.title = "catalog-budget-fixture";
+    std::string id, error;
+    for (const char* name : {"Alpha", "Beta", "Gamma"})
+        CHECK_MSG(lib.save(name, preset, false, id, error), error);
+
+    // Matching output and a completely unsuccessful search consume the same
+    // finite directory budget. No filesystem enumeration order is assumed.
+    const auto partial = lib.list("catalog-budget-fixture", &report, 2);
+    CHECK(partial.size() == 2);
+    CHECK(report.examinedEntries == 2 && report.readFiles == 2 && report.truncated && report.error.empty());
+    CHECK(lib.list("not-present-in-any-preset", &report, 2).empty());
+    CHECK(report.examinedEntries == 2 && report.readFiles == 2 && report.truncated && report.error.empty());
+    const auto complete = lib.list("catalog-budget-fixture", &report, 3);
+    CHECK(complete.size() == 3);
+    CHECK(report.examinedEntries == 3 && report.readFiles == 3 && !report.truncated && report.error.empty());
+    CHECK(complete[0].id == "user:Alpha" && complete[1].id == "user:Beta" && complete[2].id == "user:Gamma");
+    CHECK(lib.list("catalog-budget-fixture", &report, 0).empty());
+    CHECK(report.examinedEntries == 0 && report.readFiles == 0 && report.truncated && report.error.empty());
+
+    // Skipped entries count too: unrelated files, invalid stems and directories
+    // cannot turn a zero-match query into an unbounded traversal.
+    const auto ignoredDir = td.path / "ignored";
+    fs::create_directories(ignoredDir / "Nested.circuitdrift.json");
+    std::ofstream(ignoredDir / "notes.txt") << "irrelevant";
+    std::ofstream(ignoredDir / ".invalid.circuitdrift.json") << "ignored name";
+    PresetLibrary ignored(ignoredDir);
+    CHECK(ignored.list("not-present-in-any-preset", &report, 2).empty());
+    CHECK(report.examinedEntries == 2 && report.readFiles == 0 && report.truncated && report.error.empty());
+    CHECK(ignored.list("not-present-in-any-preset", &report, 3).empty());
+    CHECK(report.examinedEntries == 3 && report.readFiles == 0 && !report.truncated && report.error.empty());
+
+    const auto notDirectory = td.path / "regular-file";
+    std::ofstream(notDirectory) << "not a directory";
+    PresetLibrary invalidDirectory(notDirectory);
+    CHECK(invalidDirectory.list({}, &report).size() == factoryPresets().size());
+    CHECK(report.examinedEntries == 0 && report.readFiles == 0 && !report.error.empty());
+    CHECK(lib.list("catalog-budget-fixture", &report, 3).size() == 3);
+    CHECK(report.error.empty() && !report.truncated);  // report is replaced, not accumulated
+}
+
 void testLibrary() {
     TempDir td;
     const fs::path userDir = td.path / "presets";  // does not exist yet: save creates it
@@ -418,6 +467,7 @@ int main() {
     testModified();
     testHostile();
     testSanitize();
+    testCatalogBudget();
     testLibrary();
     return TEST_RESULT("test_preset");
 }
