@@ -1,5 +1,6 @@
 // Capture (CD-F03), Network (CD-F11) and Community (CD-F04) panels.
 #include <cmath>
+#include <cstdint>
 #include "ui/panels/CapturePanelTestHooks.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/shell/EditorCore.h"
@@ -63,6 +64,7 @@ public:
         dest_->onClick = [this] { chooseDestination(); };
         content_.addItem(*dest_, buttonBasis("Choose destination..."), 30);
         destNote_ = note("", Tone::Dim);
+        destNote_->setTitle("Capture destination");
         heading("Record");
         record_ = makeButton("Record", "Start recording the canvas to the chosen destination");
         stop_ = makeButton("Stop", "Stop recording and finish the file");
@@ -74,8 +76,10 @@ public:
         tip(*progress_, "Capture progress", "Progress of the current capture");
         content_.addItem(*progress_, 240, 22, true);
         state_ = note("", Tone::Normal);
+        qualityWarning_ = note("", Tone::Warn);
         msg_ = note("", Tone::Normal);
         state_->setTitle("Capture state");
+        qualityWarning_->setTitle("Capture quality warning");
         msg_->setTitle("Capture result");
         note("PNG captures the current canvas at the chosen aspect. GIF: 20 FPS, 256 colours, no audio. MP4: H.264 30 FPS, optional stereo AAC. A format is never silently swapped for another.");
         setFormat(CaptureFormat::Gif);
@@ -91,6 +95,10 @@ public:
         const bool busy = cs.state == CaptureState::Armed || cs.state == CaptureState::Recording || cs.state == CaptureState::Finalizing;
         ch |= state_->set(juce::String("State: ") + names[si] + (busy || cs.framesWritten > 0 ? ".  Frames written " + juce::String(cs.framesWritten) + ", repeated " + juce::String(cs.framesRepeated) : juce::String()),
                           cs.state == CaptureState::Failed ? Tone::Danger : cs.state == CaptureState::Completed ? Tone::Ok : Tone::Normal);
+        const bool repeatedWarning = cs.framesWritten > 0 &&
+            static_cast<std::int64_t>(cs.framesRepeated) * 100 > static_cast<std::int64_t>(cs.framesWritten) * 2;
+        ch |= qualityWarning_->set(repeatedWarning ? "Quality warning: more than 2% of frames were repeated. Motion may look less smooth." : "",
+                                   Tone::Warn);
         // A still-save or rejected-start result belongs to the user action, not to this poll.
         // Keep it until another action or an actual capture state transition supersedes it.
         if (hasActionResult_ && cs.state != actionResultState_) hasActionResult_ = false;
@@ -188,7 +196,7 @@ private:
     std::unique_ptr<juce::TextButton> dest_, record_, stop_;
     double progressValue_ = 0.0;
     std::unique_ptr<juce::ProgressBar> progress_;
-    NoteLabel *mp4Reason_ = nullptr, *durNote_ = nullptr, *destNote_ = nullptr, *state_ = nullptr, *msg_ = nullptr;
+    NoteLabel *mp4Reason_ = nullptr, *durNote_ = nullptr, *destNote_ = nullptr, *state_ = nullptr, *qualityWarning_ = nullptr, *msg_ = nullptr;
     CaptureFormat format_ = CaptureFormat::Gif;
     juce::File dest_file_;
     std::unique_ptr<juce::FileChooser> chooser_;

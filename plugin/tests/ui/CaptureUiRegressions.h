@@ -129,6 +129,22 @@ inline bool samePixels(const juce::Image& a, const juce::Image& b) {
     return true;
 }
 
+inline bool labelHasTone(pc::NoteLabel& label, pc::Tone tone) {
+    auto* parent = label.getParentComponent();
+    if (!parent || label.getWidth() <= 0 || label.getHeight() <= 0 || label.text().isEmpty()) return false;
+    pc::NoteLabel expected(tone);
+    expected.set(label.text(), tone);
+    expected.setBounds(label.getBounds());
+    parent->addChildComponent(expected); // Share the same theme without changing the tested label.
+    const auto paint = [](pc::NoteLabel& note) {
+        juce::Image image(juce::Image::ARGB, note.getWidth(), note.getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics graphics(image);
+        note.paint(graphics);
+        return image;
+    };
+    return samePixels(paint(label), paint(expected));
+}
+
 inline bool softwareImage(const juce::Image& image) {
     return image.isValid() && image.getPixelData()->createType()->getTypeID() == juce::SoftwareImageType().getTypeID();
 }
@@ -359,6 +375,49 @@ inline int run(const juce::File& outputDirectory) {
         check(message->text() == bridge->idleStatus.message, "a capture state transition replaces the old action result");
         check(embeddingHost.paints == 0 && unrelatedSibling.paints == 0, "PNG ancestor resolution also excludes host and sibling painting");
 
+        auto* qualityWarning = control<pc::NoteLabel>(*panel, "Capture quality warning");
+        auto* captureState = control<pc::NoteLabel>(*panel, "Capture state");
+        auto* captureDestination = control<pc::NoteLabel>(*panel, "Capture destination");
+        check(qualityWarning && captureState && captureDestination, "capture quality, state and destination have stable names");
+        if (!(qualityWarning && captureState && captureDestination)) return failures;
+        const auto destinationText = captureDestination->text();
+        bridge->idleStatus.state = CaptureState::Completed;
+        bridge->idleStatus.framesWritten = 100;
+        bridge->idleStatus.framesRepeated = 2;
+        bridge->idleStatus.message = "Saved " + directory.getChildFile("quality.gif").getFullPathName();
+        panel->refresh(bridge->status());
+        check(qualityWarning->text().isEmpty() && !qualityWarning->isVisible() &&
+                  message->text() == bridge->idleStatus.message,
+              "exactly two percent repeated frames keeps completion without a quality warning");
+        bridge->idleStatus.framesRepeated = 3;
+        panel->refresh(bridge->status());
+        check(qualityWarning->isVisible() && qualityWarning->text().contains("Quality warning") &&
+                  labelHasTone(*qualityWarning, pc::Tone::Warn) && message->text() == bridge->idleStatus.message &&
+                  captureDestination->text() == destinationText,
+              "above two percent warns explicitly while preserving the saved result and destination");
+        record->onClick();
+        const auto qualityActionError = message->text();
+        for (int i = 0; i < 3; ++i) panel->refresh(bridge->status());
+        check(qualityActionError.contains("Synthetic destination rejection") && message->text() == qualityActionError &&
+                  qualityWarning->isVisible() && captureDestination->text() == destinationText,
+              "quality warning and destination coexist with a persistent local action error");
+        bridge->idleStatus.state = CaptureState::Failed;
+        bridge->idleStatus.message = "Synthetic encoder failure";
+        panel->refresh(bridge->status());
+        check(captureState->text().startsWith("State: Failed") && labelHasTone(*captureState, pc::Tone::Danger) &&
+                  message->text() == bridge->idleStatus.message && labelHasTone(*message, pc::Tone::Danger) &&
+                  qualityWarning->isVisible(),
+              "repeated-frame warning preserves Failed state and error severity");
+        bridge->idleStatus.state = CaptureState::Completed;
+        bridge->idleStatus.framesRepeated = 0;
+        panel->refresh(bridge->status());
+        check(qualityWarning->text().isEmpty() && !qualityWarning->isVisible(),
+              "a completion with no repeated frames clears the quality warning");
+        bridge->idleStatus = {};
+        panel->refresh(bridge->status());
+        check(qualityWarning->text().isEmpty() && !qualityWarning->isVisible(),
+              "empty capture status has no stale quality warning");
+
         // Even a parented standalone panel must fail closed, rather than snapshot that parent.
         ForeignSurface foreignParent;
         auto detached = ui::createPanel(ui::PanelId::Capture, *bridge);
@@ -456,6 +515,14 @@ inline int run(const juce::File& outputDirectory) {
                   "hidden completion needs no editor, panel or snapshot callback");
             check(parsed.complete && parsed.frames == 20 && parsed.centiseconds == 100,
                   "hidden interval remains present in the output playback duration");
+            panel->refresh(bridge->status());
+            auto* warning = control<pc::NoteLabel>(*panel, "Capture quality warning");
+            auto* message = control<pc::NoteLabel>(*panel, "Capture result");
+            auto* destination = control<pc::NoteLabel>(*panel, "Capture destination");
+            check(warning && warning->isVisible() && warning->text().contains("Quality warning") &&
+                      message && message->text().startsWith("Saved ") &&
+                      destination && destination->text().contains(file.getFullPathName()),
+                  "hidden completion warns about nineteen repeated frames without hiding success or destination");
         }
         bridge->setClock(2000);
         core->selectPanel(ui::PanelId::Capture);
@@ -463,6 +530,9 @@ inline int run(const juce::File& outputDirectory) {
         const bool restarted = panel && startFromPanel(*panel, *bridge, destroyedFile, CaptureFraming::Landscape16x9);
         check(restarted, "same editor can start a fresh session after hidden completion");
         if (restarted) {
+            auto* warning = control<pc::NoteLabel>(*panel, "Capture quality warning");
+            check(warning && warning->text().isEmpty() && !warning->isVisible(),
+                  "starting a fresh session clears the previous quality warning");
             core->pumpFrame(0.0, 2000);
             check(waitUntil([&] { return bridge->captureStatus().framesWritten == 1; }), "destruction fixture admits its owned frame");
             bridge->setClock(2125);
