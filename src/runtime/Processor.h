@@ -32,6 +32,24 @@ public:
     int latencySamples() const noexcept { return prepared_ ? engine_.latencySamples() : 0; }
     bool needsReprepare(const core::ParamValues& values) const noexcept;
 
+    // Engine-only continuation bridge for a STOPPED runtime. The caller must
+    // quiesce both host audio callbacks and the pitch worker across these calls.
+    // Allocation runs off-thread and may throw; capture/restore require that
+    // storage to have been preallocated and never allocate on their own.
+    // This does NOT capture control/key/tempo/pitch, runtime epoch, host
+    // parameters, blueprint, slot seeds or a complete session transaction.
+    bool allocateEngineCheckpoint(engine::Checkpoint& cp) const {
+        if (!prepared_) return false;
+        engine_.allocateCheckpoint(cp);
+        return true;
+    }
+    bool captureEngineCheckpoint(engine::Checkpoint& cp) noexcept {
+        return prepared_ && engine_.getCheckpoint(cp);
+    }
+    bool restoreEngineCheckpoint(const engine::Checkpoint& cp) noexcept {
+        return prepared_ && engine_.setCheckpoint(cp);
+    }
+
     // Hosts may supply more than maxBlock samples: every sample is processed in
     // bounded chunks. Input/output may alias. Null input channels are silence.
     // MIDI must be sorted, with offsets relative to this call. At most 1024 events

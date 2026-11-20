@@ -173,3 +173,13 @@ the current handoff and use fresh code, bug and defensive reviewers for changed
 work, preserving exact source and evidence. Repeat verification to resolve a
 concrete risk or required gate. Credit balance is not observable. This remains
 development work with no release, deployment or paid-service provisioning.
+
+## Separate G12 engine-checkpoint staging candidate (nonintegrated)
+
+A nonoverlapping scoped candidate based on this publication proposes explicit
+stopped-runtime engine-only allocate/capture/restore methods and runtime
+regressions. Its durable, scope-limited review is in
+[ENGINE_CHECKPOINT_BRIDGE_HANDOFF_2026-11-20.md](ENGINE_CHECKPOINT_BRIDGE_HANDOFF_2026-11-20.md).
+This is **not** a host session serializer or control/seed restore, and it must
+not be included in PR #16 before exact-head qualification and fresh
+coordinator-ref/owner checks. GIF R20 owners retain their source files.
