@@ -8,6 +8,14 @@ namespace cd::state {
 namespace {
 using core::JsonValue;
 
+// Public scene helpers accept an int slot from the editor/services layer.
+// Validate before indexing std::array: a negative slot would otherwise convert
+// to a huge size_t and invoke undefined behavior.
+std::size_t checkedSlot(int slot) {
+    if (slot != 0 && slot != 1) throw std::out_of_range("scene slot must be A (0) or B (1)");
+    return static_cast<std::size_t>(slot);
+}
+
 std::string slotAId(std::size_t pos) { return core::kParams[kSlotAIndices[pos]].id; }
 
 JsonValue blueprintJson(const SlotConfig& s, bool withSeed) {
@@ -82,20 +90,21 @@ bool operator==(const ScenePreset& a, const ScenePreset& b) noexcept {
 ScenePreset captureScene(const Config& c, int slot, PresetMeta meta) {
     ScenePreset p;
     p.meta = std::move(meta);
-    p.slot = c.slots[slot];
+    p.slot = c.slots[checkedSlot(slot)];
     for (std::size_t i = 0; i < kSceneGlobalCount; ++i) p.globals[i] = c.get(kSceneGlobalIndices[i]);
     return p;
 }
 
 Config applyScene(const Config& cur, int slot, const ScenePreset& p, bool circuitOnly) {
+    const auto index = checkedSlot(slot);
     Config n = cur;
-    n.slots[slot] = p.slot;
+    n.slots[index] = p.slot;
     if (!circuitOnly) for (std::size_t i = 0; i < kSceneGlobalCount; ++i) n.set(kSceneGlobalIndices[i], p.globals[i]);
     return n;
 }
 
 bool matchesScene(const Config& c, int slot, const ScenePreset& p, bool circuitOnly) {
-    if (!(c.slots[slot] == p.slot)) return false;
+    if (!(c.slots[checkedSlot(slot)] == p.slot)) return false;
     if (!circuitOnly)
         for (std::size_t i = 0; i < kSceneGlobalCount; ++i) if (!(c.get(kSceneGlobalIndices[i]) == p.globals[i])) return false;
     return true;
