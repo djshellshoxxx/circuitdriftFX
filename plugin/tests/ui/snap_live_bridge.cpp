@@ -5,6 +5,7 @@
 #include "ui/ProcessorEditorBridge.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/workbench/ParamOps.h"
+#include "BlueprintValidationRegressions.h"
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -203,13 +204,24 @@ int main() {
               "invalid capture does not destroy an existing file");
     }
     check(tempRoot.deleteRecursively(), "remove isolated preset test directory");
+    // Surface directory enumeration errors and clear them after recovery.
+    const auto blocked = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("cdfx-catalog-blocked", "", false);
+    check(blocked.replaceWithText("not a directory"), "create blocked preset path");
+    {
+        ProcessorEditorBridge catalog(processor, std::filesystem::u8path(blocked.getFullPathName().toStdString()));
+        catalog.listPresets("");
+        check(catalog.presetCatalogMessage().contains("Could not finish"),
+              "directory failures reach the live catalog diagnostic");
+        check(blocked.deleteFile() && blocked.createDirectory(), "repair blocked preset directory");
+        catalog.listPresets("");
+        check(catalog.presetCatalogMessage().isEmpty(), "successful catalog scan clears old diagnostics");
+    }
+    check(blocked.deleteRecursively(), "remove catalog diagnostic fixture");
     error.clear();
     check(!bridge.applyBlueprint(0, "{}", error) && error.isNotEmpty(),
           "unwired runtime blueprint installation fails explicitly");
-    bridge.requestBlueprintValidation("{}");
-    BlueprintReport report;
-    check(bridge.blueprintReport(report) && !report.ok && !report.diagnostics.isEmpty(),
-          "unwired validation reports a failure, not a fabricated success");
+    failures += cd::plugin::test::blueprint_validation_regressions::run();
 
     UiSettings prefs;
     prefs.scale = 500.0f;

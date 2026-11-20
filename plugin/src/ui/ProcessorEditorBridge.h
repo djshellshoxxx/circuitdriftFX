@@ -1,16 +1,18 @@
 // Live message-thread adapter for the CircuitDrift editor.
-// Only parameter transactions and read-only telemetry are wired in this milestone.
+// Parameters, telemetry, local file services and worker blueprint validation.
 // Unimplemented services fail explicitly; never substitute synthetic FakeBridge data.
 #pragma once
 #include "ui/EditorBridge.h"
 #include "state/PresetLibrary.h"
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <utility>
 #include <vector>
 
 namespace cd::plugin {
 class CircuitDriftProcessor;
+class BlueprintValidationService;
 
 class ProcessorEditorBridge final : public EditorBridge {
 public:
@@ -18,6 +20,7 @@ public:
     // Tests/embedders can inject a sandboxed directory; production selects the
     // current user's application data. No storage is touched by construction.
     ProcessorEditorBridge(CircuitDriftProcessor& processor, std::filesystem::path userPresetDirectory);
+    ~ProcessorEditorBridge() override;
 
     juce::AudioProcessorValueTreeState& parameters() override;
     juce::String slotParamId(const juce::String& baseName) const override;
@@ -41,6 +44,7 @@ public:
     bool deletePreset(const juce::String& id, juce::String& error) override;
     bool importPreset(const juce::File& file, juce::String& error) override;
     bool exportPreset(const juce::String& id, const juce::File& file, juce::String& error) override;
+    juce::String presetCatalogMessage() const override { return catalogMessage_; }
     void commitRestoration(int slot) override;
     bool supportsRestorationCommit() const override { return false; }
     std::vector<FaultInfo> faults(int slot) override;
@@ -48,8 +52,10 @@ public:
     void clearFaults(int slot) override;
     juce::String blueprintJson(int slot) override;
     void requestBlueprintValidation(const juce::String& json) override;
+    void cancelBlueprintValidation() override;
     bool blueprintReport(BlueprintReport& out) override;
     bool applyBlueprint(int slot, const juce::String& json, juce::String& error) override;
+    bool supportsBlueprintApply() const override { return false; }
     void resetEngine(bool cold) override;
     bool supportsEngineReset() const override;
     bool startCapture(const CaptureRequest& request, juce::String& error) override;
@@ -71,16 +77,26 @@ private:
     bool replay(const Step& step, bool forward);
     bool setParameter(const juce::String& id, float normalized);
     void syncStateEpoch();
+    struct ValidationContext {
+        double sampleRate = 48000;
+        int oversampling = 1;
+        bool preview = true;
+        std::uint64_t stateEpoch = 0;
+        bool operator==(const ValidationContext&) const = default;
+    };
+    ValidationContext validationContext();
 
     CircuitDriftProcessor& processor_;
     state::PresetLibrary presetLibrary_;
+    juce::String catalogMessage_;
+    std::unique_ptr<BlueprintValidationService> blueprintValidator_;
+    ValidationContext validationContext_{};
     int editSlot_ = 0;
     bool gestureOpen_ = false;
     Snapshot gestureBefore_;
     juce::String gestureLabel_;
     std::vector<Step> steps_;
     std::size_t position_ = 0;
-    bool blueprintReportPending_ = false;
     std::uint64_t lastStateEpoch_ = 0;
 };
 }  // namespace cd::plugin

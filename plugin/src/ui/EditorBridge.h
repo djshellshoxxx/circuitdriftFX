@@ -59,6 +59,13 @@ struct BlueprintReport {
     juce::StringArray diagnostics;   // "<componentId>.<pin>: message" or general text
     int components = 0, nodes = 0, nonlinear = 0, unknowns = 0;
     double estimatedCostNsPerSample = 0;
+    // Arithmetic/memory estimates are not measured CPU-time budgets.
+    double estimatedFlopsPerSample = 0;
+    std::size_t estimatedBytes = 0;
+    double sampleRate = 0;
+    int oversampling = 0;
+    bool syntheticModels = false;
+    bool previewConfiguration = false;
 };
 
 enum class CaptureFormat : int { Png = 0, Gif = 1, Mp4 = 2 };
@@ -144,6 +151,7 @@ public:
     virtual bool deletePreset(const juce::String& id, juce::String& error) = 0;
     virtual bool importPreset(const juce::File& file, juce::String& error) = 0;
     virtual bool exportPreset(const juce::String& id, const juce::File& file, juce::String& error) = 0;
+    virtual juce::String presetCatalogMessage() const { return {}; }
 
     // Lifecycle timeline (CD-F18): scrubbing uses slot.<x>.lifecycle/scenario parameters;
     // committing Restoration changes replacement seeds once.
@@ -159,8 +167,10 @@ public:
     // Blueprints (CD-F10): validation/compile runs on a worker; result polled.
     virtual juce::String blueprintJson(int slot) = 0;
     virtual void requestBlueprintValidation(const juce::String& json) = 0;
+    virtual void cancelBlueprintValidation() {}
     virtual bool blueprintReport(BlueprintReport& out) = 0;  // true when a new report is ready
     virtual bool applyBlueprint(int slot, const juce::String& json, juce::String& error) = 0;
+    virtual bool supportsBlueprintApply() const { return true; }
 
     // Engine reset (Warm/Cold) and re-prepare request after a staged quality change.
     virtual void resetEngine(bool cold) = 0;

@@ -1,4 +1,5 @@
 #include "ui/ProcessorEditorBridge.h"
+#include "ui/BlueprintValidationService.h"
 #include "PluginProcessor.h"
 #include "ParameterLayout.h"
 #include "core/ParameterRegistry.h"
@@ -35,6 +36,7 @@ ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor)
 ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor,
                                              std::filesystem::path userPresetDirectory)
     : processor_(processor), presetLibrary_(std::move(userPresetDirectory)) {}
+ProcessorEditorBridge::~ProcessorEditorBridge() = default;
 
 juce::AudioProcessorValueTreeState& ProcessorEditorBridge::parameters() { return processor_.parameters(); }
 juce::String ProcessorEditorBridge::slotParamId(const juce::String& name) const {
@@ -255,7 +257,8 @@ void ProcessorEditorBridge::swapSlots() {
 std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& query) {
     // Local, bounded directory scan on the message thread; no audio ownership.
     std::vector<PresetEntry> entries;
-    for (const auto& preset : presetLibrary_.list(query.toStdString())) {
+    state::PresetListReport report;
+    for (const auto& preset : presetLibrary_.list(query.toStdString(), &report)) {
         PresetEntry entry;
         entry.id = displayUtf8(preset.id);
         entry.name = displayUtf8(preset.title);
@@ -264,6 +267,13 @@ std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& 
         entry.description = preset.valid ? displayUtf8(preset.author)
                                          : "Unreadable preset: " + displayUtf8(preset.error);
         entries.push_back(std::move(entry));
+    }
+    catalogMessage_.clear();
+    if (report.truncated)
+        catalogMessage_ = "Catalog scan limit reached; some presets may be missing.";
+    if (!report.error.empty()) {
+        if (catalogMessage_.isNotEmpty()) catalogMessage_ += " ";
+        catalogMessage_ += "Could not finish reading the preset directory: " + displayUtf8(report.error);
     }
     return entries;
 }
@@ -302,12 +312,41 @@ std::vector<FaultInfo> ProcessorEditorBridge::faults(int) { return {}; }
 bool ProcessorEditorBridge::applyFault(int, const FaultInfo&, juce::String& error) { return unavailable(error); }
 void ProcessorEditorBridge::clearFaults(int) {} // No fault state installed.
 juce::String ProcessorEditorBridge::blueprintJson(int) { return {}; }
-void ProcessorEditorBridge::requestBlueprintValidation(const juce::String&) { blueprintReportPending_ = true; }
+ProcessorEditorBridge::ValidationContext ProcessorEditorBridge::validationContext() {
+    ValidationContext context;
+    context.stateEpoch = processor_.editorStateEpoch();
+    const auto sampleRate = processor_.editorSampleRate();
+    if (sampleRate > 0) context.sampleRate = sampleRate;
+    CircuitDriftProcessor::EditorSnapshot snapshot;
+    if (processor_.readEditorSnapshot(snapshot)) {
+        context.sampleRate = snapshot.telemetry.sampleRate;
+        context.oversampling = snapshot.telemetry.activeFactor;
+        context.preview = false;
+    }
+    return context;
+}
+void ProcessorEditorBridge::requestBlueprintValidation(const juce::String& json) {
+    if (!blueprintValidator_) blueprintValidator_ = std::make_unique<BlueprintValidationService>();
+    validationContext_ = validationContext();
+    if (processor_.edition() == Edition::Lite) {
+        blueprintValidator_->reject("Blueprint validation is available in the Full edition.");
+    } else if (json.getNumBytesAsUTF8() > blueprint::kMaxBytes) {
+        blueprintValidator_->reject("Blueprint exceeds the 1 MiB UTF-8 limit.");
+    } else {
+        blueprintValidator_->request(json.toStdString(),
+            {validationContext_.sampleRate, validationContext_.oversampling, 1.0});
+    }
+}
+void ProcessorEditorBridge::cancelBlueprintValidation() {
+    if (blueprintValidator_) blueprintValidator_->cancel();
+}
 bool ProcessorEditorBridge::blueprintReport(BlueprintReport& out) {
-    if (!blueprintReportPending_) return false;
-    blueprintReportPending_ = false;
-    out = {};
-    out.diagnostics.add("Live blueprint compiler service is not connected (G11)");
+    if (!blueprintValidator_ || !blueprintValidator_->take(out)) return false;
+    out.previewConfiguration = validationContext_.preview;
+    if (!(validationContext_ == validationContext())) {
+        out.ok = false;
+        out.diagnostics.add("The audio configuration or host session changed. Validate again.");
+    }
     return true;
 }
 bool ProcessorEditorBridge::applyBlueprint(int, const juce::String&, juce::String& error) { return unavailable(error); }
