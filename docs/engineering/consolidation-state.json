@@ -159,21 +159,49 @@
         "change": "corrupt or missing offline-cache entry clears its obsolete persisted pin"
       }
     ],
-    "integration_status": "isolated_not_in_pr16",
+    "integration_status": "integrated_in_pr16_cb53cd812700e5edbcf7323653b84e470da77cfc",
     "validation": {
-      "pr16_linux": "passed_on_base_sha",
-      "pr16_windows": "failed_pluginval_invocation_only_after_build_ctest_and_staging_passed",
+      "pr16_linux": "passed_on_cb53cd812700e5edbcf7323653b84e470da77cfc_run_44674618903",
+      "pr16_windows": "queued_exact_head_run_44674618903_last_checked_2026-11-20",
       "child": "not_yet_ci_qualified",
       "windows_run_id": 44662769491,
       "windows_tested_checkout": "33fbe24c62c134998bf6fe080b592772c390300c (PR synthetic merge checkout)",
-      "exact_head_requalification": "pending_after_ref_move"
+      "exact_head_requalification": "Linux pass, Windows queued as of latest observation; no pluginval verdict"
     },
     "unresolved": [
       "Exact PR-head Windows/pluginval rerun after GUI-process wait fix",
       "independent regression/security review",
-      "child branch CI",
       "custom EditorBridge and session migration",
-      "older PR 9/10/14 per-file reconciliation"
+      "older PR 9/10/14 per-file reconciliation",
+      "Live EditorBridge branch C++ build/UI snapshot qualification on isolated head before integration"
     ]
+  },
+  "editor_bridge_continuation": {
+    "base_pr": 16,
+    "base_sha": "cb53cd812700e5edbcf7323653b84e470da77cfc",
+    "branch": "codex/cdfx-live-editor-bridge-20261120",
+    "source_head": "7c0c72df79a692f14b223a720a9da51c66d164ce",
+    "status": "published_isolated_unbuilt_pending_independent_review",
+    "behavior": [
+      "Actual custom CircuitDriftEditor constructed by plugin instead of JUCE GenericAudioProcessorEditor",
+      "Live EditorBridge APVTS parameter transactions with 20-step bounded local history, guarded undo/redo and A/B copy/swap",
+      "Read-only processor telemetry read gate coordinated with prepare/release",
+      "Host state replacement invalidates stale local undo history",
+      "Unsupported service requests return explicit failure; restoration commit disabled in live UI",
+      "Registered new JUCE UI live-bridge test target via existing snap_*.cpp CMake glob"
+    ],
+    "verification": {
+      "method": "source/interface inventory via GitHub; C++ test source added but not yet compiled/executed",
+      "tests": "plugin/tests/ui/snap_live_bridge.cpp",
+      "local_plugin_build": "unavailable_local_clone_and_JUCE_dependencies",
+      "ci": "new isolated head has not passed CI; existing PR Linux pass does not cover these edits",
+      "independent_review_workers": "unavailable_in_this_automation_tool_context"
+    },
+    "limitations": [
+      "Unwired presets, faults, blueprint compilation/install, GIF/MP4 capture, live engine reset, component seed restoration and persisted UI settings",
+      "No complete runtime/control/seed/session checkpoint restoration; parameter-only APVTS remains",
+      "History is message-thread local; host automation can invalidate touched steps; no claim of atomic multi-parameter host automation"
+    ],
+    "next_owner": "Review and build on supported JUCE platform; run live bridge UI regression, then gated non-force PR integration; implement service transactions and versioned session state"
   }
 }
