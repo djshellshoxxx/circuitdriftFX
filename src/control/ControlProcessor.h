@@ -22,6 +22,7 @@
 #include <atomic>
 #include <cstdint>
 #include <vector>
+#include "control/ControlSnapshot.h"
 #include "control/ControlTypes.h"
 #include "control/CreativeDrift.h"
 #include "control/HarmonicTargeting.h"
@@ -49,6 +50,22 @@ public:
     // buffers. The pitch worker observes an epoch change and flushes itself.
     void resetRealtime() noexcept;
 
+    // Audio owner between processBlock calls, or a quiescent non-audio owner.
+    // No overlap with prepare/reset, parameter-setting methods or map publication.
+    // The pitch worker may continue: these methods never access its mutable state.
+    // Supported domain: Manual/MIDI with no pending, in-use or retained harmonic
+    // map. Audio selection is unsupported even while key.enabled is false.
+    // A matching version, effective rate, maxBlock and instance seed is required.
+    // With identical future parameters/inputs/callback partitioning, accepted
+    // snapshots reproduce control outputs and status exactly in that domain.
+    // Capture failure leaves destination unchanged; restore failure leaves every
+    // live field unchanged. All three operations are bounded and allocation-free.
+    // Restore invalidates previous output views; scratch sample buffers are not
+    // checkpointed and the next positive block overwrites its complete output range.
+    ControlSnapshotResult captureSnapshot(ControlSnapshot& destination) const noexcept;
+    ControlSnapshotResult canRestoreSnapshot(const ControlSnapshot& snapshot) const noexcept;
+    ControlSnapshotResult restoreSnapshot(const ControlSnapshot& snapshot) noexcept;
+
     void processBlock(const core::ParamValues& params, const ControlContext& ctx, const AudioView& mainIn,
                       const AudioView* sidechainIn, core::ModulationBlock& out) noexcept;
 
@@ -68,6 +85,7 @@ public:
     CreativeDrift& drift(int slot) noexcept { return drift_[slot & 1]; }
 
 private:
+    ControlSnapshotResult snapshotSupport() const noexcept;
     void resetAudioState() noexcept;
     struct SlotState {
         ResonanceQuantizer quant;
@@ -83,6 +101,7 @@ private:
     bool prepared_ = false;
     double fs_ = 48000.0;
     int maxBlock_ = 0;
+    uint64_t instanceSeed_ = 0;
     CreativeDrift drift_[2];
     CreativeDrift::State initialDrift_[2]{};
     TempoBreathing tempo_;
