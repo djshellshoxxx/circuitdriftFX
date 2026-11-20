@@ -41,6 +41,7 @@ void SidechainLoad::prepare(double fs) noexcept {
     hpfHz_ = -1;
     design(40.0);  // coefficient identity always corresponds to the effective prepared rate
     reset();
+    prepared_ = true;
 }
 
 void SidechainLoad::setBudgetAmps(double amps) noexcept {
@@ -50,6 +51,36 @@ void SidechainLoad::setBudgetAmps(double amps) noexcept {
 void SidechainLoad::reset() noexcept {
     hp_[0] = hp_[1] = Biquad{};
     ms_ = env_ = lastRatio_ = 0;
+}
+
+SidechainLoad::State SidechainLoad::save() const noexcept {
+    return {prepared_ ? fs_ : 0.0, hpfHz_, {hp_[0].z1, hp_[1].z1}, {hp_[0].z2, hp_[1].z2},
+            ms_, env_, budget_, lastRatio_};
+}
+
+bool SidechainLoad::canRestore(const State& s) const noexcept {
+    const auto in = [](double v, double lo, double hi) noexcept {
+        return std::isfinite(v) && v >= lo && v <= hi;
+    };
+    if (!prepared_ || s.sampleRate != fs_ || !in(s.hpfHz, 20, 300) ||
+        !in(s.meanSquare, 0, kMaxDetectorMagnitude * kMaxDetectorMagnitude) ||
+        !in(s.envelope, 0, kMaxDetectorMagnitude) || !in(s.budgetAmps, 0, kMaxBudgetAmps) ||
+        !in(s.lastRatio, 0, kMaxDetectorMagnitude / kRefRms) || s.lastRatio != s.envelope / kRefRms)
+        return false;
+    for (int channel = 0; channel < 2; ++channel)
+        if (!withinDetectorDomain(s.z1[channel]) || !withinDetectorDomain(s.z2[channel])) return false;
+    return true;
+}
+
+bool SidechainLoad::restore(const State& s) noexcept {
+    if (!canRestore(s)) return false;
+    design(s.hpfHz);
+    for (int channel = 0; channel < 2; ++channel) {
+        hp_[channel].z1 = s.z1[channel];
+        hp_[channel].z2 = s.z2[channel];
+    }
+    ms_ = s.meanSquare; env_ = s.envelope; budget_ = s.budgetAmps; lastRatio_ = s.lastRatio;
+    return true;
 }
 
 void SidechainLoad::design(double hz) noexcept {

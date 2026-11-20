@@ -30,6 +30,14 @@ public:
     static constexpr double kHysteresisSt = 0.15;
     static constexpr double kGlideS = 0.05;
 
+    struct State {
+        uint16_t mask = scale::kChromatic;
+        int root = 0;
+        bool haveNote = false, haveOutput = false;
+        int note = 69, glideNote = 69;
+        double current = 69.0, start = 69.0, glideRemaining = 0.0;
+    };
+
     void configure(uint16_t mask, int root) noexcept;
     void reset() noexcept { haveNote_ = haveOutput_ = false; glideRemaining_ = 0; }
     // Update with target pitch p (MIDI float) and elapsed time; returns glided pitch (MIDI float).
@@ -39,6 +47,9 @@ public:
     double glided() const noexcept { return current_; }
     // Hysteresis decision only (no glide); exposed for deterministic tie/hysteresis tests.
     int decide(double pitch) noexcept;
+    State save() const noexcept;
+    bool canRestore(const State& state) const noexcept;
+    bool restore(const State& state) noexcept;
 
 private:
     uint16_t mask_ = scale::kChromatic;
