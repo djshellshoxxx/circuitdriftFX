@@ -26,6 +26,9 @@ public:
 
     // Message/worker thread only. Rejects excessive text before copying it.
     Generation request(std::string_view text, const RuntimeConfig& config);
+    // Discards queued and completed reports and prevents active work publishing.
+    // Cancelling does not enqueue a replacement compilation or failure report.
+    void cancel();
     bool poll(ValidationReport& report);
 
 private:

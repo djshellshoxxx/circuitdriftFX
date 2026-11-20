@@ -52,6 +52,7 @@ public:
     void clearFaults(int slot) override;
     juce::String blueprintJson(int slot) override;
     void requestBlueprintValidation(const juce::String& json) override;
+    void cancelBlueprintValidation() override;
     bool blueprintReport(BlueprintReport& out) override;
     bool applyBlueprint(int slot, const juce::String& json, juce::String& error) override;
     bool supportsBlueprintApply() const override { return false; }
@@ -76,6 +77,14 @@ private:
     bool replay(const Step& step, bool forward);
     bool setParameter(const juce::String& id, float normalized);
     void syncStateEpoch();
+    struct ValidationContext {
+        double sampleRate = 48000;
+        int oversampling = 1;
+        bool preview = true;
+        std::uint64_t stateEpoch = 0;
+        bool operator==(const ValidationContext&) const = default;
+    };
+    ValidationContext validationContext();
 
     CircuitDriftProcessor& processor_;
     state::PresetLibrary presetLibrary_;
@@ -89,7 +98,8 @@ private:
     std::vector<Step> steps_;
     std::size_t position_ = 0;
     blueprint::ValidationWorker blueprintValidator_;
-    std::uint64_t blueprintStateEpoch_ = 0;
+    ValidationContext validationContext_{};
+    std::optional<BlueprintReport> blueprintRejection_;
     std::uint64_t lastStateEpoch_ = 0;
 };
 }  // namespace cd::plugin

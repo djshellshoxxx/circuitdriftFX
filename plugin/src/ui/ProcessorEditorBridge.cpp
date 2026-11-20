@@ -330,43 +330,73 @@ std::vector<FaultInfo> ProcessorEditorBridge::faults(int) { return {}; }
 bool ProcessorEditorBridge::applyFault(int, const FaultInfo&, juce::String& error) { return unavailable(error); }
 void ProcessorEditorBridge::clearFaults(int) {} // No fault state installed.
 juce::String ProcessorEditorBridge::blueprintJson(int) { return {}; }
+ProcessorEditorBridge::ValidationContext ProcessorEditorBridge::validationContext() {
+    ValidationContext context;
+    context.stateEpoch = processor_.editorStateEpoch();
+    const auto sampleRate = processor_.editorSampleRate();
+    if (sampleRate > 0) context.sampleRate = sampleRate;
+    CircuitDriftProcessor::EditorSnapshot snapshot;
+    if (processor_.readEditorSnapshot(snapshot)) {
+        context.sampleRate = snapshot.telemetry.sampleRate;
+        context.oversampling = snapshot.telemetry.activeFactor;
+        context.preview = false;
+    }
+    return context;
+}
 void ProcessorEditorBridge::requestBlueprintValidation(const juce::String& json) {
-    const auto current = status();
-    blueprintStateEpoch_ = processor_.editorStateEpoch();
+    cancelBlueprintValidation();
+    validationContext_ = validationContext();
     // Check UTF-8 length before copying the editor document into the worker.
     const auto bytes = json.getNumBytesAsUTF8();
-    const auto size = std::min(bytes, blueprint::kMaxBytes + 1);
-    blueprintValidator_.request(std::string_view(json.toRawUTF8(), size),
-                                {current.sampleRate, current.activeOversampling, 1.0});
+    if (processor_.edition() == Edition::Lite || bytes > blueprint::kMaxBytes) {
+        BlueprintReport rejection;
+        rejection.diagnostics.add(processor_.edition() == Edition::Lite
+            ? "Blueprint validation is available in the Full edition."
+            : "Blueprint exceeds the 1 MiB UTF-8 limit.");
+        blueprintRejection_ = std::move(rejection);
+        return;
+    }
+    blueprintValidator_.request(std::string_view(json.toRawUTF8(), bytes),
+                                {validationContext_.sampleRate, validationContext_.oversampling, 1.0});
+}
+void ProcessorEditorBridge::cancelBlueprintValidation() {
+    blueprintValidator_.cancel();
+    blueprintRejection_.reset();
 }
 bool ProcessorEditorBridge::blueprintReport(BlueprintReport& out) {
-    blueprint::ValidationReport report;
-    if (!blueprintValidator_.poll(report)) return false;
-    out = {};
-    out.ok = report.ok;
-    out.components = report.cost.components;
-    out.nodes = report.cost.nodes;
-    out.nonlinear = report.cost.nonlinear;
-    out.unknowns = report.cost.unknowns;
-    out.estimatedFlopsPerSample = report.cost.estimatedFlopsPerSample;
-    out.configuration = juce::String(report.config.sampleRate, 0) + " Hz / " +
-        juce::String(report.config.oversampling) + "x; synthetic fixture-v1 models only";
-    for (const auto& diagnostic : report.diagnostics.items) {
-        juce::String where = displayUtf8(diagnostic.component);
-        if (!diagnostic.pin.empty()) where += (where.isEmpty() ? "" : ".") + displayUtf8(diagnostic.pin);
-        if (where.isNotEmpty()) where += ": ";
-        out.diagnostics.add(where + displayUtf8(diagnostic.message));
+    if (blueprintRejection_) {
+        out = std::move(*blueprintRejection_);
+        blueprintRejection_.reset();
+    } else {
+        blueprint::ValidationReport report;
+        if (!blueprintValidator_.poll(report)) return false;
+        out = {};
+        out.ok = report.ok;
+        out.components = report.cost.components;
+        out.nodes = report.cost.nodes;
+        out.nonlinear = report.cost.nonlinear;
+        out.unknowns = report.cost.unknowns;
+        out.estimatedFlopsPerSample = report.cost.estimatedFlopsPerSample;
+        out.estimatedBytes = report.cost.estimatedBytes;
+        out.sampleRate = report.config.sampleRate;
+        out.oversampling = report.config.oversampling;
+        out.syntheticModels = true;
+        out.configuration = juce::String(report.config.sampleRate, 0) + " Hz / " +
+            juce::String(report.config.oversampling) + "x; synthetic fixture-v1 models only";
+        for (const auto& diagnostic : report.diagnostics.items) {
+            juce::String where = displayUtf8(diagnostic.component);
+            if (!diagnostic.pin.empty()) where += (where.isEmpty() ? "" : ".") + displayUtf8(diagnostic.pin);
+            if (where.isNotEmpty()) where += ": ";
+            out.diagnostics.add("Check " + juce::String(diagnostic.check) + " [" +
+                blueprint::diagCodeName(diagnostic.code) + "] " + where + displayUtf8(diagnostic.message));
+        }
+        if (report.diagnostics.truncated) out.diagnostics.add("Further diagnostics were omitted.");
     }
-    if (report.diagnostics.truncated) out.diagnostics.add("Further diagnostics were omitted.");
-    const auto current = status();
-    if (report.ok && (report.config.sampleRate != current.sampleRate ||
-                      report.config.oversampling != current.activeOversampling ||
-                      blueprintStateEpoch_ != processor_.editorStateEpoch())) {
+    out.previewConfiguration = validationContext_.preview;
+    if (!(validationContext_ == validationContext())) {
         out.ok = false;
-        out.diagnostics.add("The audio configuration or session changed. Validate again.");
+        out.diagnostics.add("The audio configuration or host session changed. Validate again.");
     }
-    if (report.diagnostics.has(blueprint::DiagCode::BadConfig))
-        out.diagnostics.add("Start audio processing before validating for the active configuration.");
     return true;
 }
 bool ProcessorEditorBridge::applyBlueprint(int, const juce::String&, juce::String& error) { return unavailable(error); }

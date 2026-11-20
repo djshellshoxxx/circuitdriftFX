@@ -5,6 +5,7 @@
 #include "ui/ProcessorEditorBridge.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/workbench/ParamOps.h"
+#include "BlueprintValidationRegressions.h"
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -81,6 +82,7 @@ bool waitForBlueprintReady(ui::Panel& panel, ProcessorEditorBridge& bridge) {
 
 int main() {
     juce::ScopedJuceInitialiser_GUI gui;
+    failures += test::blueprint_validation_regressions::run();
     CircuitDriftProcessor processor(Edition::Full, "CircuitDrift");
     ProcessorEditorBridge bridge(processor);
     auto telemetry = std::make_unique<cd::engine::TelemetryFrame>();

@@ -107,6 +107,11 @@ CompileResult fail(CompileResult r, int check) {
     return r;
 }
 
+CompileResult cancelled(CompileResult r, int check) {
+    r.diagnostics.add(DiagCode::Cancelled, check, "", "", "blueprint compilation cancelled");
+    return fail(std::move(r), check);
+}
+
 // Names of the fields a model exposes as parameters, in manifest order.
 std::vector<std::string> fieldNames(const DeviceManifest* dev, const SourceModel* src) {
     std::vector<std::string> f;
@@ -240,19 +245,20 @@ bool checkConnectivity(const Blueprint& bp, const std::map<std::string, int>& no
     return d.items.size() == before;
 }
 
-struct ProbeResult { bool ok = false; double peak = 0; int maxNewton = 0; std::string why; };
+struct ProbeResult { bool ok = false, cancelled = false; double peak = 0; int maxNewton = 0; std::string why; };
 
 ProbeResult runProbe(const dsp::MnaSolver& proto, int inputElement, int outputNode, double rate, double fullScale, int kind,
-                     std::stop_token cancellation) {
-    dsp::MnaSolver s = proto;
+                     std::stop_token stop) {
     ProbeResult pr;
+    if (stop.stop_requested()) { pr.cancelled = true; return pr; }
+    dsp::MnaSolver s = proto;
     const long n = long(std::llround(kProbeSeconds * rate));
     const double amp = kind == 1 ? std::pow(10.0, -18.0 / 20.0) : kind == 2 ? std::pow(10.0, -6.0 / 20.0) : 0.0;
     const long pulse = long(std::llround(0.005 * rate));
     double phase = 0;
     const double dphi = 2.0 * kPi * 1000.0 / rate;
     for (long i = 0; i < n; ++i) {
-        if (cancellation.stop_requested()) { pr.why = "validation cancelled"; return pr; }
+        if (stop.stop_requested()) { pr.cancelled = true; return pr; }
         double x = 0;
         if (kind == 1) { x = amp * std::sin(phase); phase += dphi; if (phase > 2 * kPi) phase -= 2 * kPi; }
         else if (kind == 2 && i < pulse) x = amp * std::sin(kPi * double(i) / double(pulse));
@@ -265,6 +271,7 @@ ProbeResult runProbe(const dsp::MnaSolver& proto, int inputElement, int outputNo
             if (!std::isfinite(s.unknown(k)) || std::fabs(s.unknown(k)) > 1e6) { pr.why = "probe state not finite/bounded"; return pr; }
         pr.peak = std::max(pr.peak, std::fabs(v));
     }
+    if (stop.stop_requested()) { pr.cancelled = true; return pr; }
     if (s.needsFallback() || s.failures() != 0) { pr.why = "solver required emergency fallback during probe"; return pr; }
     pr.ok = true;
     return pr;
@@ -293,19 +300,17 @@ bool PreparedGraph::makeSolver(dsp::MnaSolver& out, std::string& error) const {
 }
 
 CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const RuntimeConfig& cfg, Generation generation,
-                      std::stop_token cancellation) {
+                      std::stop_token stop) {
     CompileResult res;
     CostReport& cost = res.cost;
     Diagnostics& d = res.diagnostics;
-    if (cancellation.stop_requested()) {
-        d.add(DiagCode::Cancelled, 1, "", "", "validation cancelled");
-        return fail(std::move(res), 1);
-    }
+    if (stop.stop_requested()) return cancelled(std::move(res), 1);
     if (!validConfig(cfg)) {
         d.add(DiagCode::BadConfig, 4, "", "", "sample rate, oversampling or full-scale voltage outside supported range");
         return fail(std::move(res), 4);
     }
     if (!validBlueprint(bp, d)) return fail(std::move(res), 1);
+    if (stop.stop_requested()) return cancelled(std::move(res), 1);
     cost.components = int(bp.components.size());
     cost.nodes = int(bp.nodes.size());
     cost.pinConnections = bp.pinConnectionCount();
@@ -328,12 +333,15 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     }
 
     // Check 2.
+    if (stop.stop_requested()) return cancelled(std::move(res), 2);
     std::vector<Resolved> rs;
     if (!checkModels(bp, reg, nodeIdx, rs, d)) return fail(std::move(res), 2);
     // Check 3.
+    if (stop.stop_requested()) return cancelled(std::move(res), 3);
     if (!checkConnectivity(bp, nodeIdx, rs, d)) return fail(std::move(res), 3);
 
     // Check 4: symbolic structure + numeric DC.
+    if (stop.stop_requested()) return cancelled(std::move(res), 4);
     auto graph = std::make_shared<PreparedGraph>();
     PreparedGraph& g = *graph;
     g.generation = generation;
@@ -393,6 +401,7 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     const double rate = cfg.sampleRate * cfg.oversampling;
     dsp::MnaSolver proto;
     std::string err;
+    if (stop.stop_requested()) return cancelled(std::move(res), 4);
     if (!proto.prepare(g.netlist, 1.0 / rate, {}, err)) {
         d.add(DiagCode::DcFailed, 4, "", "", err);
         return fail(std::move(res), 4);
@@ -405,17 +414,18 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     // Check 5: 250 ms synthetic probe (silence, -18 dBFS sine, -6 dBFS transient).
     static const char* const kNames[3] = {"silence", "-18 dBFS sine", "-6 dBFS transient"};
     for (int kind = 0; kind < 3; ++kind) {
-        const ProbeResult pr = runProbe(proto, g.inputElement, g.outputNode, rate, cfg.fullScaleVolts, kind, cancellation);
+        const ProbeResult pr = runProbe(proto, g.inputElement, g.outputNode, rate, cfg.fullScaleVolts, kind, stop);
         cost.probePeakVolts[kind] = pr.peak;
         cost.probeMaxNewton = std::max(cost.probeMaxNewton, pr.maxNewton);
+        if (pr.cancelled) return cancelled(std::move(res), 5);
         if (!pr.ok) {
-            d.add(cancellation.stop_requested() ? DiagCode::Cancelled : DiagCode::ProbeFailed,
-                  5, "", "", std::string(kNames[kind]) + ": " + pr.why);
+            d.add(DiagCode::ProbeFailed, 5, "", "", std::string(kNames[kind]) + ": " + pr.why);
             return fail(std::move(res), 5);
         }
     }
 
     // Check 6: bind Mod Slots / macros (stable states map via stableStateMap()).
+    if (stop.stop_requested()) return cancelled(std::move(res), 6);
     auto target = [&](const std::string& comp, const std::string& field) {
         ParamTarget t;
         const int ci = bp.componentIndex(comp);
@@ -429,6 +439,7 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     };
     for (const auto& b : bp.modSlots) g.modSlots[std::size_t(b.slot)] = target(b.component, b.field);
     for (const auto& b : bp.macroBindings) g.macroTargets.push_back(target(b.component, b.field));
+    if (stop.stop_requested()) return cancelled(std::move(res), 6);
     cost.validatedForThisConfigurationOnly = true;
     g.cost = cost;
     res.ok = true;
@@ -438,11 +449,12 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
 }
 
 CompileResult compileText(std::string_view json, const ModelRegistry& reg, const RuntimeConfig& cfg, Generation generation,
-                          std::stop_token cancellation) {
+                          std::stop_token stop) {
     CompileResult res;
+    if (stop.stop_requested()) return cancelled(std::move(res), 1);
     Blueprint bp;
     if (!parseBlueprint(json, bp, res.diagnostics)) return fail(std::move(res), 1);
-    return compile(bp, reg, cfg, generation, cancellation);
+    return compile(bp, reg, cfg, generation, stop);
 }
 
 std::vector<std::pair<int, int>> stableStateMap(const PreparedGraph& from, const PreparedGraph& to) {

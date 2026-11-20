@@ -34,6 +34,15 @@ int main() {
     CHECK(result.cost.estimatedFlopsPerSample > 0 && result.cost.validatedForThisConfigurationOnly);
     CHECK(result.config.sampleRate == 8000 && result.config.oversampling == 1);
     CHECK(!worker.poll(result));
+    // Explicit cancellation never exposes a synthetic replacement error. Active
+    // work cannot publish after cancellation or replace a subsequent failure.
+    worker.request(rc, {384000, 16, 1.0});
+    worker.cancel();
+    CHECK(!worker.poll(result));
+    const auto afterCancel = worker.request("{}", config);
+    CHECK(waitFor(worker, result));
+    CHECK(result.generation == afterCancel && !result.ok && !result.diagnostics.empty());
+    CHECK(!worker.poll(result));
     // Only the newest text/configuration can produce a visible report.
     for (int i = 0; i < 40; ++i) worker.request(i % 2 == 0 ? rc : "{}", config);
     const auto last = worker.request(rc, config);
@@ -48,6 +57,9 @@ int main() {
     CHECK(worker.poll(result));
     CHECK(result.generation == oversized && !result.ok && result.diagnostics.has(DiagCode::TooLarge));
     CHECK(!worker.poll(result));
+    worker.request(excess, config);
+    worker.cancel();
+    CHECK(!worker.poll(result));  // cancellation also discards a ready immediate rejection
     const auto unsupported = worker.request(rc, {0, 1, 1.0});
     CHECK(waitFor(worker, result));
     CHECK(result.generation == unsupported && !result.ok && result.diagnostics.has(DiagCode::BadConfig));

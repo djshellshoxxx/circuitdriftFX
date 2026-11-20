@@ -7,6 +7,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 #include "engine/EngineTypes.h"
@@ -67,7 +68,12 @@ struct BlueprintReport {
     int components = 0, nodes = 0, nonlinear = 0, unknowns = 0;
     double estimatedCostNsPerSample = 0;
     double estimatedFlopsPerSample = 0;  // analytical cost, not measured CPU time
-    juce::String configuration;         // sample rate, quality and model provenance
+    std::size_t estimatedBytes = 0;
+    double sampleRate = 0;
+    int oversampling = 0;
+    bool syntheticModels = false;
+    bool previewConfiguration = false;
+    juce::String configuration;         // compatibility summary of configuration/provenance
 };
 
 enum class CaptureFormat : int { Png = 0, Gif = 1, Mp4 = 2 };
@@ -173,6 +179,7 @@ public:
     // Blueprints (CD-F10): validation/compile runs on a worker; result polled.
     virtual juce::String blueprintJson(int slot) = 0;
     virtual void requestBlueprintValidation(const juce::String& json) = 0;
+    virtual void cancelBlueprintValidation() {}
     virtual bool blueprintReport(BlueprintReport& out) = 0;  // true when a new report is ready
     virtual bool applyBlueprint(int slot, const juce::String& json, juce::String& error) = 0;
     virtual bool supportsBlueprintApply() const { return true; }

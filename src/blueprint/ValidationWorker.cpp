@@ -48,6 +48,14 @@ Generation ValidationWorker::request(std::string_view text, const RuntimeConfig&
     return latest_;
 }
 
+void ValidationWorker::cancel() {
+    const std::lock_guard lock(mutex_);
+    cancellation_.request_stop();
+    ++latest_;
+    pending_.reset();
+    completed_.reset();
+}
+
 bool ValidationWorker::poll(ValidationReport& report) {
     const std::lock_guard lock(mutex_);
     if (!completed_) return false;
@@ -79,10 +87,13 @@ void ValidationWorker::run() {
             // never acquire or dispose of its solver storage.
         } catch (const std::exception&) {
             report.diagnostics.add(DiagCode::Internal, 1, "", "", "validation could not complete");
+        } catch (...) {
+            report.diagnostics.add(DiagCode::Internal, 1, "", "", "validation failed unexpectedly");
         }
         {
             const std::lock_guard lock(mutex_);
-            if (!stopping_ && request->generation == latest_) completed_ = std::move(report);
+            if (!stopping_ && request->generation == latest_ && !request->cancellation.stop_requested())
+                completed_ = std::move(report);
         }
     }
 }
