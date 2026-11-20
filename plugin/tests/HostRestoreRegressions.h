@@ -315,6 +315,29 @@ inline int run() {
         check(lite ? afterRecoveryAutomation.bypassed : near(afterRecoveryAutomation.mainsA, 103),
               "ordinary automation resumes after exceptional restore recovery");
 
+        // A successful stopped-audio restore must not be lost when a later
+        // notification fails before audio has adopted that successful state.
+        restore(processor, oldState);  // A
+        check(isOld(observe(processor)), "three-state fixture starts with audio on A");
+        restore(processor, newState);  // B: deliberately no callback before C.
+        const auto thirdState = lite
+            ? candidate(processor, {{kBypassParamId, 0}, {"lite.sag", 0.3f}, {"lite.thermalAge", 0.4f}})
+            : candidate(processor, {{"slot.a.supply.mainsVoltage", 103}, {"slot.b.supply.mainsVoltage", 121}});
+        {
+            NotificationProbe probe(processor, firstId, nullptr, true);
+            bool threw = false;
+            try { restore(processor, thirdState); }  // C
+            catch (const std::runtime_error&) { threw = true; }
+            check(threw && probe.called && near(firstRaw->load(), lite ? 0 : 103),
+                  "third-state notification fails after publishing its first changed parameter");
+        }
+        check(savedValue(processor, firstId, lite ? 1 : 95) && savedValue(processor, secondId, lite ? 0.8 : 125),
+              "failed C restore preserves successful stopped-audio B in the saved state");
+        check(isNew(observe(processor)), "first resumed zero-frame callback adopts B after failed C");
+        check(isNew(observe(processor, true)), "resumed positive-frame callback retains B after failed C");
+        restore(processor, newState);
+        check(isNew(observe(processor)), "three-state failure recovers through a successful restore");
+
         CircuitDriftProcessor initiallyStopped(edition, "Unprepared restore");
         restore(initiallyStopped, newState);
         check(savedValue(initiallyStopped, firstId, lite ? 1 : 95) && savedValue(initiallyStopped, secondId, lite ? 0.8 : 125),
