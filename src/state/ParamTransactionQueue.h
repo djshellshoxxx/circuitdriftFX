@@ -16,11 +16,13 @@
 // it retries a bounded number of times and reports failure instead of spinning.
 //
 // OVERFLOW POLICY: the ring never blocks the producer. When it is full, the value is written into a
-// per-parameter coalescing slot (latest wins) and QueueDiagnostics::overflowed is incremented. A
-// parameter that has an unconsumed coalesced value keeps being routed to its coalescing slot, so
-// ordering for one parameter is preserved (older ring entries are applied first, then the latest
-// coalesced value). A coalesced value is applied at sample offset 0 and carries no gesture kind; the
-// final value of every parameter is never lost.
+// per-parameter coalescing mailbox (latest wins) and QueueDiagnostics::overflowed is incremented.
+// The mailbox transfers complete event ownership through three fixed slots; the producer never
+// modifies the consumer's slot. Per-parameter sequence numbers suppress older ring entries when a
+// newer coalesced value overtakes the consumer's bounded ring snapshot. A parameter with an unread
+// coalesced value keeps using its mailbox. Coalesced values use sample offset 0 and no gesture kind;
+// the final accepted value of every parameter is never lost. Sequence exhaustion rejects new pushes
+// instead of wrapping (after UINT64_MAX accepted events for a single parameter).
 #pragma once
 #include <algorithm>
 #include <array>
@@ -28,6 +30,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include "core/ParameterRegistry.h"
 
 namespace cd::state {
@@ -45,7 +48,7 @@ struct ParamEvent {
 struct QueueDiagnostics {
     std::uint64_t pushed = 0;               // accepted into the ring
     std::uint64_t overflowed = 0;           // pushes routed to the coalescing slots
-    std::uint64_t rejected = 0;             // bad index or non-finite value
+    std::uint64_t rejected = 0;             // bad index, non-finite value or exhausted sequence
     std::uint64_t drained = 0;              // parameter writes applied by the consumer
     std::uint64_t ownershipViolations = 0;  // concurrent producers/consumers detected
 };
@@ -62,11 +65,7 @@ public:
     static constexpr std::size_t kCapacity = 1024;  // power of two
     static_assert((kCapacity & (kCapacity - 1)) == 0, "capacity must be a power of two");
 
-    ParamTransactionQueue() noexcept {
-        for (auto& f : pendingFlag_) f.store(0, std::memory_order_relaxed);
-        for (auto& v : pendingValue_) v.store(0.0, std::memory_order_relaxed);
-        for (auto& g : pendingGesture_) g.store(0, std::memory_order_relaxed);
-    }
+    ParamTransactionQueue() noexcept = default;
     ParamTransactionQueue(const ParamTransactionQueue&) = delete;
     ParamTransactionQueue& operator=(const ParamTransactionQueue&) = delete;
 
@@ -82,12 +81,17 @@ public:
         }
         const core::ParamSpec& s = core::kParams[e.index];
         e.value = std::clamp(e.value, s.min, s.max);
+        if (producerSequence_[e.index] == std::numeric_limits<std::uint64_t>::max()) {
+            rejected_.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+        const SequencedEvent queued{e, ++producerSequence_[e.index]};
         // A parameter with an unconsumed coalesced value stays on the coalescing path (ordering).
-        if (pendingFlag_[e.index].load(std::memory_order_acquire) != 0) { coalesce(e); return true; }
+        if (pending_[e.index].hasPending()) { coalesce(queued); return true; }
         const std::uint64_t t = tail_.load(std::memory_order_relaxed);
         const std::uint64_t h = head_.load(std::memory_order_acquire);
-        if (t - h >= kCapacity) { coalesce(e); return true; }
-        ring_[t & (kCapacity - 1)] = e;
+        if (t - h >= kCapacity) { coalesce(queued); return true; }
+        ring_[t & (kCapacity - 1)] = queued;
         tail_.store(t + 1, std::memory_order_release);
         pushed_.fetch_add(1, std::memory_order_relaxed);
         return true;
@@ -101,33 +105,15 @@ public:
     }
 
     // Consumer (audio thread). Applies queued events in order to `values`, then pending coalesced
-    // values. If `record` is non-null, the first `recordCap` applied events are copied there (for
+    // values. Ring entries already superseded by a newer coalesced value are skipped. If `record`
+    // is non-null, the first `recordCap` applied events are copied there (for
     // sample-accurate segmentation by the runtime). Bounded work, noexcept, no allocation.
     DrainResult drain(core::ParamValues& values, ParamEvent* record = nullptr, std::size_t recordCap = 0) noexcept {
         DrainResult r;
         const Guard guard(consumerBusy_, violations_);
         if (!guard.ok) return r;
-        const std::uint64_t t = tail_.load(std::memory_order_acquire);  // snapshot bounds the loop
-        std::uint64_t h = head_.load(std::memory_order_relaxed);
-        for (; h != t; ++h) {
-            const ParamEvent& e = ring_[h & (kCapacity - 1)];
-            values[e.index] = e.value;
-            note(r, record, recordCap, e);
-        }
-        head_.store(h, std::memory_order_release);
-        for (std::uint32_t i = 0; i < core::kParamCount; ++i) {
-            if (pendingFlag_[i].load(std::memory_order_relaxed) == 0) continue;
-            // exchange (acq_rel) pairs with the producer's release store of the flag, so the value
-            // read below is at least as new as the one that set the flag.
-            if (pendingFlag_[i].exchange(0, std::memory_order_acq_rel) == 0) continue;
-            ParamEvent e;
-            e.index = i;
-            e.value = pendingValue_[i].load(std::memory_order_relaxed);
-            e.gestureId = pendingGesture_[i].load(std::memory_order_relaxed);
-            values[i] = e.value;
-            ++r.coalesced;
-            note(r, record, recordCap, e);
-        }
+        drainRing(values, r, record, recordCap);
+        drainCoalesced(values, r, record, recordCap);
         drained_.fetch_add(r.applied, std::memory_order_relaxed);
         return r;
     }
@@ -147,6 +133,38 @@ public:
     }
 
 private:
+    // Tests can schedule the two real drain phases deterministically without
+    // callbacks, waits or test-only branches in the production audio path.
+    friend struct ParamTransactionQueueTestAccess;
+
+    struct SequencedEvent {
+        ParamEvent event{};
+        std::uint64_t sequence = 0;
+    };
+    struct CoalescedMailbox {
+        static constexpr std::uint8_t kFresh = 4, kIndexMask = 3;
+        std::array<SequencedEvent, 3> slots{};
+        std::atomic<std::uint8_t> middle{1};
+        std::uint8_t back = 0;   // producer-owned
+        std::uint8_t front = 2;  // consumer-owned
+
+        bool hasPending() const noexcept { return (middle.load(std::memory_order_acquire) & kFresh) != 0; }
+        void publish(const SequencedEvent& event) noexcept {
+            slots[back] = event;
+            // Release publishes the completed slot; acquire takes ownership of
+            // a slot the consumer has finished reading, if it exchanged one.
+            back = middle.exchange(std::uint8_t(back | kFresh), std::memory_order_acq_rel) & kIndexMask;
+        }
+        bool consume(SequencedEvent& event) noexcept {
+            if (!hasPending()) return false;
+            // One consumer clears the fresh bit. A racing producer can replace
+            // middle only with another complete fresh publication.
+            front = middle.exchange(front, std::memory_order_acq_rel) & kIndexMask;
+            event = slots[front];
+            return true;
+        }
+    };
+
     struct Guard {
         std::atomic<bool>& busy; bool ok;
         Guard(std::atomic<bool>& b, std::atomic<std::uint64_t>& violations) noexcept
@@ -157,26 +175,48 @@ private:
         Guard(const Guard&) = delete;
         Guard& operator=(const Guard&) = delete;
     };
-    void coalesce(const ParamEvent& e) noexcept {
-        pendingValue_[e.index].store(e.value, std::memory_order_relaxed);
-        pendingGesture_[e.index].store(e.gestureId, std::memory_order_relaxed);
-        pendingFlag_[e.index].store(1, std::memory_order_release);
+    void coalesce(SequencedEvent e) noexcept {
+        e.event.sampleOffset = 0;
+        e.event.gesture = GestureKind::None;
+        pending_[e.event.index].publish(e);
         overflowed_.fetch_add(1, std::memory_order_relaxed);
+    }
+    bool applyLatest(const SequencedEvent& queued, core::ParamValues& values, DrainResult& result,
+                     ParamEvent* record, std::size_t recordCap) noexcept {
+        const ParamEvent& e = queued.event;
+        if (queued.sequence <= consumedSequence_[e.index]) return false;
+        consumedSequence_[e.index] = queued.sequence;
+        values[e.index] = e.value;
+        note(result, record, recordCap, e);
+        return true;
+    }
+    void drainRing(core::ParamValues& values, DrainResult& result, ParamEvent* record, std::size_t recordCap) noexcept {
+        const std::uint64_t t = tail_.load(std::memory_order_acquire);  // snapshot bounds the loop
+        std::uint64_t h = head_.load(std::memory_order_relaxed);
+        for (; h != t; ++h) applyLatest(ring_[h & (kCapacity - 1)], values, result, record, recordCap);
+        head_.store(h, std::memory_order_release);
+    }
+    void drainCoalesced(core::ParamValues& values, DrainResult& result, ParamEvent* record, std::size_t recordCap) noexcept {
+        for (std::uint32_t i = 0; i < core::kParamCount; ++i) {
+            SequencedEvent e;
+            if (pending_[i].consume(e) && applyLatest(e, values, result, record, recordCap)) ++result.coalesced;
+        }
     }
     static void note(DrainResult& r, ParamEvent* rec, std::size_t cap, const ParamEvent& e) noexcept {
         ++r.applied;
         if (rec && r.recorded < cap) rec[r.recorded++] = e; else ++r.droppedFromRecord;
     }
 
-    static_assert(std::atomic<double>::is_always_lock_free, "coalescing slots need lock-free atomic<double>");
+    static_assert(std::atomic<std::uint8_t>::is_always_lock_free, "coalescing mailbox needs lock-free slot ownership");
     static_assert(std::atomic<std::uint64_t>::is_always_lock_free, "ring indices need lock-free 64-bit atomics");
+    static_assert(std::atomic<bool>::is_always_lock_free, "queue ownership checks need lock-free atomics");
 
     alignas(64) std::atomic<std::uint64_t> tail_{0};  // written by the producer
     alignas(64) std::atomic<std::uint64_t> head_{0};  // written by the consumer
-    alignas(64) std::array<ParamEvent, kCapacity> ring_{};
-    std::array<std::atomic<double>, core::kParamCount> pendingValue_{};
-    std::array<std::atomic<std::uint32_t>, core::kParamCount> pendingGesture_{};
-    std::array<std::atomic<std::uint8_t>, core::kParamCount> pendingFlag_{};
+    alignas(64) std::array<SequencedEvent, kCapacity> ring_{};
+    std::array<CoalescedMailbox, core::kParamCount> pending_{};
+    std::array<std::uint64_t, core::kParamCount> producerSequence_{};  // producer-owned
+    std::array<std::uint64_t, core::kParamCount> consumedSequence_{};  // consumer-owned
     std::atomic<bool> producerBusy_{false}, consumerBusy_{false};
     std::atomic<std::uint64_t> pushed_{0}, overflowed_{0}, rejected_{0}, drained_{0}, violations_{0};
 };
@@ -218,6 +258,7 @@ public:
 
 private:
     static_assert(std::atomic<std::uint64_t>::is_always_lock_free, "seqlock counter must be lock-free");
+    static_assert(std::atomic<double>::is_always_lock_free, "snapshot values must be lock-free");
     alignas(64) std::atomic<std::uint64_t> seq_{0};
     std::array<std::atomic<double>, core::kParamCount> data_{};
 };

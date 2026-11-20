@@ -24,6 +24,26 @@ void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 using namespace cd;
 using namespace cd::state;
 
+namespace cd::state {
+// Expose the actual production drain phases for one deterministic interleaving.
+// The production callback contains no synchronization hook or test-only branch.
+struct ParamTransactionQueueTestAccess {
+    static DrainResult ring(ParamTransactionQueue& queue, core::ParamValues& values) {
+        DrainResult result;
+        queue.drainRing(values, result, nullptr, 0);
+        return result;
+    }
+    static DrainResult coalesced(ParamTransactionQueue& queue, core::ParamValues& values, ParamEvent& event) {
+        DrainResult result;
+        queue.drainCoalesced(values, result, &event, 1);
+        return result;
+    }
+    static void setProducerSequence(ParamTransactionQueue& queue, std::size_t index, std::uint64_t sequence) {
+        queue.producerSequence_[index] = sequence;
+    }
+};
+}  // namespace cd::state
+
 namespace {
 constexpr std::size_t kMix = core::indexOf("mix");
 constexpr std::size_t kKeyMask = core::indexOf("key.mask");
@@ -67,6 +87,92 @@ void testOverflowCoalescing() {
     q.drain(v);
     CHECK(v[kHpf] == 50.0);
     CHECK(q.diagnostics().ownershipViolations == 0);
+}
+
+void testCoalescedValueOvertakesRingSnapshot() {
+    ParamTransactionQueue q;
+    core::ParamValues values = core::defaultValues();
+    values[kMix] = 0.0;
+    for (std::size_t i = 0; i < ParamTransactionQueue::kCapacity; ++i) CHECK(q.push(kHpf, 20.0));
+
+    // The consumer snapshots and releases the old ring, then is descheduled
+    // before reading coalesced values. The producer fills the newly available
+    // ring and publishes a newer value for the same parameter in its mailbox.
+    CHECK(ParamTransactionQueueTestAccess::ring(q, values).applied == ParamTransactionQueue::kCapacity);
+    CHECK(q.push(kMix, 0.25, 13, 25, GestureKind::Update));
+    for (std::size_t i = 1; i < ParamTransactionQueue::kCapacity; ++i) CHECK(q.push(kHpf, 30.0));
+    CHECK(q.push(kMix, 0.75, 23, 75, GestureKind::End));
+
+    ParamEvent latest;
+    const auto coalesced = ParamTransactionQueueTestAccess::coalesced(q, values, latest);
+    CHECK(coalesced.applied == 1 && coalesced.coalesced == 1 && coalesced.recorded == 1);
+    CHECK(values[kMix] == 0.75 && latest.value == 0.75 && latest.gestureId == 75);
+    CHECK(latest.sampleOffset == 0 && latest.gesture == GestureKind::None);
+
+    // The next drain must discard the older ring value, including its record.
+    std::array<ParamEvent, ParamTransactionQueue::kCapacity> records{};
+    const auto next = q.drain(values, records.data(), records.size());
+    CHECK(values[kMix] == 0.75 && next.applied == ParamTransactionQueue::kCapacity - 1);
+    for (std::size_t i = 0; i < next.recorded; ++i) CHECK(records[i].index != kMix);
+    CHECK(q.drain(values).applied == 0);
+
+    // Sequence order, not numerical value, determines freshness: a legitimate
+    // later reduction still reaches both the value snapshot and event record.
+    CHECK(q.push(kMix, 0.125, 9, 125, GestureKind::Update));
+    CHECK(q.drain(values, records.data(), records.size()).recorded == 1);
+    CHECK(values[kMix] == 0.125 && records[0].value == 0.125 && records[0].gestureId == 125);
+}
+
+void testCoalescedRecordIntegrity() {
+    ParamTransactionQueue q;
+    for (std::size_t i = 0; i < ParamTransactionQueue::kCapacity; ++i) CHECK(q.push(kHpf, 20.0));
+    constexpr std::uint32_t kLastValue = 4000;
+    std::latch firstOverflow{1}, consumerStarted{1};
+    std::atomic<bool> producerDone{false}, accepted{true};
+    std::thread producer([&] {
+        if (!q.push(kKeyMask, 1.0, 7, 1, GestureKind::Update)) accepted.store(false);
+        firstOverflow.count_down();
+        consumerStarted.wait();
+        for (std::uint32_t n = 2; n <= kLastValue; ++n) {
+            if (!q.push(kKeyMask, double(n), n % 32, n, GestureKind::Update)) accepted.store(false);
+            if (n % 31 == 0) std::this_thread::yield();
+        }
+        producerDone.store(true, std::memory_order_release);
+    });
+    core::ParamValues values = core::defaultValues();
+    std::array<ParamEvent, ParamTransactionQueue::kCapacity + core::kParamCount> records{};
+    bool monotonic = true, coherent = true, bounded = true;
+    double last = 0;
+    firstOverflow.wait();
+    consumerStarted.count_down();
+    for (;;) {
+        const bool done = producerDone.load(std::memory_order_acquire);
+        const auto result = q.drain(values, records.data(), records.size());
+        if (result.applied > records.size() || result.droppedFromRecord != 0) bounded = false;
+        for (std::size_t i = 0; i < result.recorded; ++i) {
+            const auto& event = records[i];
+            if (event.index != kKeyMask) continue;
+            if (event.value <= last) monotonic = false;
+            if (event.value != double(event.gestureId)) coherent = false;
+            last = event.value;
+        }
+        if (done) break;
+        std::this_thread::yield();
+    }
+    producer.join();
+    CHECK(accepted.load() && monotonic && coherent && bounded);
+    CHECK(values[kKeyMask] == double(kLastValue) && last == double(kLastValue));
+    CHECK(q.diagnostics().overflowed > 0 && q.diagnostics().ownershipViolations == 0);
+}
+
+void testSequenceExhaustion() {
+    ParamTransactionQueue q;
+    ParamTransactionQueueTestAccess::setProducerSequence(q, kMix, std::numeric_limits<std::uint64_t>::max() - 1);
+    CHECK(q.push(kMix, 0.5));
+    CHECK(!q.push(kMix, 0.75));
+    core::ParamValues values = core::defaultValues();
+    CHECK(q.drain(values).applied == 1 && values[kMix] == 0.5);
+    CHECK(q.diagnostics().rejected == 1);
 }
 
 void testStressSpsc() {
@@ -186,6 +292,9 @@ void testSnapshotPublisher() {
 int main() {
     testBasics();
     testOverflowCoalescing();
+    testCoalescedValueOvertakesRingSnapshot();
+    testCoalescedRecordIntegrity();
+    testSequenceExhaustion();
     testStressSpsc();
     testNoAllocation();
     testSnapshotPublisher();
