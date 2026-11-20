@@ -267,3 +267,44 @@ catalog operations and dynamic preset application. Integrate with the
 coordinator's newer branch only after checking its live head and conflicts;
 preserve the pending PR #16 CI attribution. No changes to the audio thread,
 model calibration, releases or deployments were made.
+
+## Isolated preset-library consolidation and scene-slot hardening — 2026-11-20
+
+Continuation branch `codex/cdfx-preset-guard-20261120` descends from the isolated
+`codex/cdfx-preset-services-20261120-r4` commit `1f1a92a5cc8d6b44a863410c2967a8d44b6132c8`,
+which itself is one commit ahead of draft PR #16 source
+`b3e05b652147a584ad5fb22e5715d1e61b702318`.
+The original branch and PR #16 were not changed. **Do not fast-forward
+the coordinator while its exact-head Windows run remains queued.**
+
+The inherited feature connects the existing validated local `PresetLibrary`
+to the production `ProcessorEditorBridge` for search, import, export and
+user-preset removal, and writes PNG screenshots through atomic file replacement.
+It intentionally **does not** load/save complete live sounds: APVTS-only
+application cannot carry blueprint identity, prepared runtime seed or full
+dynamic state. That G11/G12 boundary remains open.
+
+A focused source bug-hunt found that `state::captureScene`,
+`applyScene` and `matchesScene` indexed `Config::slots` using an unchecked
+signed slot, allowing undefined behavior for `-1` or values greater than
+`1`. These are non-audio state/UI helpers, so the guard rejects invalid
+indices with `std::out_of_range` before any array access. Regression source
+checks all three calls at `-1`, `2` and `INT_MAX`, along with unchanged
+source configuration. No audio-thread exception path was added.
+
+**Verification:** repository source mutations were published and checked for
+the expected three guarded call sites. Native CMake/CTest, JUCE UI tests,
+Windows/pluginval and independent code/security reviews remain to be run
+on the **exact final child PR head**. The coordinator's earlier 30/30 core,
+6/6 native and prior Windows pass do not qualify this descendant.
+The repository is public, but this environment's container cannot resolve
+`github.com` for a full local clone or fetch a native JUCE dependency cache;
+the connected GitHub API supports source edits and CI inspection only.
+
+**Next owners:** fresh independent code, bug and defensive-security reviewers
+should examine (a) the new scene-slot guard and the preset UI adapter,
+(b) trusted per-user directory assumptions, symlink/rename and no-overwrite
+races, and (c) dynamic seed/preset load transaction design. Run
+`state_preset`, `ui_snap_live_bridge`, all required native suites and
+exact-head CI before consolidation. Evaluate older PR #9/#10/#14 semantics
+item by item; do not blanket-merge or discard source.
