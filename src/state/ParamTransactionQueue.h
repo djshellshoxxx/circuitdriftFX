@@ -198,15 +198,19 @@ public:
         seq_.store(s + 2, std::memory_order_release);  // even: complete
     }
     // Reader (UI). Returns the generation (>0) of a coherent copy, or 0 if nothing was published yet
-    // or no coherent copy was obtained within maxAttempts (the caller keeps its previous snapshot).
+    // or no coherent copy was obtained within maxAttempts. On failure `out` is unchanged.
     std::uint64_t read(core::ParamValues& out, int maxAttempts = 32) const noexcept {
+        core::ParamValues candidate{};
         for (int a = 0; a < maxAttempts; ++a) {
             const std::uint64_t s1 = seq_.load(std::memory_order_acquire);
             if (s1 == 0) return 0;
             if (s1 & 1u) continue;
-            for (std::size_t i = 0; i < core::kParamCount; ++i) out[i] = data_[i].load(std::memory_order_relaxed);
+            for (std::size_t i = 0; i < core::kParamCount; ++i) candidate[i] = data_[i].load(std::memory_order_relaxed);
             std::atomic_thread_fence(std::memory_order_acquire);
-            if (seq_.load(std::memory_order_relaxed) == s1) return s1 / 2;
+            if (seq_.load(std::memory_order_relaxed) == s1) {
+                out = candidate;
+                return s1 / 2;
+            }
         }
         return 0;
     }

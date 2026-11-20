@@ -131,7 +131,10 @@ void testNoAllocation() {
 void testSnapshotPublisher() {
     ParamSnapshotPublisher pub;
     core::ParamValues out{};
+    out.fill(-17.0);
+    const core::ParamValues original = out;
     CHECK(pub.read(out) == 0);  // nothing published yet
+    CHECK(out == original);
     std::atomic<bool> stop{false};
     std::latch firstPublished{1}, firstRead{1};
     std::thread writer([&] {
@@ -155,10 +158,14 @@ void testSnapshotPublisher() {
     for (double x : out) CHECK(x == 1.0);
     long reads = lastGen == 1 ? 1 : 0;
     firstRead.count_down();
-    bool coherent = true, monotonic = true;
+    bool coherent = true, monotonic = true, failurePreservesPrevious = true;
     while (!stop.load(std::memory_order_relaxed)) {
-        const std::uint64_t g = pub.read(out);
-        if (g == 0) continue;
+        const core::ParamValues previous = out;
+        const std::uint64_t g = pub.read(out, 1);
+        if (g == 0) {
+            if (out != previous) failurePreservesPrevious = false;
+            continue;
+        }
         ++reads;
         for (double x : out) if (x != out[0]) coherent = false;  // never a torn mix of two snapshots
         if (out[0] != double(g)) coherent = false;               // value matches its generation tag
@@ -168,8 +175,11 @@ void testSnapshotPublisher() {
     writer.join();
     CHECK(coherent);
     CHECK(monotonic);
+    CHECK(failurePreservesPrevious);
     CHECK(reads > 0);
     CHECK(pub.read(out) == 200000 && out[0] == 200000.0);
+    const core::ParamValues latest = out;
+    CHECK(pub.read(out, 0) == 0 && out == latest);
 }
 }  // namespace
 
