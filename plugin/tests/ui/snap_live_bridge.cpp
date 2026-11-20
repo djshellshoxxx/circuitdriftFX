@@ -91,6 +91,8 @@ int main() {
               "history retention capped at twenty completed transactions");
     }
 
+    check(!bridge.supportsRestorationCommit(),
+          "live UI must disable unavailable seed-restoration action");
     juce::String error;
     check(!bridge.loadPreset("factory:clean-console", 0, error) && error.isNotEmpty(),
           "unwired preset service fails explicitly");
