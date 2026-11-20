@@ -274,6 +274,66 @@ int main(int argc, char** argv) {
             expect(has(texts, "letters, digits"), "invalid preset name shows inline error");
         } else fail("preset name/save controls");
     }
+    {
+        currentCase = "interact-preset-search-selection";
+        struct SelectionBridge final : FakeBridge {
+            juce::String loadedId;
+            bool loadPreset(const juce::String& id, int slot, juce::String& error) override {
+                loadedId = id;
+                return FakeBridge::loadPreset(id, slot, error);
+            }
+        } selectionBridge;
+        juce::String error;
+        expect(selectionBridge.savePreset("Other Scene", error), "create second user preset fixture");
+        auto p = ui::createPanel(ui::PanelId::Presets, selectionBridge);
+        p->setBounds(0, 0, 420, 1400);
+        p->refresh(selectionBridge.status());
+        auto* search = findByTitle<juce::TextEditor>(*p, "Search presets");
+        auto* factory = findByTitle<juce::ListBox>(*p, "Factory presets");
+        auto* user = findByTitle<juce::ListBox>(*p, "User presets");
+        auto* load = findByTitle<juce::Button>(*p, "Load into Slot A");
+        auto* remove = findByTitle<juce::Button>(*p, "Delete");
+        auto* exportButton = findByTitle<juce::Button>(*p, "Export...");
+        if (search && factory && user && load && remove && exportButton) {
+            auto filter = [&](const juce::String& query) {
+                search->setText(query, false);
+                if (search->onTextChange) search->onTextChange();
+            };
+            auto expectCleared = [&] {
+                expect(factory->getSelectedRow() < 0 && user->getSelectedRow() < 0,
+                       "rebuilt results have no stale row selection");
+                expect(!load->isEnabled() && !remove->isEnabled() && !exportButton->isEnabled(),
+                       "actions stay disabled until a result is explicitly selected");
+                selectionBridge.loadedId.clear();
+                if (load->onClick) load->onClick();
+                expect(selectionBridge.loadedId.isEmpty(), "load cannot use the previous result's id");
+            };
+
+            filter("My Scene");
+            expect(user->getListBoxModel()->getNumRows() == 1, "first filter has one user result");
+            user->selectRow(0);
+            expect(load->isEnabled() && remove->isEnabled() && exportButton->isEnabled(),
+                   "explicit user selection enables its actions");
+            filter("Other Scene");
+            expect(user->getListBoxModel()->getNumRows() == 1, "replacement filter also has one user result");
+            expectCleared();
+            user->selectRow(0);
+            if (load->onClick) load->onClick();
+            expect(selectionBridge.loadedId == "user:Other Scene", "reselection targets the new user result");
+
+            filter("Clean");
+            expect(factory->getListBoxModel()->getNumRows() == 1, "first filter has one factory result");
+            factory->selectRow(0);
+            expect(load->isEnabled() && exportButton->isEnabled() && !remove->isEnabled(),
+                   "explicit factory selection remains read-only");
+            filter("Mint");
+            expect(factory->getListBoxModel()->getNumRows() == 1, "replacement filter also has one factory result");
+            expectCleared();
+            factory->selectRow(0);
+            if (load->onClick) load->onClick();
+            expect(selectionBridge.loadedId == "factory:mint-1968-console", "reselection targets the new factory result");
+        } else fail("preset search/selection controls");
+    }
 
     std::printf(failures ? "UI panels snapshot FAILED (%d)\n" : "UI panels snapshot passed\n", failures);
     return failures ? 1 : 0;

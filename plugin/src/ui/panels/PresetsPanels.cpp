@@ -125,6 +125,12 @@ private:
 
     void rebuild() {
         const auto all = bridge.listPresets(search_.getText());
+        // ListBox retains selections by row index when its content changes.
+        // A filter may put a different preset at that index, so require an
+        // explicit selection before acting on the rebuilt catalog.
+        factory_.box.deselectAllRows();
+        user_.box.deselectAllRows();
+        clearSelection();
         factory_.model.rows.clear();
         user_.model.rows.clear();
         for (const auto& p : all) (p.factory ? factory_ : user_).model.rows.push_back(p);
