@@ -76,16 +76,19 @@ bool Processor::prepare(const engine::EngineConfig& config, const core::ParamVal
     activeZeroLatency_ = values[core::indexOf("quality.zeroLatency")] != 0;
     activePitchDrift_ = values[core::indexOf("pitchDrift.enabled")] != 0;
     midiOverflowed_ = false;
+    haveEpoch_ = false;
+    lastEpoch_ = 0;
     prepared_ = true;
     error.clear();
     return true;
 }
 
-void Processor::release() noexcept { prepared_ = false; }
+void Processor::release() noexcept { prepared_ = false; haveEpoch_ = false; }
 void Processor::reset(engine::ResetKind kind) noexcept {
     if (!prepared_) return;
     control_.reset();
     engine_.reset(kind);
+    haveEpoch_ = false;
 }
 bool Processor::needsReprepare(const core::ParamValues& values) const noexcept {
     return !prepared_ || engine_.needsReprepare(mapped(values));
@@ -104,6 +107,12 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
         silence(output, channels, frames);
         return;
     }
+    // Host seek/loop discontinuities are reported by the adapter as epoch
+    // changes. Only an atomic request reaches the pitch worker here: never
+    // reset or re-prepare its analysis state on the audio thread.
+    if (haveEpoch_ && context.epoch != lastEpoch_) control_.markPitchDiscontinuity();
+    lastEpoch_ = context.epoch;
+    haveEpoch_ = true;
     const auto values = mapped(parameters);
     // The engine stages these modes until the host can accept the new latency.
     // Its modulation producer must keep using that same active configuration.

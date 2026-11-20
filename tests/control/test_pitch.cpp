@@ -162,6 +162,28 @@ static void stalenessAndOverload() {
     }
 }
 
+static void seekDiscontinuity() {
+    constexpr double fs = 48000.0;
+    PitchDetector d;
+    d.prepare(fs);
+    const auto before = th::sine(220.0, 0.3, fs, 24000);
+    const auto acquired = feedAll(d, before);
+    CHECK(acquired.state == PitchState::Acquired && d.isFresh(acquired), "pre-seek tone acquired");
+
+    // The old result and even a retained copy must be invalid immediately,
+    // without touching worker-owned history from the audio producer.
+    const auto oldQueued = th::sine(220.0, 0.3, fs, 6000);
+    d.push(oldQueued.data(), int(oldQueued.size()));
+    d.markDiscontinuity();
+    CHECK(d.latest().state == PitchState::None, "seek immediately hides prior generation");
+    CHECK(!d.isFresh(acquired), "saved pre-seek result is invalid");
+    const auto after = th::sine(523.25, 0.3, fs, 12000);
+    const auto changed = feedAll(d, after);
+    CHECK(changed.state == PitchState::Acquired && d.isFresh(changed), "post-seek tone acquired");
+    CHECK(std::fabs(th::cents(changed.frequencyHz, 523.25)) < 15,
+          "post-seek worker discards queued pre-seek audio: %g", changed.frequencyHz);
+}
+
 static void threadedSpsc() {
     constexpr double fs = 48000.0;
     PitchDetector d;
@@ -191,6 +213,7 @@ int main() {
     lowConfidence();
     hopStateMachine();
     stalenessAndOverload();
+    seekDiscontinuity();
     threadedSpsc();
     if (g_fail) { std::printf("pitch: %d failure(s)\n", g_fail); return 1; }
     std::printf("pitch: all passed\n");

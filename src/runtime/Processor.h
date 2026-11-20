@@ -62,6 +62,8 @@ private:
     std::array<control::MidiEvent, kMaxMidiEvents> midi_{};
     bool prepared_ = false, lite_ = false, midiOverflowed_ = false;
     bool activeZeroLatency_ = false, activePitchDrift_ = false;
+    bool haveEpoch_ = false;
+    uint64_t lastEpoch_ = 0;
 };
 
 }  // namespace cd::runtime

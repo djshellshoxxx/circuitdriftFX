@@ -48,6 +48,9 @@ public:
                       const AudioView* sidechainIn, core::ModulationBlock& out) noexcept;
 
     void runPitchWorker() noexcept { pitch_.run(); }
+    // Audio thread only: invalidate pre-seek pitch results using an atomic epoch;
+    // the pitch worker performs the corresponding analysis reset itself.
+    void markPitchDiscontinuity() noexcept { if (prepared_) pitch_.markDiscontinuity(); }
 
     void setHarmonicMap(int slot, const HarmonicMap* map) noexcept;
     const HarmonicMap* harmonicMapInUse(int slot) const noexcept;

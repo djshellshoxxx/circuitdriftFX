@@ -186,6 +186,34 @@ void midiChunkingAndZeroFrames() {
     CHECK(!rig.processor.isPrepared());
 }
 
+void seekInvalidatesPitchWithoutResettingWorkerFromAudio() {
+    Rig rig;
+    set(rig.parameters, "key.enabled", 1);
+    set(rig.parameters, "key.source", 2);  // Audio pitch detector
+    CHECK(rig.prepare());
+    std::vector<double> tone(12000);
+    for (std::size_t i = 0; i < tone.size(); ++i)
+        tone[i] = 0.3 * std::sin(2.0 * 3.141592653589793 * 220.0 * double(i) / 48000.0);
+    (void)rig.render(tone);
+    rig.processor.runPitchWorker();
+    (void)rig.render(std::vector<double>(64, 0.0));
+    CHECK(rig.processor.controlStatus().pitchState == control::PitchState::Acquired);
+
+    // Sample-zero host jump is sufficient; neither audio nor worker reset
+    // may be performed on the callback thread.
+    ++rig.ec.epoch;
+    allocations = 0;
+    countAllocations = true;
+    rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
+    countAllocations = false;
+    CHECK(allocations == 0);
+    CHECK(rig.processor.controlStatus().pitchState == control::PitchState::None);
+    (void)rig.render(tone);
+    rig.processor.runPitchWorker();
+    (void)rig.render(std::vector<double>(64, 0.0));
+    CHECK(rig.processor.controlStatus().pitchState == control::PitchState::Acquired);
+}
+
 void pendingLatencyModePreservesActiveControl() {
     Rig pending, active;
     set(pending.parameters, "pitchDrift.enabled", 1);
@@ -233,6 +261,7 @@ int main() {
     liteEquivalenceAndAudibleProcessing();
     midiChunkingAndZeroFrames();
     pendingLatencyModePreservesActiveControl();
+    seekInvalidatesPitchWithoutResettingWorkerFromAudio();
     std::printf("runtime_processor: %s (%d failures)\n", failures ? "FAILED" : "PASS", failures);
     return failures ? 1 : 0;
 }

@@ -30,6 +30,7 @@ struct PitchResult {
     uint64_t timestamp = 0;       // accepted input sample index at the window end
     PitchState state = PitchState::None;
     bool held = false;            // frequency retained during the 200 ms invalid hold
+    uint64_t generation = 0;      // seek epoch: old results never cross a discontinuity
 };
 
 // Per-hop acquisition/hold state machine (exposed for deterministic testing).
@@ -56,6 +57,9 @@ public:
 
     void prepare(double sampleRate, std::size_t ringSamples = 1u << 16);  // allocates
     void reset();                                                          // idle only
+    // Audio producer only: request a seek flush without touching worker analysis
+    // state or blocking. Samples pushed after this call belong to a new generation.
+    void markDiscontinuity() noexcept;
 
     void push(const double* mono, int n) noexcept;  // audio thread
     void run() noexcept;                             // worker thread
@@ -88,7 +92,8 @@ private:
     alignas(64) std::atomic<uint64_t> wr_{0};
     alignas(64) std::atomic<uint64_t> rd_{0};
     std::atomic<uint64_t> droppedSamples_{0}, droppedWindows_{0}, gaps_{0};
-    uint64_t seenGaps_ = 0;
+    std::atomic<uint64_t> generation_{0}, seekBoundary_{0};
+    uint64_t seenGaps_ = 0, workerGeneration_ = 0;
 
     // Worker analysis state.
     std::vector<double> chunk_, in_;
@@ -106,7 +111,7 @@ private:
     // Published result (seqlock).
     mutable std::atomic<uint32_t> seq_{0};
     std::atomic<double> pFreq_{0}, pConf_{0};
-    std::atomic<uint64_t> pTs_{0};
+    std::atomic<uint64_t> pTs_{0}, pGeneration_{0};
     std::atomic<uint32_t> pState_{0}, pHeld_{0};
 };
 

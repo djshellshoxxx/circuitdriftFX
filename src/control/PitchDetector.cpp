@@ -108,9 +108,19 @@ void PitchDetector::reset() {
     droppedWindows_.store(0);
     gaps_.store(0);
     seenGaps_ = 0;
+    generation_.store(0, std::memory_order_relaxed);
+    seekBoundary_.store(0, std::memory_order_relaxed);
+    workerGeneration_ = 0;
     baseAbs_ = 0;
     resetAnalysis();
     publish(PitchResult{});
+}
+
+void PitchDetector::markDiscontinuity() noexcept {
+    // The producer publishes its last pre-seek write index before the epoch.
+    // Neither ring consumer position nor worker-owned filters are touched here.
+    seekBoundary_.store(wr_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    generation_.fetch_add(1, std::memory_order_release);
 }
 
 void PitchDetector::resetAnalysis() noexcept {
@@ -231,6 +241,16 @@ bool PitchDetector::estimateWindow(const double* x, double& freqHz, double& scor
 
 void PitchDetector::run() noexcept {
     if (!prepared_) return;
+    const uint64_t generation = generation_.load(std::memory_order_acquire);
+    if (generation != workerGeneration_) {
+        workerGeneration_ = generation;
+        // Discard only the pre-seek ring prefix. A worker already consuming an
+        // old chunk cannot publish a usable result: latest() checks its epoch.
+        const uint64_t boundary = seekBoundary_.load(std::memory_order_relaxed);
+        const uint64_t read = rd_.load(std::memory_order_relaxed);
+        if (read < boundary) rd_.store(boundary, std::memory_order_release);
+        resetAnalysis();
+    }
     const uint64_t g = gaps_.load(std::memory_order_acquire);
     if (g != seenGaps_) {
         seenGaps_ = g;
@@ -263,6 +283,7 @@ void PitchDetector::publish(const PitchResult& r) noexcept {
     pFreq_.store(r.frequencyHz, std::memory_order_relaxed);
     pConf_.store(r.confidence, std::memory_order_relaxed);
     pTs_.store(r.timestamp, std::memory_order_relaxed);
+    pGeneration_.store(workerGeneration_, std::memory_order_relaxed);
     pState_.store(uint32_t(r.state), std::memory_order_relaxed);
     pHeld_.store(r.held ? 1u : 0u, std::memory_order_relaxed);
     seq_.store(s + 2, std::memory_order_release);
@@ -276,16 +297,18 @@ PitchResult PitchDetector::latest() const noexcept {
         r.frequencyHz = pFreq_.load(std::memory_order_relaxed);
         r.confidence = pConf_.load(std::memory_order_relaxed);
         r.timestamp = pTs_.load(std::memory_order_relaxed);
+        r.generation = pGeneration_.load(std::memory_order_relaxed);
         r.state = PitchState(pState_.load(std::memory_order_relaxed));
         r.held = pHeld_.load(std::memory_order_relaxed) != 0;
         std::atomic_thread_fence(std::memory_order_acquire);
-        if (seq_.load(std::memory_order_relaxed) == s1) return r;
+        if (seq_.load(std::memory_order_relaxed) == s1)
+            return r.generation == generation_.load(std::memory_order_acquire) ? r : PitchResult{};
     }
     return PitchResult{};  // writer busy: report no pitch rather than block
 }
 
 bool PitchDetector::isFresh(const PitchResult& r) const noexcept {
-    if (r.state == PitchState::None) return false;
+    if (r.state == PitchState::None || r.generation != generation_.load(std::memory_order_acquire)) return false;
     const uint64_t now = wr_.load(std::memory_order_acquire);
     const uint64_t age = now > r.timestamp ? now - r.timestamp : 0;
     return double(age) <= 0.25 * fs_;
