@@ -1,0 +1,22 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-native-r14
+    Start 36: ui_snap_panels
+1/1 Test #36: ui_snap_panels ...................***Failed   11.03 sec
+FAIL [theme-placeholder-colours] Search presets placeholder follows the current theme
+FAIL [theme-placeholder-colours] Preset name placeholder follows the current theme
+FAIL [theme-placeholder-colours] Search presets placeholder follows the current theme
+FAIL [theme-placeholder-colours] Preset name placeholder follows the current theme
+FAIL [theme-history-light-to-dark-insertion] reparented editor uses its current content theme
+FAIL [theme-history-light-to-dark-insertion] redo restores glyphs in the current theme
+FAIL [theme-history-light-to-dark-deletion] undo restores glyphs in the current theme
+FAIL [theme-history-dark-to-light-insertion] redo restores glyphs in the current theme
+FAIL [theme-history-dark-to-light-deletion] undo restores glyphs in the current theme
+UI panels snapshot FAILED (9)
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =  11.03 sec
+
+The following tests FAILED:
+	 36 - ui_snap_panels (Failed)
+Errors while running CTest

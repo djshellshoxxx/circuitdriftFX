@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="11"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="129"
+	timestamp="2026-11-20T11:08:36"
+	>
+	<testcase name="engine_runtime" classname="engine_runtime" time="44.3727" status="run">
+		<properties/>
+		<system-out>[ok] t20EngineClock 0.15 s
+[ok] macroEndpoints 1.47 s
+latency: FIR pad 84, IIR pad 5, total FIR 168 samples @48k
+[ok] latency 2.45 s
+[ok] mixZeroAndGains 1.20 s
+[ok] abUnity 2.57 s
+[ok] containment 2.27 s
+[ok] quality 2.22 s
+[ok] conditions 1.25 s
+[ok] checkpoint 0.83 s
+partition invariance: 7 partitions incl. 0-frame calls compared
+[ok] partitionInvariance 8.54 s
+T22: fs 48000 dry 15 Hz -3.0103 dB, wet on/off ratio -3.0103 dB
+T22 DC step dry: mean -256.5 dBFS, peak -256.5 dBFS (peak includes AC ripple/LF tails)
+T22 DC step wet: mean -213.4 dBFS, peak -112.3 dBFS (peak includes AC ripple/LF tails)
+[ok] t22Integrated 10.12 s
+T23 RMS match: residual 0.034 dB, compensation 0.402
+soft clip Studio 4x: sample peak 1.40602 (bound 2.10664)
+soft clip Draft 1x: sample peak 1.00000 (bound 1.00000)
+soft clip ZeroLatency: sample peak 1.00000 (bound 1.00000)
+[ok] t23MatchAndClip 7.61 s
+[ok] telemetryAndThermal 3.66 s
+ENGINE RUNTIME PASSED
+</system-out>
+	</testcase>
+	<testcase name="engine_checkpoint" classname="engine_checkpoint" time="0.772622" status="run">
+		<properties/>
+		<system-out>engine checkpoint safety: PASS (0 failures)
+</system-out>
+	</testcase>
+	<testcase name="engine_stress" classname="engine_stress" time="62.3328" status="run">
+		<properties/>
+		<system-out>stress scale 0.042 (sanitized build)
+stress Eco healthy       2.50 s audio: peak 1.021, non-finite 0, |y|&gt;8 0, fallbacks 0, solver failures 0
+stress Studio healthy    2.50 s audio: peak 1.021, non-finite 0, |y|&gt;8 0, fallbacks 0, solver failures 0
+stress Render healthy    0.62 s audio: peak 1.020, non-finite 0, |y|&gt;8 0, fallbacks 0, solver failures 0
+stress Eco hostile       2.50 s audio: peak 7.996, non-finite 0, |y|&gt;8 0, fallbacks 11, solver failures 344
+stress Studio hostile    2.50 s audio: peak 7.985, non-finite 0, |y|&gt;8 0, fallbacks 20, solver failures 367
+stress Render hostile    0.62 s audio: peak 7.985, non-finite 0, |y|&gt;8 0, fallbacks 4, solver failures 0
+stress wall time 48.0 s
+rate smoke  44100 Hz Studio 4x: peak 1.020 failures 0
+rate smoke  96000 Hz Studio 4x: peak 1.031 failures 0
+rate smoke 192000 Hz Render 16x: peak 1.007 failures 0
+BENCH Eco (4x, cap 6)          116657 ns/stereo sample  14.932 ms per 128-frame block (max 54.298)  560.0% of real time  [sanitized build: not representative]
+BENCH...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="control_macros" classname="control_macros" time="0.238143" status="run">
+		<properties/>
+		<system-out>macros: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_key" classname="control_key" time="0.0971967" status="run">
+		<properties/>
+		<system-out>key: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_pitch" classname="control_pitch" time="4.83849" status="run">
+		<properties/>
+		<system-out>pitch: worst pure-sine error 12.05 cents
+pitch: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_tempo" classname="control_tempo" time="0.0340253" status="run">
+		<properties/>
+		<system-out>tempo: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_harmonic" classname="control_harmonic" time="0.832689" status="run">
+		<properties/>
+		<system-out>harmonic: synthetic map valid points 201 / 697
+harmonic: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_dynamics" classname="control_dynamics" time="0.128751" status="run">
+		<properties/>
+		<system-out>dynamics: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_safety" classname="control_safety" time="0.23165" status="run">
+		<properties/>
+		<system-out>control safety: all passed
+</system-out>
+	</testcase>
+	<testcase name="runtime_processor" classname="runtime_processor" time="15.3413" status="run">
+		<properties/>
+		<system-out>runtime_processor: PASS (0 failures)
+</system-out>
+	</testcase>
+</testsuite>

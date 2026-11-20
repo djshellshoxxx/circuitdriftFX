@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="6"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="58"
+	timestamp="2026-11-20T10:27:58"
+	>
+	<testcase name="plugin_param_consistency" classname="plugin_param_consistency" time="4.34301" status="run">
+		<properties/>
+		<system-out>Host restore regressions: PASS (0 failures)
+UI host-gesture regressions passed
+plugin parameter consistency: all checks passed (116 registry params)
+</system-out>
+	</testcase>
+	<testcase name="ui_snap_contract" classname="ui_snap_contract" time="0.726051" status="run">
+		<properties/>
+		<system-out>UI contract snapshot passed
+</system-out>
+	</testcase>
+	<testcase name="ui_snap_live_bridge" classname="ui_snap_live_bridge" time="4.85876" status="run">
+		<properties/>
+		<system-out>live EditorBridge: PASS (0 failures)
+</system-out>
+	</testcase>
+	<testcase name="ui_snap_panels" classname="ui_snap_panels" time="10.0825" status="run">
+		<properties/>
+		<system-out>UI panels snapshot passed
+</system-out>
+	</testcase>
+	<testcase name="ui_snap_shell" classname="ui_snap_shell" time="27.0141" status="run">
+		<properties/>
+		<system-out>UI shell snapshot passed
+</system-out>
+	</testcase>
+	<testcase name="ui_snap_workbench" classname="ui_snap_workbench" time="11.8478" status="run">
+		<properties/>
+		<system-out>Workbench snapshot passed
+</system-out>
+	</testcase>
+</testsuite>

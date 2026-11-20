@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="4"
+	timestamp="2026-11-20T10:03:11"
+	>
+	<testcase name="dependency_source_gate" classname="dependency_source_gate" time="4.46922" status="run">
+		<properties/>
+		<system-out>test_assume_unchanged_index_entry_is_rejected (__main__.DependencyGateTests.test_assume_unchanged_index_entry_is_rejected) ... ok
+test_clean_source_overrides_are_accepted_read_only (__main__.DependencyGateTests.test_clean_source_overrides_are_accepted_read_only) ... ok
+test_clean_warm_source_cache_needs_no_population_subbuild (__main__.DependencyGateTests.test_clean_warm_source_cache_needs_no_population_subbuild) ... ok
+test_fresh_local_population_keeps_executable_state_out_of_source_cache (__main__.DependencyGateTests.test_fresh_local_population_keeps_executable_state_out_of_source_cache) ... ok
+test_fresh_population_with_new_cmake_policies (__main__.DependencyGateTests.test_fresh_population_with_new_cmake_policies) ... ok
+test_git_worktree_must_identify_the_configured_source (__main__.DependencyGateTests.test_git_worktree_must_identify_the_configured_source) ... ok
+test_ignored_input_is_rejected (__main__.DependencyGateTests.test_ignored_input_is_rejected) ... ok
+test_incorrect_clap_pin_precedes_either_conf...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+</testsuite>

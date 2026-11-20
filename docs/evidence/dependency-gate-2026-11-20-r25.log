@@ -1,0 +1,29 @@
+test_assume_unchanged_index_entry_is_rejected (__main__.DependencyGateTests.test_assume_unchanged_index_entry_is_rejected) ... ok
+test_clean_source_overrides_are_accepted_read_only (__main__.DependencyGateTests.test_clean_source_overrides_are_accepted_read_only) ... ok
+test_clean_warm_source_cache_needs_no_population_subbuild (__main__.DependencyGateTests.test_clean_warm_source_cache_needs_no_population_subbuild) ... ok
+test_fresh_local_population_keeps_executable_state_out_of_source_cache (__main__.DependencyGateTests.test_fresh_local_population_keeps_executable_state_out_of_source_cache) ... ok
+test_fresh_population_with_new_cmake_policies (__main__.DependencyGateTests.test_fresh_population_with_new_cmake_policies) ... ok
+test_git_worktree_must_identify_the_configured_source (__main__.DependencyGateTests.test_git_worktree_must_identify_the_configured_source) ... ok
+test_ignored_input_is_rejected (__main__.DependencyGateTests.test_ignored_input_is_rejected) ... ok
+test_incorrect_clap_pin_precedes_either_configuration (__main__.DependencyGateTests.test_incorrect_clap_pin_precedes_either_configuration) ... ok
+test_incorrect_helpers_pin_precedes_either_configuration (__main__.DependencyGateTests.test_incorrect_helpers_pin_precedes_either_configuration) ... ok
+test_incorrect_root_pin_is_rejected (__main__.DependencyGateTests.test_incorrect_root_pin_is_rejected) ... ok
+test_incorrect_second_root_pin_precedes_either_configuration (__main__.DependencyGateTests.test_incorrect_second_root_pin_precedes_either_configuration) ... ok
+test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache (__main__.DependencyGateTests.test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache) ... ok
+test_missing_disconnected_source_fails_without_fetch (__main__.DependencyGateTests.test_missing_disconnected_source_fails_without_fetch) ... ok
+test_missing_helpers_checkout_is_rejected (__main__.DependencyGateTests.test_missing_helpers_checkout_is_rejected) ... ok
+test_missing_override_is_not_replaced_with_download (__main__.DependencyGateTests.test_missing_override_is_not_replaced_with_download) ... ok
+test_missing_root_git_metadata_is_rejected (__main__.DependencyGateTests.test_missing_root_git_metadata_is_rejected) ... ok
+test_missing_submodule_checkout_is_rejected (__main__.DependencyGateTests.test_missing_submodule_checkout_is_rejected) ... ok
+test_skip_worktree_index_entry_is_rejected (__main__.DependencyGateTests.test_skip_worktree_index_entry_is_rejected) ... ok
+test_staged_change_is_rejected (__main__.DependencyGateTests.test_staged_change_is_rejected) ... ok
+test_submodule_ignored_input_is_rejected (__main__.DependencyGateTests.test_submodule_ignored_input_is_rejected) ... ok
+test_submodule_tracked_change_is_rejected (__main__.DependencyGateTests.test_submodule_tracked_change_is_rejected) ... ok
+test_tracked_root_change_is_rejected_without_repair (__main__.DependencyGateTests.test_tracked_root_change_is_rejected_without_repair) ... ok
+test_untracked_root_input_is_rejected (__main__.DependencyGateTests.test_untracked_root_input_is_rejected) ... ok
+test_wrong_cached_revision_is_preserved_and_rejected (__main__.DependencyGateTests.test_wrong_cached_revision_is_preserved_and_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 3.848s
+
+OK

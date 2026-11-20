@@ -68,7 +68,12 @@ struct LoadReport { int sourceVersion = 0; int migrationsApplied = 0; };
 bool loadState(std::string_view text, StateDocument& out, std::string& error,
                const MigrationChain& chain = productionMigrations(), LoadReport* report = nullptr);
 // Numeric seed/sampleIndex identities are limited to [0, 2^53] by schema v1.
-// Throws std::invalid_argument instead of rounding larger in-memory identities.
+// Throws std::invalid_argument if the complete schema-v1 envelope could not
+// be read back (including size, blueprint, parameter and feature limits), for
+// duplicate/reserved metadata or parameter IDs, or for invalid checkpoint state.
+// Caller-owned JSON depth and complete encoded-envelope bytes are admitted
+// before recursive copying/serialization; the reader still validates semantics.
+// Only for worker/UI threads: serializes and validates; never call on audio.
 std::string saveState(const StateDocument& doc);
 // Community/scene export: requires kind Scene; strips checkpoint, UI preferences and metadata.
 // Until P05/P10/P11 provide complete validators, only the minimal synthetic blueprint
@@ -83,14 +88,31 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
 // the old file; successful return does not promise directory durability after power loss.
 // POSIX and Windows local-file replacement are supported; never call from audio.
 bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error);
+// Non-owning binary counterpart: embedded NUL bytes are preserved and the payload
+// is never copied into a second full-size buffer. The view must remain valid until
+// this synchronous operation returns. Same atomic replacement constraints as above;
+// no state/JSON validation is performed by either file-writing entry point.
+bool saveBytesFileAtomic(const std::string& path, std::string_view bytes, std::string& error);
+// Exclusively installs a new file without ever replacing an existing target, including
+// a dangling symlink. The existence decision is made atomically at installation,
+// not by a prior filesystem check; suitable for no-overwrite preset imports.
+// After a successful POSIX install, temporary hard-link cleanup is best effort:
+// cleanup failure may leave that extra link, while success and the committed
+// destination are preserved (the installed destination is never rolled back).
+// Same trusted-directory, non-audio and durability constraints as above.
+bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& text, std::string& error);
 
 struct RuntimeIdentity {
     std::string engineModelVersion, modelRevision;
     double sampleRate = 0;
     int oversampling = 1;
-    std::size_t electricalSize = 0, thermalSize = 0;
+    // The stochastic state layout is part of exact dynamic continuation.
+    // Callers supply the prepared runtime's expected RNG size; zero means none.
+    std::size_t electricalSize = 0, thermalSize = 0, rngSize = 0;
 };
 enum class RestoreDecision : unsigned char { Restore, ResetWarm, NoCheckpoint };
+// Directly constructed checkpoints must still satisfy session-only, identity,
+// scalar and vector admission rules before exact runtime compatibility is accepted.
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason);
 
 }  // namespace cd::state

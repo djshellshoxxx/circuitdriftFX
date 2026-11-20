@@ -1,0 +1,27 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-core-r14
+      Start 11: engine_runtime
+ 1/11 Test #11: engine_runtime ...................   Passed   44.37 sec
+      Start 12: engine_checkpoint
+ 2/11 Test #12: engine_checkpoint ................   Passed    0.77 sec
+      Start 14: engine_stress
+ 3/11 Test #14: engine_stress ....................   Passed   62.33 sec
+      Start 15: control_macros
+ 4/11 Test #15: control_macros ...................   Passed    0.24 sec
+      Start 16: control_key
+ 5/11 Test #16: control_key ......................   Passed    0.10 sec
+      Start 17: control_pitch
+ 6/11 Test #17: control_pitch ....................   Passed    4.84 sec
+      Start 18: control_tempo
+ 7/11 Test #18: control_tempo ....................   Passed    0.03 sec
+      Start 19: control_harmonic
+ 8/11 Test #19: control_harmonic .................   Passed    0.83 sec
+      Start 20: control_dynamics
+ 9/11 Test #20: control_dynamics .................   Passed    0.13 sec
+      Start 21: control_safety
+10/11 Test #21: control_safety ...................   Passed    0.23 sec
+      Start 32: runtime_processor
+11/11 Test #32: runtime_processor ................   Passed   15.34 sec
+
+100% tests passed out of 11
+
+Total Test time (real) = 129.24 sec

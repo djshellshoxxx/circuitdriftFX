@@ -1,38 +1,31 @@
-cmake_minimum_required(VERSION 3.20)
-project(CircuitDrift VERSION 0.0.1 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.22)
+project(CircuitDrift VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-option(CD_SANITIZE "ASan+UBSan for tests" OFF)
+option(CD_SANITIZE "ASan+UBSan for tests (GCC/Clang only)" OFF)
+option(CD_BUILD_TESTS "Build framework-independent core tests" ON)
+option(CD_BUILD_PLUGIN "Build JUCE plugin targets (fetches pinned JUCE/CLAP adapter)" OFF)
 
-# cd_core: IDs, units, parameter registry. No JUCE/UI/network dependency.
-add_library(cd_core STATIC src/core/ParameterRegistry.cpp src/core/Json.cpp)
-target_include_directories(cd_core PUBLIC src)
-# cd_dsp: portable math core; depends only on cd_core.
-add_library(cd_dsp STATIC src/dsp/ThermalNetwork.cpp src/dsp/OutputProtection.cpp
-  src/dsp/Halfband2x.cpp src/dsp/Oversampling.cpp src/dsp/DeviceManifest.cpp src/dsp/MnaSolver.cpp)
-target_link_libraries(cd_dsp PUBLIC cd_core)
-# cd_state: versioned documents/checkpoints; worker thread only. Depends on cd_dsp (model catalogue).
-add_library(cd_state STATIC src/state/StateDocument.cpp)
-target_link_libraries(cd_state PUBLIC cd_dsp)
-foreach(t cd_core cd_dsp cd_state)
-  target_compile_options(${t} PRIVATE -Wall -Wextra -Wpedantic)
-  if(CD_SANITIZE)
-    target_compile_options(${t} PUBLIC -fsanitize=address,undefined,float-cast-overflow -fno-omit-frame-pointer)
-    target_link_options(${t} PUBLIC -fsanitize=address,undefined,float-cast-overflow)
+# Shared warning/sanitizer settings for framework-independent core targets.
+include(cmake/CoreTarget.cmake)
+if(CD_BUILD_TESTS)
+  enable_testing()
+  find_package(Threads REQUIRED)
+endif()
+
+# Dependency direction (CLAUDE.md): cd_core <- cd_dsp <- cd_engine/cd_control/cd_state/cd_blueprint
+# <- cd_runtime (framework-independent integration) <- plugin adapters/UI.
+# Each module owns its CMakeLists.txt; modules that do not exist yet are skipped.
+foreach(dir core dsp engine control state blueprint media network community runtime)
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/${dir}/CMakeLists.txt)
+    add_subdirectory(src/${dir})
   endif()
 endforeach()
 
-enable_testing()
-find_package(Threads REQUIRED)
-add_executable(cd_tests tests/test_main.cpp)
-target_link_libraries(cd_tests PRIVATE cd_state)
-add_test(NAME acceptance_core COMMAND cd_tests)
-foreach(suite state_safety oversampling_safety solver_safety primitive_safety)
-  add_executable(cd_${suite}_tests tests/test_${suite}.cpp)
-  target_link_libraries(cd_${suite}_tests PRIVATE cd_state)
-  add_test(NAME ${suite} COMMAND cd_${suite}_tests)
-endforeach()
-target_link_libraries(cd_state_safety_tests PRIVATE Threads::Threads)
-add_test(NAME registry_codegen_fresh COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/gen_param_registry.py --check)
-add_test(NAME docs_validation_only COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/validate_planned_features.py)
+if(CD_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
+if(CD_BUILD_PLUGIN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/plugin/CMakeLists.txt)
+  add_subdirectory(plugin)
+endif()

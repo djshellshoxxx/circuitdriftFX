@@ -25,6 +25,16 @@ struct JsonValue {
     std::vector<JsonValue> array;
     std::vector<std::pair<std::string, JsonValue>> object;  // insertion order kept
 
+    // Special members are defined out of line (Json.cpp), where JsonValue is complete: Clang with
+    // libstdc++ otherwise instantiates std::pair<std::string, JsonValue> while JsonValue is still
+    // incomplete (implicit destructor of the recursive vector) and rejects the header.
+    JsonValue();
+    JsonValue(const JsonValue&);
+    JsonValue(JsonValue&&) noexcept;
+    JsonValue& operator=(const JsonValue&);
+    JsonValue& operator=(JsonValue&&) noexcept;
+    ~JsonValue();
+
     bool isNull() const noexcept { return type == Type::Null; }
     bool isBool() const noexcept { return type == Type::Bool; }
     bool isNumber() const noexcept { return type == Type::Number; }

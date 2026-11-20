@@ -25,7 +25,8 @@ public:
     bool prepare(const Config& cfg, double dt, double ambientK) noexcept;
     // Reads size() temperatures in finite positive kelvin. Null, non-finite, non-positive or
     // numerically unrepresentable states are ignored atomically; no model upper bound is invented.
-    void setState(const double* temperaturesK) noexcept;
+    bool isStateValid(const double* temperaturesK) const noexcept;
+    bool setState(const double* temperaturesK) noexcept;
     // One implicit step with finite average power per node [W]. Null input, any overflow or a
     // non-positive candidate kelvin temperature leaves every temperature unchanged. Finite
     // negative power can represent cooling; physical calibration belongs to the model manifest.
@@ -33,11 +34,23 @@ public:
     double temperature(std::size_t i) const noexcept { return t_[i]; }
     std::size_t size() const noexcept { return n_; }
 
+    // Ambient temperature for subsequent steps (matrix unchanged). Non-finite/non-positive or
+    // numerically unrepresentable values are ignored (false).
+    bool setAmbient(double ambientK) noexcept;
+    double ambient() const noexcept { return ambient_; }
+    // Thermal-mass control: every prepared heat capacity times s > 0, relative to prepare().
+    // Refactors the constant matrix in place (O(n^3), bounded, allocation-free); the matrix is
+    // strictly diagonally dominant so no pivoting is needed. Temperatures are kept. Invalid s or
+    // a numerically unrepresentable result leaves the network unchanged (false).
+    bool setCapacityScale(double s) noexcept;
+    double capacityScale() const noexcept { return scale_; }
+
 private:
     std::size_t n_ = 0;
-    double ambient_ = 298.15;
-    std::array<double, kMaxNodes> cOverDt_{}, gAmb_{}, t_{};
+    double ambient_ = 298.15, scale_ = 1.0;
+    std::array<double, kMaxNodes> cOverDt_{}, baseCOverDt_{}, gAmb_{}, t_{};
     std::array<std::array<double, kMaxNodes>, kMaxNodes> inv_{};
+    std::array<std::array<double, kMaxNodes>, kMaxNodes> gPart_{}, work_{};  // G_amb + Laplacian; scratch
 };
 
 }  // namespace cd::dsp

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="4"
+	timestamp="2026-11-20T10:23:08"
+	>
+	<testcase name="plugin_param_consistency" classname="plugin_param_consistency" time="4.55409" status="run">
+		<properties/>
+		<system-out>Host restore regressions: PASS (0 failures)
+UI host-gesture regressions passed
+plugin parameter consistency: all checks passed (116 registry params)
+</system-out>
+	</testcase>
+</testsuite>

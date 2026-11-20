@@ -10,15 +10,31 @@ struct Family {
     DeviceEquation eq;
     int pinCount;
     std::vector<std::pair<const char*, const char*>> params;  // required name, unit (in order)
-    bool needsDomain;
+    const char* domainKey;  // required single domain bound, or nullptr when not applicable
 };
 
 const std::vector<Family>& families() {
     static const std::vector<Family> f = {
-        {"resistor", DeviceEquation::Resistor, 2, {{"resistanceOhm", "Ohm"}}, false},
-        {"capacitor", DeviceEquation::Capacitor, 2, {{"capacitanceF", "F"}}, false},
+        {"resistor", DeviceEquation::Resistor, 2, {{"resistanceOhm", "Ohm"}}, nullptr},
+        {"capacitor", DeviceEquation::Capacitor, 2, {{"capacitanceF", "F"}}, nullptr},
         {"shockley-diode", DeviceEquation::ShockleyDiode, 2,
-         {{"saturationCurrentA", "A"}, {"emissionCoefficient", "1"}, {"thermalVoltageV", "V"}}, true},
+         {{"saturationCurrentA", "A"}, {"emissionCoefficient", "1"}, {"thermalVoltageV", "V"}}, "maxExpArg"},
+        {"electrolytic", DeviceEquation::Electrolytic, 2,
+         {{"capacitanceF", "F"}, {"esrOhm", "Ohm"}, {"leakageOhm", "Ohm"}}, nullptr},
+        {"saturating-inductor", DeviceEquation::SaturatingInductor, 2,
+         {{"inductanceH", "H"}, {"saturationFluxWb", "Wb"}, {"saturationExponent", "1"}, {"windingOhm", "Ohm"}},
+         "maxNormalizedFlux"},
+        {"koren-triode", DeviceEquation::KorenTriode, 3,
+         {{"mu", "1"}, {"exponent", "1"}, {"kg1", "V^x/A"}, {"kp", "1"}, {"kvb", "V^2"},
+          {"gridCoefficientA", "A/V^1.5"}, {"gridKneeV", "V"}}, nullptr},
+        {"koren-pentode", DeviceEquation::KorenPentode, 4,
+         {{"mu", "1"}, {"exponent", "1"}, {"kg1", "V^x/A"}, {"kg2", "V^x/A"}, {"kp", "1"}, {"kvb", "V"},
+          {"gridCoefficientA", "A/V^1.5"}, {"gridKneeV", "V"}}, nullptr},
+        {"ebers-moll-npn", DeviceEquation::EbersMollNpn, 3,
+         {{"saturationCurrentA", "A"}, {"betaF", "1"}, {"betaR", "1"}, {"thermalVoltageV", "V"}}, "maxExpArg"},
+        {"square-law-njfet", DeviceEquation::SquareLawNjfet, 3,
+         {{"betaAPerV2", "A/V^2"}, {"pinchOffV", "V"}, {"lambdaPerV", "1/V"}, {"kneeV", "V"},
+          {"gateSaturationCurrentA", "A"}, {"thermalVoltageV", "V"}}, "maxExpArg"},
     };
     return f;
 }
@@ -39,6 +55,68 @@ const char* const kFixtures[kSyntheticFixtureCount] = {
                       {"name":"thermalVoltageV","unit":"V","min":0.02,"max":0.04,"default":0.025852}],
         "scales":{"voltageV":1,"currentA":1e-3},"domain":{"maxExpArg":40},
         "provenance":{"kind":"synthetic-fixture","note":"Textbook Shockley equation with arbitrary round parameters; not a named or measured device (G01 open)."}})",
+};
+
+// SYNTHETIC CIRCUIT CATALOGUE (P03 engine factory graph). Equation forms are textbook (Koren
+// tube forms, Ebers-Moll, Shichman-Hodges, ESR/leakage capacitor, power-law saturating core);
+// every number is a round illustrative value, NOT a fit to or measurement of a real device (G01).
+const char* const kCircuit[kSyntheticCircuitCount] = {
+    R"({"schemaVersion":1,"modelId":"synthetic.electrolytic","revision":1,"equation":"electrolytic","pins":["p","n"],
+        "parameters":[{"name":"capacitanceF","unit":"F","min":1e-9,"max":1,"default":1e-5},
+                      {"name":"esrOhm","unit":"Ohm","min":1e-4,"max":1e5,"default":1},
+                      {"name":"leakageOhm","unit":"Ohm","min":100,"max":1e13,"default":1e9}],
+        "scales":{"voltageV":10,"currentA":1e-3},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): ideal C with series ESR and parallel leakage; values illustrative."}})",
+    R"({"schemaVersion":1,"modelId":"synthetic.film-capacitor","revision":1,"equation":"electrolytic","pins":["p","n"],
+        "parameters":[{"name":"capacitanceF","unit":"F","min":1e-12,"max":1e-4,"default":2.2e-8},
+                      {"name":"esrOhm","unit":"Ohm","min":1e-4,"max":1e5,"default":0.05},
+                      {"name":"leakageOhm","unit":"Ohm","min":100,"max":1e13,"default":1e12}],
+        "scales":{"voltageV":10,"currentA":1e-3},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): film/paper coupling capacitor using the ESR+leakage form; values illustrative."}})",
+    R"({"schemaVersion":1,"modelId":"synthetic.output-transformer","revision":1,"equation":"saturating-inductor","pins":["p","n"],
+        "parameters":[{"name":"inductanceH","unit":"H","min":1e-3,"max":1e5,"default":400},
+                      {"name":"saturationFluxWb","unit":"Wb","min":1e-5,"max":100,"default":0.4},
+                      {"name":"saturationExponent","unit":"1","min":0.5,"max":12,"default":4},
+                      {"name":"windingOhm","unit":"Ohm","min":1e-3,"max":1e6,"default":200}],
+        "scales":{"voltageV":10,"currentA":1e-3},"domain":{"maxNormalizedFlux":20},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): anhysteretic power-law magnetizing branch referred to the primary; no static hysteresis."}})",
+    R"({"schemaVersion":1,"modelId":"synthetic.triode-12ax7","revision":1,"equation":"koren-triode","pins":["grid","plate","cathode"],
+        "parameters":[{"name":"mu","unit":"1","min":1,"max":1000,"default":100},
+                      {"name":"exponent","unit":"1","min":1,"max":2,"default":1.4},
+                      {"name":"kg1","unit":"V^x/A","min":1,"max":1e6,"default":1060},
+                      {"name":"kp","unit":"1","min":1,"max":1e4,"default":300},
+                      {"name":"kvb","unit":"V^2","min":1,"max":1e6,"default":300},
+                      {"name":"gridCoefficientA","unit":"A/V^1.5","min":1e-9,"max":0.1,"default":5e-4},
+                      {"name":"gridKneeV","unit":"V","min":1e-3,"max":1,"default":0.1}],
+        "scales":{"voltageV":100,"currentA":1e-3},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): Koren-form triode with round 12AX7-like illustrative constants (cutoff knee kp softened to 300 for bounded Newton effort); not a measured tube."}})",
+    R"({"schemaVersion":1,"modelId":"synthetic.pentode-ef86","revision":1,"equation":"koren-pentode","pins":["grid","plate","cathode","screen"],
+        "parameters":[{"name":"mu","unit":"1","min":1,"max":1000,"default":38},
+                      {"name":"exponent","unit":"1","min":1,"max":2,"default":1.35},
+                      {"name":"kg1","unit":"V^x/A","min":1,"max":1e6,"default":2000},
+                      {"name":"kg2","unit":"V^x/A","min":1,"max":1e7,"default":9000},
+                      {"name":"kp","unit":"1","min":1,"max":1e4,"default":75},
+                      {"name":"kvb","unit":"V","min":0.1,"max":1e4,"default":15},
+                      {"name":"gridCoefficientA","unit":"A/V^1.5","min":1e-9,"max":0.1,"default":5e-4},
+                      {"name":"gridKneeV","unit":"V","min":1e-3,"max":1,"default":0.1}],
+        "scales":{"voltageV":100,"currentA":1e-3},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): Koren-form pentode with round EF86-like illustrative constants; not a measured tube."}})",
+    R"({"schemaVersion":1,"modelId":"synthetic.npn-small-signal","revision":1,"equation":"ebers-moll-npn","pins":["base","collector","emitter"],
+        "parameters":[{"name":"saturationCurrentA","unit":"A","min":1e-18,"max":1e-9,"default":1e-14},
+                      {"name":"betaF","unit":"1","min":1,"max":2000,"default":200},
+                      {"name":"betaR","unit":"1","min":0.01,"max":100,"default":2},
+                      {"name":"thermalVoltageV","unit":"V","min":0.015,"max":0.05,"default":0.025693}],
+        "scales":{"voltageV":10,"currentA":1e-3},"domain":{"maxExpArg":29},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): transport-form Ebers-Moll NPN with arbitrary round constants; exponent domain 29 (about 40 mA), C1-linear beyond; no named transistor."}})",
+    R"({"schemaVersion":1,"modelId":"synthetic.njfet-small-signal","revision":1,"equation":"square-law-njfet","pins":["gate","drain","source"],
+        "parameters":[{"name":"betaAPerV2","unit":"A/V^2","min":1e-6,"max":1,"default":5e-4},
+                      {"name":"pinchOffV","unit":"V","min":0.1,"max":10,"default":2},
+                      {"name":"lambdaPerV","unit":"1/V","min":1e-6,"max":1,"default":0.01},
+                      {"name":"kneeV","unit":"V","min":1e-3,"max":1,"default":0.05},
+                      {"name":"gateSaturationCurrentA","unit":"A","min":1e-18,"max":1e-6,"default":1e-12},
+                      {"name":"thermalVoltageV","unit":"V","min":0.015,"max":0.05,"default":0.025693}],
+        "scales":{"voltageV":10,"currentA":1e-3},"domain":{"maxExpArg":23},
+        "provenance":{"kind":"synthetic-fixture","note":"synthetic-fixture, not calibrated hardware (G01): Shichman-Hodges N-JFET with softplus cutoff and gate diode (exponent domain 23, about 10 mA); arbitrary round constants."}})",
 };
 
 bool positive(const core::JsonValue* v) { return v && v->isNumber() && std::isfinite(v->number) && v->number > 0; }
@@ -102,11 +180,12 @@ bool parseDeviceManifest(const core::JsonValue& v, DeviceManifest& m, std::strin
     m.currentScaleA = sc->get("currentA")->number;
 
     const auto* dom = v.get("domain");
-    if (fam->needsDomain) {
+    if (fam->domainKey) {
         if (!dom || !dom->isObject() || dom->object.size() != 1) return bad("domain required");
-        const auto* e = dom->get("maxExpArg");
-        if (!positive(e) || e->number > 80) return bad("maxExpArg must be in (0,80]");
-        m.maxExpArg = e->number;
+        const auto* e = dom->get(fam->domainKey);
+        if (!positive(e) || e->number > 80) return bad(std::string(fam->domainKey) + " must be in (0,80]");
+        if (fam->eq == DeviceEquation::SaturatingInductor) m.maxNormalizedFlux = e->number;
+        else m.maxExpArg = e->number;
     } else if (dom) {
         return bad("domain not applicable");
     }
@@ -151,6 +230,30 @@ const std::vector<DeviceManifest>& syntheticFixtureCatalogue() {
 
 const DeviceManifest* findSyntheticFixture(const std::string& id) {
     for (const auto& m : syntheticFixtureCatalogue()) if (m.modelId == id) return &m;
+    return nullptr;
+}
+
+const char* syntheticCircuitJson(int index) noexcept {
+    return (index >= 0 && index < kSyntheticCircuitCount) ? kCircuit[index] : nullptr;
+}
+
+const std::vector<DeviceManifest>& syntheticCircuitCatalogue() {
+    static const std::vector<DeviceManifest> cat = [] {
+        std::vector<DeviceManifest> c;
+        for (int k = 0; k < kSyntheticCircuitCount; ++k) {
+            core::JsonValue j;
+            std::string e;
+            DeviceManifest m;
+            if (core::parseJson(kCircuit[k], j, e) && parseDeviceManifest(j, m, e)) c.push_back(std::move(m));
+        }
+        return c;
+    }();
+    return cat;
+}
+
+const DeviceManifest* findSyntheticDevice(const std::string& id) {
+    if (const auto* f = findSyntheticFixture(id)) return f;
+    for (const auto& m : syntheticCircuitCatalogue()) if (m.modelId == id) return &m;
     return nullptr;
 }
 

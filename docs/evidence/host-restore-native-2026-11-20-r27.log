@@ -1,0 +1,17 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-native-r14
+    Start 33: plugin_param_consistency
+1/6 Test #33: plugin_param_consistency .........   Passed    4.34 sec
+    Start 35: ui_snap_contract
+2/6 Test #35: ui_snap_contract .................   Passed    0.73 sec
+    Start 36: ui_snap_live_bridge
+3/6 Test #36: ui_snap_live_bridge ..............   Passed    4.86 sec
+    Start 37: ui_snap_panels
+4/6 Test #37: ui_snap_panels ...................   Passed   10.08 sec
+    Start 38: ui_snap_shell
+5/6 Test #38: ui_snap_shell ....................   Passed   27.01 sec
+    Start 39: ui_snap_workbench
+6/6 Test #39: ui_snap_workbench ................   Passed   11.85 sec
+
+100% tests passed out of 6
+
+Total Test time (real) =  58.89 sec

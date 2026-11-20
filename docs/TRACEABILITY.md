@@ -1,3 +1,53 @@
+# Current traceability — 2026-11-20 UTC
+
+The active consolidation candidate is draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16),
+branch `codex/cdfx-consolidation-20261119`. Read the current
+[consolidation handoff](engineering/CONSOLIDATION_HANDOFF.md),
+[source inventory](engineering/consolidation-state.json), and
+[rounds 14–18 review](audits/CONTINUATION_ROUNDS_14_18_2026-11-20.md).
+Included child PR #17–#25 are closed; their original branches and main are preserved.
+
+Current source includes the circuit/control runtime, JUCE adapter, history/queue
+primitives and custom editor with APVTS transactions, telemetry, prepared-runtime
+reset and host-persisted UI preferences. The latest continuation adds bounded
+background preset discovery, stable query identity, import/export/delete,
+cancellable Blueprint validation preview with Example RC and structured
+configuration/diagnostics, complete-envelope state admission, strict checkpoint
+identities, and theme/undo/redo correctness. One portable validation worker and
+one asynchronous catalog service own their respective work.
+
+The [pre-GIF merged execution record](evidence/continuation-round17-18-2026-11-20.json)
+retains 31/31 sanitized core and 6/6 offscreen native results. The
+[GIF integration](audits/GIF_INTEGRATION_2026-11-20.md) adds finite 20 Hz silent
+capture, owned software rendering, bounded encoding, exact destinations and
+repetition/error feedback. Its [execution record](evidence/gif-integration-2026-11-20-r20.json)
+reports 3/3 scoped sanitized resource/state suites, 1/1 stricter decoder suite,
+6/6 final native suites at b84d2ba, and independent full decoding of 63 frames.
+These distinct results qualify their pinned sources; exact-publication CI remains
+required. R24 dependency-verification and release-validator findings are repaired in
+[the R25 build-gate changes](audits/DEPENDENCY_SOURCE_GATE_2026-11-20_R25.md),
+with passing real native configuration and 24-case CMake fixtures plus clean R26
+code/defensive review. Windows harness/pluginval execution remains open. The
+[session audit](audits/SESSION_PUBLICATION_2026-11-20_R25.md) records the repaired
+partial host-state publication and stopped-audio exception edge. Final source
+1a3f8f3 passes 6/6 native suites in 59.50 s, and all R28 reviewers completed
+without new actionable findings in scope. The [control continuation audit](audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md)
+records R30 ignored-MIDI, key-glide/cutoff and sidechain repairs (11/11 sanitized
+suites, 129.24 s at 00e2957), followed by versioned engine checkpoint rejection.
+The new [typed control snapshot API](engineering/CONTROL_SNAPSHOTS.md) supports
+Manual/MIDI without harmonic maps. Independent component tests reproduced and
+fixed drift's missing rate identity; 10/10 component/affected suites pass in
+21.15 s at 3fb0846. All R29–R33 workers completed; final source reviews found no
+additional actionable defect, and the independent aggregate suite passes 1/1 in
+0.33 s at 787fe55 with unchanged application code.
+Six native plugin/editor suites pass in 57.40 s at the same source 3fb0846.
+Complete sound-preset transactions, Blueprint Apply, dynamic
+session/seed continuity, MP4 and remaining services, physical calibration and
+real-host/performance qualification remain open. Historical claims below retain
+older provenance and do not describe current test status.
+
+## Historical traceability retained for provenance
+
 # Traceability (requirement → implementation → test → evidence → status)
 
 Status vocabulary: Planned / Partial (primitive only) / Implemented / Blocked(gate). Nothing is "Implemented" unless its full acceptance test passes against the integrated engine.

@@ -1,0 +1,25 @@
+-- Checking for modules 'webkit2gtk-4.0;gtk+-x11-3.0'
+--   Package 'webkit2gtk-4.0', required by 'virtual:world', not found
+--   Package 'gtk+-x11-3.0', required by 'virtual:world', not found
+-- Configuring juceaide
+-- Building juceaide
+-- Exporting juceaide
+-- Testing juceaide
+-- Finished setting up juceaide
+-- Building CLAP with CLAP_CXX_STANDARD=20
+-- CLAP version: 1.2.10
+-- Creating CLAP CircuitDrift_CLAP from CircuitDrift
+-- Setting Misbehaviour handler level to 'Ignore'
+-- Setting Checking handler level to 'Minimal'
+-- Setting event resolution to 0 samples (no sample-accurate automation)
+-- Setting "Always split block" to OFF
+-- Setting "Use JUCE parameter ranges" to OFF
+-- Creating CLAP CircuitDriftLite_CLAP from CircuitDriftLite
+-- Setting Misbehaviour handler level to 'Ignore'
+-- Setting Checking handler level to 'Minimal'
+-- Setting event resolution to 0 samples (no sample-accurate automation)
+-- Setting "Always split block" to OFF
+-- Setting "Use JUCE parameter ranges" to OFF
+-- Configuring done (1.7s)
+-- Generating done (0.1s)
+-- Build files have been written to: /workspace/scratch/7a10b82b2964/cdfx-integration-native-r14

@@ -1,0 +1,102 @@
+{
+  "date": "2026-11-20",
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "base": "c6ebb22daab9c46edffa761b21f3fd45320e5074",
+  "target_branch": "codex/cdfx-consolidation-20261119",
+  "status": "full_tree_identity_verified_for_each_source_commit",
+  "publication": "Read the live PR16 head. The containing checkpoint adds evidence and handoff documentation after these mapped production/test commits.",
+  "parallel_history_preserved": "02a7331cc687e710f3a3c7c0ab023e651601685e",
+  "commits": [
+    {
+      "local": "bd378a62ad51cea18139fff615c9b987a139ada1",
+      "remote": "7fa507c9a7e726366e6412b8bb8b77f0c00784c5",
+      "tree": "0276b0b9e5981420828cb60c0e9286bfbc6a8605",
+      "message": "fix(ui): clear stale preset selection when results change"
+    },
+    {
+      "local": "8f97dc5a2c97e8347c92bbcbf58484efa4d6247a",
+      "remote": "1f72b01f59f14d1f8b657ee593043a1599ab9ad9",
+      "tree": "82ee4b852ac7f68c9dd99fcf219832c581162715",
+      "message": "fix(state): reject invalid in-memory checkpoint identities and kinds"
+    },
+    {
+      "local": "333760c438a1ddf638dccdfa1be44b38788e43a4",
+      "remote": "d9a7fcfeb6bc36afc99f406e1ef9273bf562f368",
+      "tree": "87dc4e35f8cadad881ca40074f0a72bf361b4fa5",
+      "message": "feat(editor): connect background blueprint validation and bounded preset search"
+    },
+    {
+      "local": "1bfc6f89c8849cf3d998ca01fa31016eb8f7de14",
+      "remote": "e3bf0c90db5a664d5a53d7add0ab24fc5ede9201",
+      "tree": "bf57ae92cd86012fffd3f54f00f227aea3a44322",
+      "message": "fix(state): bound writer payloads and reject lossy scene exports"
+    },
+    {
+      "local": "1d3e41361f6bc3d57bae7e03be0f280835732b07",
+      "remote": "14367798d6637aa6b64d369f01482e3e1c4018ba",
+      "tree": "1b4187252504594a3d5a5fb71f4b4f306871846e",
+      "message": "fix(ui): refresh retained editor text colors when themes change"
+    },
+    {
+      "local": "a2a4a3108ad33530bf16bb1475b6f885fcd5c348",
+      "remote": "2837d5af74f25e64dd4395e2356703bc1faa99ee",
+      "tree": "54ef5a82f27d355f07f6d734dcaa8dcbef08ab28",
+      "message": "fix(presets): scan bounded catalogs off the message thread\n\nCoalesce refresh requests on one lazy worker, cancel superseded scans and publish only the latest generation. Preserve cached query filtering while showing explicit loading, directory failure and truncation state, and clear row selection when a new snapshot arrives. Add deterministic cancellation/coalescing/retry coverage and live bridge snapshot-selection regressions. Focused state_preset passes under ASan, UBSan and float-cast-overflow; native UI execution remains for integration."
+    },
+    {
+      "local": "2bad4268499b8de993bd504f48b934e2f107a403",
+      "remote": "1e688322ed8c8d502313ece055a636aa6dad32b7",
+      "tree": "b4c5a24191d123698010326372a7a198c3f2ec8e",
+      "message": "fix(ui): invalidate stale blueprint validation previews"
+    },
+    {
+      "local": "c73d6b9b9ebe6b22d03e2b72fd6b9d1b40bc97bb",
+      "remote": "dbb9a3504d3d6d0c5c24bdfd14f0c85c4262c4c9",
+      "tree": "d3500619040e027da15717274a879e22e146e2e0",
+      "message": "fix(ui): preserve current text colors through undo and redo\n\nTrack plain editor notifications independently of field callbacks, retain editing history, and refresh placeholder colors with the theme. Detach registrations safely when editors move or outlive their content. Add a final asynchronous panel regression covering rendered glyph colors, caret and selection, callbacks, both theme directions, and registration lifetimes. Native compilation and before/after execution are reserved for the integration owner.",
+      "parents": [
+        "1e688322ed8c8d502313ece055a636aa6dad32b7"
+      ]
+    },
+    {
+      "local": "9630ae03b4be4bc74b1d01d6bbf42b5259d8faec",
+      "remote": "6cb28a110c4c9a66e80d16fe243307a5c164a2f3",
+      "tree": "a9163ba5fa93f38c03d8f2826f85a87dabee5bed",
+      "message": "merge: preserve concurrent R14 lineage and verification records\n\nRetain the portable validator, asynchronous catalog and stricter local state guards as the source baseline. Follow-up reconciliation commits import the parallel implementation's unique compiler cancellation, UI capability/diagnostic and complete-envelope preflight contracts. Both parent histories and all independent evidence are preserved; this intermediate source is not a qualification checkpoint.",
+      "parents": [
+        "dbb9a3504d3d6d0c5c24bdfd14f0c85c4262c4c9",
+        "02a7331cc687e710f3a3c7c0ab023e651601685e"
+      ]
+    },
+    {
+      "local": "0849f8da8a66594d3012bba3fdc8c2e6490c6d62",
+      "remote": "e898016e7c2047d9636588fb2d8b7c64f55150ee",
+      "tree": "6ea225b77017a448a6c9fd43c9926bc984973aa6",
+      "message": "fix(state): reconcile complete resource admission and checkpoint guards\n\nRetain the remote exact encoded-envelope preflight and its boundary regressions while preserving strict local checkpoint kind, UTF-8 identity and parameter-count admission. Run resource checks before publication semantic traversal, and keep private-field stripping, reader roundtrip and output-on-success behavior. Scoped source review and diff validation only; combined execution belongs to the integration owner."
+    },
+    {
+      "local": "194e529f401813a6789c47b602f102517469a900",
+      "remote": "88dbff91b9dd1b1fc5156650baf334bb3fb3d427",
+      "tree": "9a55b3c2052641ab4beb34db2b5663988413b066",
+      "message": "fix(presets): retain query selection by identity and reject stale snapshots\n\nReconcile explicit-row activation and stable query identity with asynchronous catalog generations. New snapshots and manual refresh still require reselection, including snapshots consumed during a query. Preserve catalog error rendering and the existing final theme-history loop. Retain remote ignored-entry, zero-budget and ordering checks through the bounded scan API. No worker scanning or bridge API changes; source and diff review only, execution remains with integration."
+    },
+    {
+      "local": "fe961dfdf928179b4e4c5e2fe3e0dbafcd38b094",
+      "remote": "456fb409e2fc21e6d93bc2b99edfe95c996ef843",
+      "tree": "4d537e0cd94b033fc61527b6781728a359c3e0c9",
+      "message": "feat(blueprint): reconcile validation preview and cancellation contracts"
+    },
+    {
+      "local": "4dcd584f995c261b189774ea8f416fda40ad97a0",
+      "remote": "c6beb37b0851dd07f752464920d4f359e8b8af21",
+      "tree": "15ec5fe8522c2721befc9ee5e017dcd527cdc756",
+      "message": "test(ui): execute reconciled blueprint panel regressions"
+    },
+    {
+      "local": "8ff0adfea571e977adec128622209f63bf997d1d",
+      "remote": "65b3a259c5dc657e59adea3a2df8a2efbb82e155",
+      "tree": "476353329e03b5b9657af170cf735ac9ddc00163",
+      "message": "test(presets): publish a replacement snapshot during query lookup"
+    }
+  ]
+}

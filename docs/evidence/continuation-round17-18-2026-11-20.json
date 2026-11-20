@@ -1,0 +1,242 @@
+{
+  "date": "2026-11-20",
+  "source_sha": "4dcd584f995c261b189774ea8f416fda40ad97a0",
+  "source_tree": "15ec5fe8522c2721befc9ee5e017dcd527cdc756",
+  "core": {
+    "result": "passed",
+    "passed": 31,
+    "total": 31,
+    "elapsed_seconds": 211.91,
+    "compiler": "GCC 14.2",
+    "production_optimization": "-O1 -g0",
+    "test_optimization": "-O1 -g0 except test_state_safety.cpp translation unit at -O0 after the previously recorded resource limit",
+    "sanitizers": [
+      "AddressSanitizer",
+      "UndefinedBehaviorSanitizer",
+      "float-cast-overflow"
+    ],
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "cases": [
+      {
+        "name": "acceptance_core",
+        "seconds": 2.40755,
+        "result": "passed"
+      },
+      {
+        "name": "state_safety",
+        "seconds": 2.30657,
+        "result": "passed"
+      },
+      {
+        "name": "oversampling_safety",
+        "seconds": 0.0837334,
+        "result": "passed"
+      },
+      {
+        "name": "solver_safety",
+        "seconds": 0.00970329,
+        "result": "passed"
+      },
+      {
+        "name": "primitive_safety",
+        "seconds": 0.0271406,
+        "result": "passed"
+      },
+      {
+        "name": "ui_numeric_input",
+        "seconds": 0.00544521,
+        "result": "passed"
+      },
+      {
+        "name": "registry_codegen_fresh",
+        "seconds": 0.0255484,
+        "result": "passed"
+      },
+      {
+        "name": "docs_validation_only",
+        "seconds": 0.0965523,
+        "result": "passed"
+      },
+      {
+        "name": "engine_devices",
+        "seconds": 0.0475877,
+        "result": "passed"
+      },
+      {
+        "name": "engine_runtime",
+        "seconds": 54.2771,
+        "result": "passed"
+      },
+      {
+        "name": "engine_checkpoint",
+        "seconds": 0.830817,
+        "result": "passed"
+      },
+      {
+        "name": "engine_t21",
+        "seconds": 56.0854,
+        "result": "passed"
+      },
+      {
+        "name": "engine_stress",
+        "seconds": 66.818,
+        "result": "passed"
+      },
+      {
+        "name": "control_macros",
+        "seconds": 0.172631,
+        "result": "passed"
+      },
+      {
+        "name": "control_key",
+        "seconds": 0.0485645,
+        "result": "passed"
+      },
+      {
+        "name": "control_pitch",
+        "seconds": 4.4522,
+        "result": "passed"
+      },
+      {
+        "name": "control_tempo",
+        "seconds": 0.0188547,
+        "result": "passed"
+      },
+      {
+        "name": "control_harmonic",
+        "seconds": 0.764268,
+        "result": "passed"
+      },
+      {
+        "name": "control_dynamics",
+        "seconds": 0.108292,
+        "result": "passed"
+      },
+      {
+        "name": "control_safety",
+        "seconds": 0.176626,
+        "result": "passed"
+      },
+      {
+        "name": "state_queue",
+        "seconds": 0.225741,
+        "result": "passed"
+      },
+      {
+        "name": "state_history",
+        "seconds": 0.172942,
+        "result": "passed"
+      },
+      {
+        "name": "state_preset",
+        "seconds": 1.53953,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_compile",
+        "seconds": 1.91022,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_timeline",
+        "seconds": 0.00818518,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_faults",
+        "seconds": 10.262,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_validation_worker",
+        "seconds": 0.298922,
+        "result": "passed"
+      },
+      {
+        "name": "cd_media_tests",
+        "seconds": 0.458944,
+        "result": "passed"
+      },
+      {
+        "name": "cd_network_tests",
+        "seconds": 1.75904,
+        "result": "passed"
+      },
+      {
+        "name": "cd_community_tests",
+        "seconds": 0.0617233,
+        "result": "passed"
+      },
+      {
+        "name": "runtime_processor",
+        "seconds": 6.40164,
+        "result": "passed"
+      }
+    ],
+    "command": "ctest --test-dir cdfx-integration-core-r14 --output-on-failure --parallel 1",
+    "log": "docs/evidence/core-ctest-continuation-2026-11-20-r17.log",
+    "junit": "docs/evidence/core-ctest-continuation-2026-11-20-r17.xml"
+  },
+  "source_equivalence": "Later 8ff0adf changes only native PresetSelectionRegressions.h; all portable source and build inputs remain identical. Documentation is validated separately after the final handoff update.",
+  "native": {
+    "result": "passed",
+    "source_sha": "8ff0adfea571e977adec128622209f63bf997d1d",
+    "source_tree": "476353329e03b5b9657af170cf735ac9ddc00163",
+    "passed": 6,
+    "total": 6,
+    "elapsed_seconds": 54.2,
+    "compiler": "Clang 19.1.7",
+    "optimization": "Custom -O0 -g0 -DNDEBUG",
+    "sanitizers": false,
+    "juce_sha": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+    "command": "native-env.sh ctest --test-dir cdfx-integration-native-r14 -C Custom -R ^(plugin_param_consistency|ui_snap_(live_bridge|panels|shell|workbench|contract))$ --output-on-failure --parallel 1",
+    "cases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 5.35132,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_contract",
+        "seconds": 1.30995,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 2.22203,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 12.2913,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_shell",
+        "seconds": 20.7302,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_workbench",
+        "seconds": 12.2761,
+        "result": "passed"
+      }
+    ],
+    "log": "docs/evidence/native-ctest-continuation-2026-11-20-r17.log",
+    "junit": "docs/evidence/native-ctest-continuation-2026-11-20-r17.xml",
+    "compile_result": "All six applications linked; final incremental build reported no work to do. Native wrapper supplies sysroot loader dependencies."
+  },
+  "theme_history_regression": {
+    "baseline_production": "2bad4268499b8de993bd504f48b934e2f107a403",
+    "test_source": "125b21732c76c865eb5cc5ae7e80384273aa7a06",
+    "baseline_failures": 9,
+    "baseline_elapsed_seconds": 11.03,
+    "baseline_log": "docs/evidence/theme-history-baseline-2026-11-20-r16.log",
+    "repair_source": "c73d6b9b9ebe6b22d03e2b72fd6b9d1b40bc97bb",
+    "repaired_execution": "Passed within final merged ui_snap_panels (12.29 s), native source8ff0adf."
+  },
+  "review_boundary": "Source reviews are separate from these executed tests; no TSan, leak, deadline, real DAW or physical-model qualification."
+}

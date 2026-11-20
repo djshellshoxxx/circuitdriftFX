@@ -229,7 +229,185 @@ bool validateV1(const JsonValue& v, StateDocument& d, std::string& why) {
     return true;
 }
 
+// A checkpoint may be constructed directly in memory without passing the JSON
+// reader. Fail before emitting an unreadable or unbounded session document.
+// A version mismatch with the prepared runtime is permitted on disk: restore
+// compatibility is decided separately by decideRestore().
+bool validCheckpointIdentity(const EngineCheckpoint& c) {
+    if (c.engineModelVersion.empty() || c.engineModelVersion.size() > 64 ||
+        c.modelRevision.empty() || c.modelRevision.size() > 64) return false;
+    // Reuse the shared UTF-8 validator on these already bounded strings.
+    try {
+        (void)core::writeJson(JsonValue::makeString(c.engineModelVersion));
+        (void)core::writeJson(JsonValue::makeString(c.modelRevision));
+    } catch (const std::invalid_argument&) { return false; }
+    return true;
+}
+
+void validateCheckpointForSave(const EngineCheckpoint& c) {
+    if (!validCheckpointIdentity(c))
+        throw std::invalid_argument("checkpoint identity must be nonempty UTF-8 and at most 64 bytes");
+    if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||
+        c.oversampling < 1 || c.oversampling > 16 ||
+        (c.oversampling & (c.oversampling - 1)) != 0 ||
+        c.sampleIndex > 9007199254740992ULL)
+        throw std::invalid_argument("invalid checkpoint scalar for schema v1");
+    if (c.electrical.size() > 4096 || c.thermal.size() > 4096 || c.rng.size() > 64 ||
+        !std::all_of(c.electrical.begin(), c.electrical.end(), [](double v) { return std::isfinite(v); }) ||
+        !std::all_of(c.thermal.begin(), c.thermal.end(), [](double v) { return std::isfinite(v); }))
+        throw std::invalid_argument("invalid checkpoint dynamic vector for schema v1");
+}
+
+// Count exactly what writeJson emits, without building an output string or
+// copying recursive JsonValues. Recursion stops at the reader's depth limit;
+// every token is charged with checked arithmetic before further traversal.
+struct JsonWriteBudget {
+    std::size_t limit, used = 0;
+    const char* sizeError;
+    JsonWriteBudget(std::size_t maxBytes, const char* error) : limit(maxBytes), sizeError(error) {}
+
+    void add(std::size_t bytes) {
+        if (bytes > limit - used) throw std::invalid_argument(sizeError);
+        used += bytes;
+    }
+    void string(std::string_view text) {
+        add(2);  // quotes
+        add(text.size());
+        for (unsigned char c : text) {
+            if (c < 0x20) add(5);  // writeJson emits every control byte as \u00xx
+            else if (c == '"' || c == '\\') add(1);
+        }
+    }
+    void number(double value) {
+        // Reuse the writer's locale-independent token format; at most 32 bytes.
+        add(core::writeJson(JsonValue::makeNumber(value)).size());
+    }
+    void array(std::size_t items) {
+        add(2);
+        if (items) add(items - 1);  // commas
+    }
+    void field(std::string_view key, bool& first) {
+        if (!first) add(1);
+        first = false;
+        string(key);
+        add(1);  // colon
+    }
+    void strings(const std::vector<std::string>& values) {
+        array(values.size());
+        for (const auto& text : values) string(text);
+    }
+    void value(const JsonValue& v, int ancestors) {
+        // JsonValue's default copy includes all members, including storage that
+        // the type tag excludes from serialization. Do not copy hidden trees.
+        if ((!v.isString() && !v.string.empty()) || (!v.isArray() && !v.array.empty()) ||
+            (!v.isObject() && !v.object.empty()))
+            throw std::invalid_argument("state writer resource preflight: inactive JSON storage");
+        if ((v.isArray() || v.isObject()) && ancestors >= core::JsonLimits{}.maxDepth)
+            throw std::invalid_argument("state writer resource preflight: nesting exceeds JSON depth bound");
+        switch (v.type) {
+            case JsonValue::Type::Null: add(4); break;
+            case JsonValue::Type::Bool: add(v.boolean ? 4 : 5); break;
+            case JsonValue::Type::Number: number(v.number); break;
+            case JsonValue::Type::String: string(v.string); break;
+            case JsonValue::Type::Array:
+                array(v.array.size());
+                for (const auto& child : v.array) value(child, ancestors + 1);
+                break;
+            case JsonValue::Type::Object: {
+                add(2);
+                bool first = true;
+                for (const auto& member : v.object) {
+                    field(member.first, first);
+                    value(member.second, ancestors + 1);
+                }
+                break;
+            }
+            default: throw std::invalid_argument("state writer resource preflight: invalid JSON type");
+        }
+    }
+};
+
+// The field names and nesting below mirror toJson. Keep this admission pass
+// ahead of that function: checking the completed tree is already too late to
+// bound its recursive copies. Reader roundtrip still owns semantic validation.
+void validateWriteResources(const StateDocument& d, bool forPublish) {
+    JsonWriteBudget budget(d.kind == DocKind::Scene ? kSceneMaxBytes : kSessionMaxBytes,
+                           "state writer resource preflight: document exceeds encoded byte bound");
+    budget.add(2);  // root object
+    bool first = true;
+    const auto field = [&](std::string_view key) { budget.field(key, first); };
+    field("schemaVersion"); budget.number(kSchemaVersion);
+    field("product"); budget.string("CircuitDrift");
+    field("kind"); budget.string(d.kind == DocKind::Scene ? "scene" : "session");
+    field("engineModelVersion"); budget.string(d.engineModelVersion);
+    field("minReaderVersion"); budget.number(d.minReaderVersion);
+    field("author"); budget.string(d.author);
+    field("title"); budget.string(d.title);
+    field("tags"); budget.strings(d.tags);
+    field("requiredFeatures"); budget.strings(d.requiredFeatures);
+    field("createdAt"); budget.string(d.createdAt);
+    const auto blueprint = [&](const JsonValue& value, int ancestors) {
+        JsonWriteBudget bounded(kBlueprintMaxBytes,
+                                "state writer resource preflight: blueprint exceeds encoded byte bound");
+        bounded.value(value, ancestors);
+        budget.add(bounded.used);
+    };
+    if (d.kind == DocKind::Scene) {
+        field("blueprint");
+        if (d.blueprints.empty()) budget.add(2);  // toJson's empty-object fallback
+        else blueprint(d.blueprints.front(), 1);
+    } else {
+        field("blueprints"); budget.array(d.blueprints.size());
+        for (const auto& value : d.blueprints) blueprint(value, 2);
+    }
+    field("baseParameters"); budget.add(2);
+    bool firstParameter = true;
+    for (const auto& parameter : d.baseParameters) {
+        budget.field(parameter.first, firstParameter);
+        budget.number(parameter.second);
+    }
+    field("macros"); budget.value(d.macros, 1);
+    field("timeline"); budget.value(d.timeline, 1);
+    field("faults"); budget.value(d.faults, 1);
+    field("seed"); budget.number(double(d.seed));
+    if (!forPublish) {
+        if (d.ui) { field("ui"); budget.value(*d.ui, 1); }
+        if (d.checkpoint) {
+            if (d.kind != DocKind::Session)
+                throw std::invalid_argument("checkpoint only allowed in sessions");
+            // This typed payload is already bounded before its small JSON tree
+            // is built; opaque input trees above are traversed only by reference.
+            validateCheckpointForSave(*d.checkpoint);
+            field("checkpoint"); budget.value(checkpointJson(*d.checkpoint), 1);
+        }
+        JsonWriteBudget metadata(kMetadataMaxBytes,
+                                 "state writer resource preflight: metadata exceeds encoded byte bound");
+        for (const auto& member : d.metadata) {
+            // validateV1 charges raw key bytes plus encoded value bytes here;
+            // the complete envelope separately charges escaped keys/punctuation.
+            metadata.add(member.first.size());
+            const auto beforeValue = metadata.used;
+            metadata.value(member.second, 1);
+            field(member.first); budget.add(metadata.used - beforeValue);
+        }
+    }
+}
+
+void validateParameterIdentities(const StateDocument& d) {
+    if (d.baseParameters.size() > core::kParamCount)
+        throw std::invalid_argument("too many in-memory parameter identities");
+    std::set<std::string> identities;
+    for (const auto& param : d.baseParameters)
+        if (!identities.insert(param.first).second)
+            throw std::invalid_argument("duplicate in-memory parameter identity");
+}
+
 JsonValue toJson(const StateDocument& d, bool forPublish) {
+    if (!forPublish && d.checkpoint) {
+        if (d.kind != DocKind::Session)
+            throw std::invalid_argument("checkpoint only allowed in sessions");
+        validateCheckpointForSave(*d.checkpoint);
+    }
     if (d.seed > 9007199254740992ULL || (!forPublish && d.checkpoint && d.checkpoint->sampleIndex > 9007199254740992ULL))
         throw std::invalid_argument("schema v1 numeric identities must be in [0, 2^53]");
     JsonValue o = JsonValue::makeObject();
@@ -344,13 +522,51 @@ bool loadState(std::string_view text, StateDocument& out, std::string& error, co
     return true;
 }
 
-std::string saveState(const StateDocument& doc) { return core::writeJson(toJson(doc, false)); }
+std::string saveState(const StateDocument& doc) {
+    // StateDocument may be assembled directly by a worker without loadState().
+    // Reject fields that toJson would otherwise silently normalize or overwrite.
+    if (!doc.macros.isObject() || !(doc.timeline.isObject() || doc.timeline.isArray()) ||
+        !(doc.faults.isObject() || doc.faults.isArray()))
+        throw std::invalid_argument("state writer requires valid macro/timeline/fault containers");
+    // toJson() emits only blueprints[0] for scenes. Reject extra entries
+    // instead of silently dropping a prepared A/B slot during a local save.
+    // Invalid enum values must not be normalized into scenes either.
+    if (doc.kind == DocKind::Scene) {
+        if (doc.blueprints.size() != 1)
+            throw std::invalid_argument("scene writer requires exactly one blueprint");
+    } else if (doc.kind == DocKind::Session) {
+        if (doc.blueprints.empty() || doc.blueprints.size() > 2)
+            throw std::invalid_argument("session writer requires 1..2 blueprints");
+    } else {
+        throw std::invalid_argument("invalid document kind");
+    }
+    validateWriteResources(doc, false);
+    validateParameterIdentities(doc);
+    std::set<std::string> identities;
+    for (const auto& field : doc.metadata)
+        if (knownKeys().count(field.first) || !identities.insert(field.first).second)
+            throw std::invalid_argument("duplicate or reserved metadata identity");
+
+    // Writer and reader must agree on the *complete* schema-v1 envelope,
+    // including size, blueprint, parameter, feature and metadata bounds.
+    // This is a worker/UI-thread operation, never part of audio processing.
+    std::string encoded = core::writeJson(toJson(doc, false));
+    StateDocument checked;
+    std::string why;
+    if (!loadState(encoded, checked, why))
+        throw std::invalid_argument("state writer produced invalid document: " + why);
+    return encoded;
+}
 
 bool publishScene(const StateDocument& doc, std::string& out, std::string& error) {
     if (doc.kind != DocKind::Scene) { error = "only scenes are published"; return false; }
-    if (!publishableContent(doc, error)) return false;
     std::string candidate;
-    try { candidate = core::writeJson(toJson(doc, true)); }
+    try {
+        validateWriteResources(doc, true);
+        validateParameterIdentities(doc);
+        if (!publishableContent(doc, error)) return false;
+        candidate = core::writeJson(toJson(doc, true));
+    }
     catch (const std::invalid_argument& e) { error = e.what(); return false; }
     StateDocument check;
     if (!loadState(candidate, check, error)) return false;  // publishing never emits an unreadable scene
@@ -359,7 +575,9 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
     return true;
 }
 
-bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error) {
+namespace {
+bool writeStateFileAtomicImpl(const std::string& path, std::string_view text,
+                              bool allowReplace, std::string& error) {
     if (path.empty() || path.find('\0') != std::string::npos) { error = "invalid destination path"; return false; }
 #if defined(_WIN32)
     if (path.size() > std::size_t(std::numeric_limits<int>::max())) { error = "destination path too long"; return false; }
@@ -394,8 +612,13 @@ bool saveStateFileAtomic(const std::string& path, const std::string& text, std::
     if (!written || !flushed || !closed) {
         DeleteFileW(temporary.c_str()); error = "temporary write, flush or close failed"; return false;
     }
-    if (!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(temporary.c_str()); error = "replace failed"; return false;
+    // Omitting REPLACE_EXISTING is an exclusive destination install; unlike an
+    // exists() precheck, a competing file creator cannot be silently overwritten.
+    const DWORD flags = (allowReplace ? MOVEFILE_REPLACE_EXISTING : DWORD{0}) | MOVEFILE_WRITE_THROUGH;
+    if (!MoveFileExW(temporary.c_str(), destination.c_str(), flags)) {
+        DeleteFileW(temporary.c_str());
+        error = allowReplace ? "replace failed" : "destination exists or atomic creation failed";
+        return false;
     }
 #else
     std::string pattern = path + ".tmp.XXXXXX";
@@ -421,22 +644,55 @@ bool saveStateFileAtomic(const std::string& path, const std::string& text, std::
     if (!written || !flushed || !closed) {
         ::unlink(temporary.data()); error = "temporary write, flush or close failed"; return false;
     }
-    if (::rename(temporary.data(), path.c_str()) != 0) {
-        ::unlink(temporary.data()); error = "replace failed"; return false;
+    // link() creates the destination only if it is absent, atomically; rename()
+    // retains the overwrite contract for existing callers. Both files reside
+    // in the same directory/filesystem. A dangling destination symlink also
+    // causes EEXIST, preventing accidental replacement.
+    const int installed = allowReplace ? ::rename(temporary.data(), path.c_str())
+                                      : ::link(temporary.data(), path.c_str());
+    if (installed != 0) {
+        ::unlink(temporary.data());
+        error = allowReplace ? "replace failed" : "destination exists or atomic creation failed";
+        return false;
     }
+    if (!allowReplace) (void)::unlink(temporary.data());
 #endif
     error.clear();
     return true;
+}
+}  // namespace
+
+bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error) {
+    return writeStateFileAtomicImpl(path, text, true, error);
+}
+
+bool saveBytesFileAtomic(const std::string& path, std::string_view bytes, std::string& error) {
+    return writeStateFileAtomicImpl(path, bytes, true, error);
+}
+
+bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& text, std::string& error) {
+    return writeStateFileAtomicImpl(path, text, false, error);
 }
 
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason) {
     if (!doc.checkpoint) { reason = "no checkpoint; configuration only (no exact continuity claimed)"; return RestoreDecision::NoCheckpoint; }
     const EngineCheckpoint& c = *doc.checkpoint;
-    if (c.engineModelVersion != rt.engineModelVersion) reason = "engine model version differs";
+    if (doc.kind != DocKind::Session) reason = "checkpoint only allowed in sessions";
+    else if (!validCheckpointIdentity(c)) reason = "invalid checkpoint identity";
+    else if (c.engineModelVersion != rt.engineModelVersion) reason = "engine model version differs";
     else if (c.modelRevision != rt.modelRevision) reason = "model revision differs";
     else if (c.sampleRate != rt.sampleRate) reason = "sample rate differs";
     else if (c.oversampling != rt.oversampling) reason = "oversampling differs";
-    else if (c.electrical.size() != rt.electricalSize || c.thermal.size() != rt.thermalSize) reason = "state layout differs";
+    else if (c.electrical.size() > 4096 || c.thermal.size() > 4096 || c.rng.size() > 64)
+        reason = "checkpoint dynamic state exceeds schema-v1 vector bounds";
+    else if (c.electrical.size() != rt.electricalSize || c.thermal.size() != rt.thermalSize ||
+             c.rng.size() != rt.rngSize) reason = "state layout differs (including rng)";
+    else if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||
+             c.oversampling < 1 || c.oversampling > 16 || (c.oversampling & (c.oversampling - 1)) ||
+             c.sampleIndex > 9007199254740992ULL ||
+             !std::all_of(c.electrical.begin(), c.electrical.end(), [](double x) { return std::isfinite(x); }) ||
+             !std::all_of(c.thermal.begin(), c.thermal.end(), [](double x) { return std::isfinite(x); }))
+        reason = "invalid checkpoint scalar or dynamic state";
     else { reason.clear(); return RestoreDecision::Restore; }
     reason += "; dynamic state reset to prepared warm initialisation";
     return RestoreDecision::ResetWarm;

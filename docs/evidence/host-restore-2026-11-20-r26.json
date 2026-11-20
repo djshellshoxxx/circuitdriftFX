@@ -1,0 +1,190 @@
+{
+  "date": "2026-11-20",
+  "finding": "Valid host-state replacement can expose mixed old/new parameters to audio.",
+  "baseline": {
+    "worker_test_commit": "32d6026181b07ef483657c2f6b58ec4ae5589c01",
+    "source_sha": "aae757197c16e21d6a85e28e53c862349763c12b",
+    "source_tree": "ea20b70b28d0f7730585f5bd840f87d1fc20ec4a",
+    "production_equivalence": "All src/ and plugin/src/ inputs byte-identical to previously qualified b84d2ba. Only regression header/test invocation added after gate/docs changes.",
+    "suite": "plugin_param_consistency",
+    "result": "failed_as_expected",
+    "failed_assertions": 4,
+    "elapsed_seconds": 4.19,
+    "case_seconds": 4.17514,
+    "failures": "Full and LITE each fail complete-old-configuration retention during paused valid replacement for zero-frame and positive-frame callbacks.",
+    "other_checks": "No fixture timing, exception, allocation or compatibility check failed; UI host-gesture regressions passed.",
+    "compiler": "Clang19.1.7",
+    "build_type": "Custom O0",
+    "sanitizers": false,
+    "log": "docs/evidence/host-restore-baseline-2026-11-20-r26.log",
+    "junit": "docs/evidence/host-restore-baseline-2026-11-20-r26.xml"
+  },
+  "repair": "Completed through 1a3f8f3; deterministic baseline failures repaired, six native suites pass, and fresh R28 code/bug/defensive reviews completed without a new actionable finding in assigned scopes.",
+  "qualification_boundary": "Deterministic native adapter/runtime functional regression; no measured audible artifact, full G12 continuity, TSan or real-DAW qualification.",
+  "first_fixed_run": {
+    "source_sha": "90d647d71ce57ea80e0e5f5f03519f969e4f2113",
+    "source_tree": "3a95bd0fd214a3902900c1cfea4d3970260ce91c",
+    "provenance": "Root pinned the worker draft before compilation. Final worker 3f49d5fbd4318eae2f4d72bcb5953d7df6bd2ce1 has byte-identical PluginProcessor.h/.cpp and HostRestoreRegressions.h.",
+    "suite": "plugin_param_consistency",
+    "result": "passed",
+    "passed": 1,
+    "total": 1,
+    "elapsed_seconds": 4.67,
+    "case_seconds": 4.55409,
+    "checks": "All four prior failures resolved. Expanded reentrant/exception/recovery and existing UI host-gesture/116parameter checks pass.",
+    "compiler": "Clang19.1.7",
+    "build_type": "Custom O0",
+    "sanitizers": false,
+    "log": "docs/evidence/host-restore-first-fix-2026-11-20-r26.log",
+    "junit": "docs/evidence/host-restore-first-fix-2026-11-20-r26.xml"
+  },
+  "first_full_native_run": {
+    "source_sha": "90d647d71ce57ea80e0e5f5f03519f969e4f2113",
+    "source_tree": "3a95bd0fd214a3902900c1cfea4d3970260ce91c",
+    "result": "passed",
+    "passed": 6,
+    "total": 6,
+    "elapsed_seconds": 58.89,
+    "compiler": "Clang 19.1.7",
+    "build_type": "Custom -O0 -g0 -DNDEBUG",
+    "sanitizers": false,
+    "cases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 4.34301,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_contract",
+        "seconds": 0.726051,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 4.85876,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 10.0825,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_shell",
+        "seconds": 27.0141,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_workbench",
+        "seconds": 11.8478,
+        "result": "passed"
+      }
+    ],
+    "log": "docs/evidence/host-restore-native-2026-11-20-r27.log",
+    "junit": "docs/evidence/host-restore-native-2026-11-20-r27.xml"
+  },
+  "r27_finding": {
+    "severity": "P2",
+    "finding": "After audio processes A, a successful stopped-audio B restore and then a thrown C notification leave audio on A while save/reprepare use B.",
+    "review": "Fresh bug and defensive reviewers independently confirmed the source edge; code review found no separate issue. All R27 workers completed before R28 started."
+  },
+  "fallback_baseline": {
+    "source_sha": "92400745f92866cb30145c427775a7cc896d80b9",
+    "source_tree": "5efa28bf1bb49f05b382d35b714bc4d82ae3d80a",
+    "result": "failed_as_expected",
+    "passed": 0,
+    "total": 1,
+    "elapsed_seconds": 4.36,
+    "compiler": "Clang 19.1.7",
+    "build_type": "Custom -O0 -g0 -DNDEBUG",
+    "sanitizers": false,
+    "cases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 4.34773,
+        "result": "failed"
+      }
+    ],
+    "log": "docs/evidence/host-fallback-baseline-2026-11-20-r28.log",
+    "junit": "docs/evidence/host-fallback-baseline-2026-11-20-r28.xml",
+    "failed_assertions": 4,
+    "production_equivalence": "Unchanged 90d647d production; only the three-state regression is added.",
+    "failures": "Full and LITE fail zero-frame adoption and subsequent positive-frame retention of B after A was last processed, B restored without a callback, and a later C notification threw. Saves correctly retain B."
+  },
+  "final_native_run": {
+    "source_sha": "1a3f8f35efd5080f60caf18172ec4454c26dea19",
+    "source_tree": "7af2c5b76ccf7badead4c314261b6eb7cf7d9f67",
+    "result": "passed",
+    "passed": 6,
+    "total": 6,
+    "elapsed_seconds": 59.5,
+    "compiler": "Clang 19.1.7",
+    "build_type": "Custom -O0 -g0 -DNDEBUG",
+    "sanitizers": false,
+    "cases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 4.30983,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_contract",
+        "seconds": 0.756587,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 4.7735,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 10.558,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_shell",
+        "seconds": 27.274,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_workbench",
+        "seconds": 11.8047,
+        "result": "passed"
+      }
+    ],
+    "log": "docs/evidence/host-fallback-native-2026-11-20-r28.log",
+    "junit": "docs/evidence/host-fallback-native-2026-11-20-r28.xml",
+    "remote_source_sha": "452bd97b36dd1bb0227a633ed2a42b558261a9e8",
+    "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+    "scope": "Six native processor/editor console suites. Host-restore regressions, UI host gestures, 116 registry parameters and all five editor suites pass.",
+    "build_note": "All six targets built and linked serially from this committed source. No test threshold relaxed."
+  },
+  "final_repair_contract": [
+    "Serialized non-audio host publishers stage and validate complete configuration before APVTS replacement.",
+    "A monotonically increasing odd/even sequence guards raw parameter snapshot reads; audio makes one attempt and never waits.",
+    "The complete pre-replacement fallback is published through a preallocated SPSC triple buffer before the odd marker, including LITE wrapper bypass.",
+    "A stable even read returns immediately, so an old pending fallback cannot overwrite an accepted raw configuration.",
+    "Thrown notifications retain the captured complete fallback for audio, saves and quiescent preparation until successful recovery. Raw APVTS/UI state may remain partial.",
+    "Lifecycle preparation does not reset buffer ownership indices; audio work is fixed-size with no locks, allocations, I/O or retry loop."
+  ],
+  "fresh_reviews": {
+    "round": 28,
+    "source_sha": "1a3f8f35efd5080f60caf18172ec4454c26dea19",
+    "source_tree": "7af2c5b76ccf7badead4c314261b6eb7cf7d9f67",
+    "workers": [
+      "fallback_code_audit_r28",
+      "fallback_bug_hunt_r28",
+      "fallback_security_audit_r28"
+    ],
+    "status": "All completed; no new actionable findings in specified ownership, exception, input-boundary and lifecycle scopes.",
+    "method": "Read-only source inspection; no reviewer builds, test runs, scans or exploit reproduction."
+  },
+  "coverage_limits": [
+    "The new three-state positive-frame assertion checks retention after zero-frame adoption, not an independent positive-first callback.",
+    "Concurrent ordinary automation during fallback capture is not tested; latest-at-odd rollback and cross-API serializability are not promised.",
+    "The second publisher promise proves caller start rather than arrival at the mutex.",
+    "Allocation instrumentation covers new/new[] rather than direct malloc or comprehensive lock/I/O traps.",
+    "No full G12 dynamic continuation, raw APVTS rollback on notification exception, TSan, optimized performance, real DAW or exact-publication Windows/pluginval qualification."
+  ]
+}

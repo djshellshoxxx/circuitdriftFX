@@ -1,3 +1,44 @@
+# Current checkpoint — 2026-11-20
+
+The active consolidation candidate is draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16),
+branch `codex/cdfx-consolidation-20261119`. Read the current
+[consolidation handoff](engineering/CONSOLIDATION_HANDOFF.md),
+[source inventory](engineering/consolidation-state.json), and audit records in
+`docs/audits/` before choosing or reporting work. Original branches and main are
+preserved; included child PR #17–#25 are closed. Older PR #9/#10/#14 still need
+semantic reconciliation.
+
+Current source includes the integrated circuit/control runtime, live custom JUCE
+editor, configuration/history/queue primitives, background preset discovery and
+file operations, Blueprint validation preview, host-persisted UI preferences and
+silent GIF capture. Coherent host-state restoration now includes a bounded
+fallback handoff for stopped-audio notification failures. Exact source 1a3f8f3
+passes 6/6 native suites in 59.50 s; all three fresh R28 reviews completed without
+new actionable findings in scope. See the [host-state evidence](evidence/host-restore-2026-11-20-r26.json).
+
+R30 repairs preserve ignored-MIDI processing, key glides/reachable cutoff notes
+and sidechain history/numeric bounds. Source 00e2957 passed 11/11 sanitized suites
+in 129.24 s. The revised engine algorithm identity rejects legacy checkpoints.
+New fixed-size control snapshots support Manual/MIDI with no harmonic maps;
+Audio selection is explicitly excluded. The independent component baseline
+exposed missing drift sample-rate identity, which is repaired. Source 3fb0846
+passes the component suite and nine affected suites: 10/10 in 21.15 s. See the
+[control audit](audits/CONTROL_CHECKPOINTS_2026-11-20_R29_R33.md) and
+[API contract](engineering/CONTROL_SNAPSHOTS.md).
+
+All R29–R33 workers completed. The final code and defensive reviews found no
+additional actionable defect; the independent aggregate suite passes 1/1 in
+0.33 s at 787fe55. Six native plugin/editor suites pass in 57.40 s at 3fb0846,
+whose application/native-test inputs are identical. Root owns builds and integration.
+The containing publication records this qualification; read live PR16 for its
+current head and CI. Next is fresh engine/runtime checkpoint work covering
+prepared reset state and pending conditions. Full dynamic session/seed continuity, coordinated sound
+presets and dynamic A/B, graph Apply, remaining providers/MP4, physical calibration,
+Windows validator/pluginval and real-host/performance qualification remain open.
+Historical claims below retain older provenance and are not current test status.
+
+## Historical checkpoint retained for provenance
+
 # Checkpoint
 
 Read [HANDOFF.md](HANDOFF.md) for ownership and restart packets, [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md) for source SHAs, reviewed defects and verification limits, and [TRACEABILITY.md](TRACEABILITY.md) for requirement status.

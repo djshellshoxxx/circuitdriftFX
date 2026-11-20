@@ -1,0 +1,577 @@
+Start testing: Nov 19 22:33 PST
+----------------------------------------------------------
+21/30 Testing: state_queue
+21/30 Test: state_queue
+Command: "<build-core>/tests/state/cd_state_queue_tests"
+Directory: <build-core>/tests/state
+"state_queue" start time: Nov 19 22:33 PST
+Output:
+----------------------------------------------------------
+  stress: pushed=5092 coalesced=10908
+test_queue: ok
+<end of output>
+Test time =   0.17 sec
+----------------------------------------------------------
+Test Passed.
+"state_queue" end time: Nov 19 22:33 PST
+"state_queue" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/30 Testing: engine_t21
+12/30 Test: engine_t21
+Command: "<build-core>/tests/engine/cd_engine_t21_tests"
+Directory: <build-core>/tests/engine
+"engine_t21" start time: Nov 19 22:33 PST
+Output:
+----------------------------------------------------------
+T21 integrated nominal (drive 12.04 dB, A=0.1) 64x reference floor: published window  -136.83 dB, settled window  -164.22 dB
+T21 integrated nominal circuit lane Studio 4x FIR   alias  -136.86 dB published,  -164.25 dB settled (limit -70 dB)
+T21 integrated nominal circuit lane Render 16x FIR  alias  -136.85 dB published,  -164.24 dB settled (limit -85 dB)
+T21 integrated nominal circuit lane 4x IIR          alias  -136.93 dB published,  -164.25 dB settled (no spec, info 0 dB)
+T21 integrated nominal circuit lane 2x FIR Draft    alias  -136.88 dB published,  -164.25 dB settled (no spec, info 0 dB)
+T21 integrated nominal full engine  Studio 4x FIR   alias  -105.60 dB published,  -105.72 dB settled (limit -70 dB)
+T21 integrated nominal full engine  Render 16x FIR  alias  -105.60 dB published,  -105.73 dB settled (limit -85 dB)
+T21 integrated hot     (drive 18.06 dB, A=0.3) 64x reference floor: published window   -81.82 dB, settled window  -109.68 dB
+T21 integrated hot     circuit lane Studio 4x FIR   alias   -79.57 dB published,   -84.81 dB settled (ungated, spec -70 dB)
+T21 integrated hot     circuit lane Render 16x FIR  alias   -81.87 dB published,  -109.69 dB settled (ungated, spec -85 dB) FINDING: exceeds spec
+T21 integrated hot     circuit lane 4x IIR          alias   -79.60 dB published,   -84.49 dB settled (no spec, info 0 dB)
+T21 integrated hot     circuit lane 2x FIR Draft    alias   -58.34 dB published,   -58.31 dB settled (no spec, info 0 dB)
+T21 integrated hot     full engine  Studio 4x FIR   alias   -77.34 dB published,   -85.53 dB settled (ungated, spec -70 dB)
+T21 integrated hot     full engine  Render 16x FIR  alias   -78.43 dB published,  -101.34 dB settled (ungated, spec -85 dB) FINDING: exceeds spec
+T21 integrated grid2V  (drive 24.08 dB, A=0.1) 64x reference floor: published window  -102.00 dB, settled window      n/a
+T21 integrated grid2V  circuit lane Studio 4x FIR   alias  -101.75 dB published,      n/a settled (ungated, spec -70 dB)
+T21 integrated grid2V  circuit lane Render 16x FIR  alias  -102.07 dB published,      n/a settled (ungated, spec -85 dB)
+T21 integrated grid2V  circuit lane 4x IIR          alias  -101.56 dB published,      n/a settled (no spec, info 0 dB)
+T21 integrated grid2V  circuit lane 2x FIR Draft    alias   -66.86 dB published,      n/a settled (no spec, info 0 dB)
+T21 integrated grid7V  (drive 30.10 dB, A=0.3) 64x reference floor: published window   -64.46 dB, settled window      n/a
+T21 integrated grid7V  circuit lane Studio 4x FIR   alias   -62.70 dB published,      n/a settled (ungated, spec -70 dB) FINDING: exceeds spec
+T21 integrated grid7V  circuit lane Render 16x FIR  alias   -64.50 dB published,      n/a settled (ungated, spec -85 dB) FINDING: exceeds spec
+T21 integrated grid7V  circuit lane 4x IIR          alias   -63.27 dB published,      n/a settled (no spec, info 0 dB)
+T21 integrated grid7V  circuit lane 2x FIR Draft    alias   -46.82 dB published,      n/a settled (no spec, info 0 dB)
+ENGINE T21 PASSED
+<end of output>
+Test time =  58.14 sec
+----------------------------------------------------------
+Test Passed.
+"engine_t21" end time: Nov 19 22:34 PST
+"engine_t21" time elapsed: 00:00:58
+----------------------------------------------------------
+
+10/30 Testing: engine_runtime
+10/30 Test: engine_runtime
+Command: "<build-core>/tests/engine/cd_engine_runtime_tests"
+Directory: <build-core>/tests/engine
+"engine_runtime" start time: Nov 19 22:33 PST
+Output:
+----------------------------------------------------------
+[ok] t20EngineClock 0.08 s
+[ok] macroEndpoints 2.99 s
+latency: FIR pad 84, IIR pad 5, total FIR 168 samples @48k
+[ok] latency 3.73 s
+[ok] mixZeroAndGains 1.47 s
+[ok] abUnity 3.24 s
+[ok] containment 5.38 s
+[ok] quality 6.49 s
+[ok] conditions 2.78 s
+[ok] checkpoint 1.52 s
+partition invariance: 7 partitions incl. 0-frame calls compared
+[ok] partitionInvariance 13.99 s
+T22: fs 48000 dry 15 Hz -3.0103 dB, wet on/off ratio -3.0103 dB
+T22 DC step dry: mean -256.5 dBFS, peak -256.5 dBFS (peak includes AC ripple/LF tails)
+T22 DC step wet: mean -213.4 dBFS, peak -112.3 dBFS (peak includes AC ripple/LF tails)
+[ok] t22Integrated 12.97 s
+T23 RMS match: residual 0.034 dB, compensation 0.402
+soft clip Studio 4x: sample peak 1.40602 (bound 2.10664)
+soft clip Draft 1x: sample peak 1.00000 (bound 1.00000)
+soft clip ZeroLatency: sample peak 1.00000 (bound 1.00000)
+[ok] t23MatchAndClip 11.35 s
+[ok] telemetryAndThermal 5.49 s
+ENGINE RUNTIME PASSED
+<end of output>
+Test time =  71.52 sec
+----------------------------------------------------------
+Test Passed.
+"engine_runtime" end time: Nov 19 22:35 PST
+"engine_runtime" time elapsed: 00:01:11
+----------------------------------------------------------
+
+26/30 Testing: blueprint_faults
+26/30 Test: blueprint_faults
+Command: "<build-core>/tests/blueprint/cd_blueprint_faults_tests"
+Directory: <build-core>/tests/blueprint
+"blueprint_faults" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+blueprint_faults: all checks passed
+<end of output>
+Test time =  12.95 sec
+----------------------------------------------------------
+Test Passed.
+"blueprint_faults" end time: Nov 19 22:35 PST
+"blueprint_faults" time elapsed: 00:00:12
+----------------------------------------------------------
+
+16/30 Testing: control_pitch
+16/30 Test: control_pitch
+Command: "<build-core>/tests/control/cd_control_pitch_tests"
+Directory: <build-core>/tests/control
+"control_pitch" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+pitch: worst pure-sine error 12.05 cents
+pitch: all passed
+<end of output>
+Test time =   4.62 sec
+----------------------------------------------------------
+Test Passed.
+"control_pitch" end time: Nov 19 22:35 PST
+"control_pitch" time elapsed: 00:00:04
+----------------------------------------------------------
+
+30/30 Testing: runtime_processor
+30/30 Test: runtime_processor
+Command: "<build-core>/tests/runtime/cd_runtime_processor_tests"
+Directory: <build-core>/tests/runtime
+"runtime_processor" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+runtime_processor: PASS (0 failures)
+<end of output>
+Test time =   7.12 sec
+----------------------------------------------------------
+Test Passed.
+"runtime_processor" end time: Nov 19 22:35 PST
+"runtime_processor" time elapsed: 00:00:07
+----------------------------------------------------------
+
+1/30 Testing: acceptance_core
+1/30 Test: acceptance_core
+Command: "<build-core>/tests/cd_tests"
+Directory: <build-core>/tests
+"acceptance_core" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+[section] registry
+[section] t20_thermal
+[section] t21_oversampling
+T21 nominal 64x reference self-alias  -190.43 dB
+T21 nominal Studio 4x FIR        alias  -150.33 dB (limit -70 dB)
+T21 nominal Render 16x FIR       alias  -150.19 dB (limit -85 dB)
+T21 nominal 4x IIR               alias  -135.29 dB (no spec, info 0 dB)
+T21 nominal 2x FIR Draft         alias   -81.72 dB (no spec, info 0 dB)
+T21 hot     64x reference self-alias  -172.08 dB
+T21 hot     Studio 4x FIR        alias   -53.13 dB (ungated, spec -70 dB) FINDING: exceeds spec
+T21 hot     Render 16x FIR       alias  -126.09 dB (ungated, spec -85 dB)
+T21 hot     4x IIR               alias   -53.09 dB (no spec, info 0 dB)
+T21 hot     2x FIR Draft         alias   -29.56 dB (no spec, info 0 dB)
+[section] t21_halfband
+[section] t22_hpf
+[section] t23_clip_match
+[section] p02_json
+[section] p02_manifest
+[section] p02_mna
+[section] p04_state
+P04 checkpoint continuation peak error 0 V (T24 limit 1e-6)
+ALL PASSED
+<end of output>
+Test time =   2.55 sec
+----------------------------------------------------------
+Test Passed.
+"acceptance_core" end time: Nov 19 22:35 PST
+"acceptance_core" time elapsed: 00:00:02
+----------------------------------------------------------
+
+28/30 Testing: cd_network_tests
+28/30 Test: cd_network_tests
+Command: "<build-core>/tests/network/cd_network_tests"
+Directory: <build-core>/tests/network
+"cd_network_tests" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+  concurrent: 8 members x 3000 ticks, worst publish+consume 8141 us (informational)
+network tests passed
+<end of output>
+Test time =   2.25 sec
+----------------------------------------------------------
+Test Passed.
+"cd_network_tests" end time: Nov 19 22:35 PST
+"cd_network_tests" time elapsed: 00:00:02
+----------------------------------------------------------
+
+24/30 Testing: blueprint_compile
+24/30 Test: blueprint_compile
+Command: "<build-core>/tests/blueprint/cd_blueprint_compile_tests"
+Directory: <build-core>/tests/blueprint
+"blueprint_compile" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+T10 fuzz: 2000 mutants, 17 accepted, 1983 rejected
+blueprint_compile: all checks passed
+<end of output>
+Test time =   2.76 sec
+----------------------------------------------------------
+Test Passed.
+"blueprint_compile" end time: Nov 19 22:35 PST
+"blueprint_compile" time elapsed: 00:00:02
+----------------------------------------------------------
+
+23/30 Testing: state_preset
+23/30 Test: state_preset
+Command: "<build-core>/tests/state/cd_state_preset_tests"
+Directory: <build-core>/tests/state
+"state_preset" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+test_preset: ok
+<end of output>
+Test time =   1.69 sec
+----------------------------------------------------------
+Test Passed.
+"state_preset" end time: Nov 19 22:35 PST
+"state_preset" time elapsed: 00:00:01
+----------------------------------------------------------
+
+11/30 Testing: engine_checkpoint
+11/30 Test: engine_checkpoint
+Command: "<build-core>/tests/engine/cd_engine_checkpoint_tests"
+Directory: <build-core>/tests/engine
+"engine_checkpoint" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+engine checkpoint safety: PASS (0 failures)
+<end of output>
+Test time =   1.41 sec
+----------------------------------------------------------
+Test Passed.
+"engine_checkpoint" end time: Nov 19 22:35 PST
+"engine_checkpoint" time elapsed: 00:00:01
+----------------------------------------------------------
+
+18/30 Testing: control_harmonic
+18/30 Test: control_harmonic
+Command: "<build-core>/tests/control/cd_control_harmonic_tests"
+Directory: <build-core>/tests/control
+"control_harmonic" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+harmonic: synthetic map valid points 201 / 697
+harmonic: all passed
+<end of output>
+Test time =   0.89 sec
+----------------------------------------------------------
+Test Passed.
+"control_harmonic" end time: Nov 19 22:35 PST
+"control_harmonic" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/30 Testing: control_macros
+14/30 Test: control_macros
+Command: "<build-core>/tests/control/cd_control_macros_tests"
+Directory: <build-core>/tests/control
+"control_macros" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+macros: all passed
+<end of output>
+Test time =   0.26 sec
+----------------------------------------------------------
+Test Passed.
+"control_macros" end time: Nov 19 22:35 PST
+"control_macros" time elapsed: 00:00:00
+----------------------------------------------------------
+
+27/30 Testing: cd_media_tests
+27/30 Test: cd_media_tests
+Command: "<build-core>/tests/media/cd_media_tests"
+Directory: <build-core>/tests/media
+"cd_media_tests" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+  queue: producer 20000 pushes in 4 ms, consumed 23, torn 0, disorder 0, dropped 19977
+media tests passed
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"cd_media_tests" end time: Nov 19 22:35 PST
+"cd_media_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/30 Testing: state_safety
+2/30 Test: state_safety
+Command: "<build-core>/tests/cd_state_safety_tests"
+Directory: <build-core>/tests
+"state_safety" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+comma-locale execution: 3 locale selections passed
+state safety regressions: PASSED (0 failures)
+<end of output>
+Test time =   0.22 sec
+----------------------------------------------------------
+Test Passed.
+"state_safety" end time: Nov 19 22:35 PST
+"state_safety" time elapsed: 00:00:00
+----------------------------------------------------------
+
+20/30 Testing: control_safety
+20/30 Test: control_safety
+Command: "<build-core>/tests/control/cd_control_safety_tests"
+Directory: <build-core>/tests/control
+"control_safety" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+control safety: all passed
+<end of output>
+Test time =   0.20 sec
+----------------------------------------------------------
+Test Passed.
+"control_safety" end time: Nov 19 22:35 PST
+"control_safety" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/30 Testing: oversampling_safety
+3/30 Test: oversampling_safety
+Command: "<build-core>/tests/cd_oversampling_safety_tests"
+Directory: <build-core>/tests
+"oversampling_safety" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+oversampling safety: PASS (0 failures)
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"oversampling_safety" end time: Nov 19 22:35 PST
+"oversampling_safety" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/30 Testing: docs_validation_only
+8/30 Test: docs_validation_only
+Command: "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3.12" "<checkout>/tools/validate_planned_features.py"
+Directory: <build-core>/tests
+"docs_validation_only" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+PASS: 23 feature mappings, 23 acceptance IDs, 10 UX contracts
+PASS: 116 parameter IDs, defaults, enums and mapping roundtrips
+PASS: synthetic diode manifest example matches device-manifest schema
+PASS: blueprint schema, synthetic fixture semantics and three invalid cases
+PASS: synthetic thermal and tempo-recovery formula checks
+PASS: 93 repository-local Markdown link targets
+DOCUMENT PACKAGE VALIDATED. No plugin/audio/GPU/host tests were run.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"docs_validation_only" end time: Nov 19 22:35 PST
+"docs_validation_only" time elapsed: 00:00:00
+----------------------------------------------------------
+
+22/30 Testing: state_history
+22/30 Test: state_history
+Command: "<build-core>/tests/state/cd_state_history_tests"
+Directory: <build-core>/tests/state
+"state_history" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+  worst case: 20 transactions, 50.08 MiB of 56 MiB
+test_history: ok
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"state_history" end time: Nov 19 22:35 PST
+"state_history" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/30 Testing: control_dynamics
+19/30 Test: control_dynamics
+Command: "<build-core>/tests/control/cd_control_dynamics_tests"
+Directory: <build-core>/tests/control
+"control_dynamics" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+dynamics: all passed
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"control_dynamics" end time: Nov 19 22:35 PST
+"control_dynamics" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/30 Testing: control_key
+15/30 Test: control_key
+Command: "<build-core>/tests/control/cd_control_key_tests"
+Directory: <build-core>/tests/control
+"control_key" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+key: all passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"control_key" end time: Nov 19 22:35 PST
+"control_key" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/30 Testing: engine_devices
+9/30 Test: engine_devices
+Command: "<build-core>/tests/engine/cd_engine_devices_tests"
+Directory: <build-core>/tests/engine
+"engine_devices" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+ENGINE DEVICES PASSED
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"engine_devices" end time: Nov 19 22:35 PST
+"engine_devices" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/30 Testing: registry_codegen_fresh
+7/30 Test: registry_codegen_fresh
+Command: "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3.12" "<checkout>/tools/gen_param_registry.py" "--check"
+Directory: <build-core>/tests
+"registry_codegen_fresh" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"registry_codegen_fresh" end time: Nov 19 22:35 PST
+"registry_codegen_fresh" time elapsed: 00:00:00
+----------------------------------------------------------
+
+29/30 Testing: cd_community_tests
+29/30 Test: cd_community_tests
+Command: "<build-core>/tests/community/cd_community_tests"
+Directory: <build-core>/tests/community
+"cd_community_tests" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+community tests passed
+<end of output>
+Test time =   0.06 sec
+----------------------------------------------------------
+Test Passed.
+"cd_community_tests" end time: Nov 19 22:35 PST
+"cd_community_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/30 Testing: primitive_safety
+5/30 Test: primitive_safety
+Command: "<build-core>/tests/cd_primitive_safety_tests"
+Directory: <build-core>/tests
+"primitive_safety" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+PRIMITIVE SAFETY PASSED
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"primitive_safety" end time: Nov 19 22:35 PST
+"primitive_safety" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/30 Testing: control_tempo
+17/30 Test: control_tempo
+Command: "<build-core>/tests/control/cd_control_tempo_tests"
+Directory: <build-core>/tests/control
+"control_tempo" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+tempo: all passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"control_tempo" end time: Nov 19 22:35 PST
+"control_tempo" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/30 Testing: solver_safety
+4/30 Test: solver_safety
+Command: "<build-core>/tests/cd_solver_safety_tests"
+Directory: <build-core>/tests
+"solver_safety" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+SOLVER SAFETY PASSED
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"solver_safety" end time: Nov 19 22:35 PST
+"solver_safety" time elapsed: 00:00:00
+----------------------------------------------------------
+
+25/30 Testing: blueprint_timeline
+25/30 Test: blueprint_timeline
+Command: "<build-core>/tests/blueprint/cd_blueprint_timeline_tests"
+Directory: <build-core>/tests/blueprint
+"blueprint_timeline" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+blueprint_timeline: all checks passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"blueprint_timeline" end time: Nov 19 22:35 PST
+"blueprint_timeline" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/30 Testing: ui_numeric_input
+6/30 Test: ui_numeric_input
+Command: "<build-core>/tests/cd_ui_input_tests"
+Directory: <build-core>/tests
+"ui_numeric_input" start time: Nov 19 22:35 PST
+Output:
+----------------------------------------------------------
+UI numeric-input regressions passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ui_numeric_input" end time: Nov 19 22:35 PST
+"ui_numeric_input" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/30 Testing: engine_stress
+13/30 Test: engine_stress
+Command: "<build-core>/tests/engine/cd_engine_stress_tests"
+Directory: <build-core>/tests/engine
+"engine_stress" start time: Nov 19 22:34 PST
+Output:
+----------------------------------------------------------
+stress scale 0.042 (sanitized build)
+stress Eco healthy       2.50 s audio: peak 1.021, non-finite 0, |y|>8 0, fallbacks 0, solver failures 0
+stress Studio healthy    2.50 s audio: peak 1.021, non-finite 0, |y|>8 0, fallbacks 0, solver failures 0
+stress Render healthy    0.62 s audio: peak 1.020, non-finite 0, |y|>8 0, fallbacks 0, solver failures 0
+stress Eco hostile       2.50 s audio: peak 7.996, non-finite 0, |y|>8 0, fallbacks 11, solver failures 344
+stress Studio hostile    2.50 s audio: peak 7.985, non-finite 0, |y|>8 0, fallbacks 20, solver failures 367
+stress Render hostile    0.62 s audio: peak 7.985, non-finite 0, |y|>8 0, fallbacks 4, solver failures 0
+stress wall time 56.3 s
+rate smoke  44100 Hz Studio 4x: peak 1.020 failures 0
+rate smoke  96000 Hz Studio 4x: peak 1.031 failures 0
+rate smoke 192000 Hz Render 16x: peak 1.007 failures 0
+BENCH Eco (4x, cap 6)           96703 ns/stereo sample  12.378 ms per 128-frame block (max 15.828)  464.2% of real time  [sanitized build: not representative]
+BENCH Studio (4x, cap 8)       151883 ns/stereo sample  19.441 ms per 128-frame block (max 172.779)  729.0% of real time  [sanitized build: not representative]
+BENCH Render (16x, cap 12)     413128 ns/stereo sample  52.880 ms per 128-frame block (max 291.209)  1983.0% of real time  [sanitized build: not representative]
+ENGINE STRESS PASSED
+<end of output>
+Test time =  69.57 sec
+----------------------------------------------------------
+Test Passed.
+"engine_stress" end time: Nov 19 22:36 PST
+"engine_stress" time elapsed: 00:01:09
+----------------------------------------------------------
+
+End testing: Nov 19 22:36 PST

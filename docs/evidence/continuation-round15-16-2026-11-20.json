@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-20",
+  "source_sha": "2bad4268499b8de993bd504f48b934e2f107a403",
+  "tree": "b4c5a24191d123698010326372a7a198c3f2ec8e",
+  "native": {
+    "compiler": "Clang 19.1.7",
+    "build_type": "Custom",
+    "optimization": "-O0 -g0",
+    "sanitizers": [],
+    "elapsed_seconds": 12.97,
+    "tests": 2,
+    "failures": 0,
+    "cases": [
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 1.41954,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 11.513,
+        "result": "passed"
+      }
+    ],
+    "dependencies": {
+      "JUCE": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+      "CLAP": "repository-pinned source"
+    },
+    "command": "native-env.sh ctest --test-dir cdfx-integration-native-r14 -C Custom -R ^ui_snap_(live_bridge|panels)$ --output-on-failure --parallel 1",
+    "visual_review": [
+      "Dark Blueprint at 100% and 420 px; existing document glyphs readable",
+      "Light Presets at 100% and 360 px; no clipping in inspected image"
+    ],
+    "qualification": "Offscreen native integration only; no DAW, MSVC, realtime deadline, leak or physical-model qualification"
+  },
+  "successor_tests": {
+    "catalog": {
+      "worker_source": "c9fdf90a8ff67ceb68ccf0d58bef66ddd95e575e",
+      "suite": "state_preset",
+      "result": "passed",
+      "elapsed_seconds": 2.59,
+      "compiler": "GCC 14.2",
+      "optimization": "-O1",
+      "sanitizers": [
+        "address",
+        "undefined",
+        "float-cast-overflow"
+      ],
+      "leak_detection": "disabled under tracer"
+    },
+    "report_freshness": {
+      "worker_source": "431a51b0423966941e880ccef8e06e139c469cab",
+      "baseline_production": "1bfc6f89c8849cf3d998ca01fa31016eb8f7de14",
+      "regression_source": "same test source for baseline and repair",
+      "baseline_failures": 5,
+      "baseline_seconds": 1.32,
+      "suite": "ui_snap_live_bridge",
+      "result": "passed",
+      "elapsed_seconds": 1.56
+    }
+  },
+  "scope": "This qualified source precedes the round-16 undo/redo theme-history repair; later evidence must identify its own source."
+}

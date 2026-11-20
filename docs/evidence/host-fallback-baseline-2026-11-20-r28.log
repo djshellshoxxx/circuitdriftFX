@@ -1,0 +1,19 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-native-r14
+    Start 33: plugin_param_consistency
+1/1 Test #33: plugin_param_consistency .........***Failed    4.35 sec
+FAIL host restore: first resumed zero-frame callback adopts B after failed C
+FAIL host restore: resumed positive-frame callback retains B after failed C
+FAIL host restore: first resumed zero-frame callback adopts B after failed C
+FAIL host restore: resumed positive-frame callback retains B after failed C
+4 check(s) failed
+Host restore regressions: FAILED (4 failures)
+UI host-gesture regressions passed
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   4.36 sec
+
+The following tests FAILED:
+	 33 - plugin_param_consistency (Failed)
+Errors while running CTest

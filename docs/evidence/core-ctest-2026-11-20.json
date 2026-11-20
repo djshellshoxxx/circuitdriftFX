@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "local_source_commit": "1f21fe95a2d495be8abe797437730577575f9d58",
+  "published_source_commit": "581745655f26c51fb1b092fe4db9e32a035e1f0c",
+  "source_tree": "8394d34c4c0e15900e77188332cec1b37d2621af",
+  "compiler": "GCC 14.2.0",
+  "configuration": "Release, -O1 -g0 -DNDEBUG",
+  "sanitizers": [
+    "address",
+    "undefined",
+    "float-cast-overflow"
+  ],
+  "leak_detection": false,
+  "leak_detection_reason": "Local execution tracer does not support LeakSanitizer",
+  "suites": 30,
+  "passed": 30,
+  "failed": 0,
+  "wall_seconds": 127.89,
+  "tests": [
+    {
+      "name": "acceptance_core",
+      "status": "run",
+      "seconds": 2.5509,
+      "failed": false
+    },
+    {
+      "name": "state_safety",
+      "status": "run",
+      "seconds": 0.220012,
+      "failed": false
+    },
+    {
+      "name": "oversampling_safety",
+      "status": "run",
+      "seconds": 0.079232,
+      "failed": false
+    },
+    {
+      "name": "solver_safety",
+      "status": "run",
+      "seconds": 0.0136943,
+      "failed": false
+    },
+    {
+      "name": "primitive_safety",
+      "status": "run",
+      "seconds": 0.0259245,
+      "failed": false
+    },
+    {
+      "name": "ui_numeric_input",
+      "status": "run",
+      "seconds": 0.00618909,
+      "failed": false
+    },
+    {
+      "name": "registry_codegen_fresh",
+      "status": "run",
+      "seconds": 0.023918,
+      "failed": false
+    },
+    {
+      "name": "docs_validation_only",
+      "status": "run",
+      "seconds": 0.0758495,
+      "failed": false
+    },
+    {
+      "name": "engine_devices",
+      "status": "run",
+      "seconds": 0.0333387,
+      "failed": false
+    },
+    {
+      "name": "engine_runtime",
+      "status": "run",
+      "seconds": 71.5186,
+      "failed": false
+    },
+    {
+      "name": "engine_checkpoint",
+      "status": "run",
+      "seconds": 1.40789,
+      "failed": false
+    },
+    {
+      "name": "engine_t21",
+      "status": "run",
+      "seconds": 58.138,
+      "failed": false
+    },
+    {
+      "name": "engine_stress",
+      "status": "run",
+      "seconds": 69.5668,
+      "failed": false
+    },
+    {
+      "name": "control_macros",
+      "status": "run",
+      "seconds": 0.256836,
+      "failed": false
+    },
+    {
+      "name": "control_key",
+      "status": "run",
+      "seconds": 0.0430326,
+      "failed": false
+    },
+    {
+      "name": "control_pitch",
+      "status": "run",
+      "seconds": 4.62452,
+      "failed": false
+    },
+    {
+      "name": "control_tempo",
+      "status": "run",
+      "seconds": 0.0149481,
+      "failed": false
+    },
+    {
+      "name": "control_harmonic",
+      "status": "run",
+      "seconds": 0.893567,
+      "failed": false
+    },
+    {
+      "name": "control_dynamics",
+      "status": "run",
+      "seconds": 0.108169,
+      "failed": false
+    },
+    {
+      "name": "control_safety",
+      "status": "run",
+      "seconds": 0.199296,
+      "failed": false
+    },
+    {
+      "name": "state_queue",
+      "status": "run",
+      "seconds": 0.172934,
+      "failed": false
+    },
+    {
+      "name": "state_history",
+      "status": "run",
+      "seconds": 0.0129831,
+      "failed": false
+    },
+    {
+      "name": "state_preset",
+      "status": "run",
+      "seconds": 1.6859,
+      "failed": false
+    },
+    {
+      "name": "blueprint_compile",
+      "status": "run",
+      "seconds": 2.76226,
+      "failed": false
+    },
+    {
+      "name": "blueprint_timeline",
+      "status": "run",
+      "seconds": 0.0100164,
+      "failed": false
+    },
+    {
+      "name": "blueprint_faults",
+      "status": "run",
+      "seconds": 12.9548,
+      "failed": false
+    },
+    {
+      "name": "cd_media_tests",
+      "status": "run",
+      "seconds": 0.307826,
+      "failed": false
+    },
+    {
+      "name": "cd_network_tests",
+      "status": "run",
+      "seconds": 2.2459,
+      "failed": false
+    },
+    {
+      "name": "cd_community_tests",
+      "status": "run",
+      "seconds": 0.0575165,
+      "failed": false
+    },
+    {
+      "name": "runtime_processor",
+      "status": "run",
+      "seconds": 7.11781,
+      "failed": false
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-core-r14
+    Start 22: control_snapshots
+1/1 Test #22: control_snapshots ................***Failed    0.06 sec
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:134 !actual.canRestore(candidate) | invalid/incompatible state rejected: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:138 same(actual.save(), before) | rejection changes no live fields: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 0: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames -1: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 1: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 79: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 80: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 441: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 1: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 479: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 480: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 997: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 2304: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 23: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:134 !actual.canRestore(candidate) | invalid/incompatible state rejected: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:138 same(actual.save(), before) | rejection changes no live fields: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 0: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames -1: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 1: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 79: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 80: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 441: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 1: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 479: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 480: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 997: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 2304: drift sample-rate identity
+FAIL /workspace/scratch/7a10b82b2964/circuitdriftFX/tests/control/test_snapshots.cpp:145 a.q() == b.q() && a.ticks() == b.ticks() && a.cutoffOct(0.73) == b.cutoffOct(0.73) && a.delayMs(0.91) == b.delayMs(0.91) && same(a.save(), b.save()) | exact future drift, frames 23: drift sample-rate identity
+control snapshots: 28 failure(s)
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.06 sec
+
+The following tests FAILED:
+	 22 - control_snapshots (Failed)
+Errors while running CTest

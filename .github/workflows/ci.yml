@@ -1,20 +1,108 @@
 name: ci
 on:
+  # Branch pushes are covered by their pull request run; push runs only on main (no duplicate jobs).
   push:
-    paths-ignore: ['**.md', 'docs/**/*.md']
+    branches: [main]
+    paths-ignore: ['**.md', '**.png', '**.jpg', '**.jpeg', '**.gif', '**.svg']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**/*.md']
+    paths-ignore: ['**.md', '**.png', '**.jpg', '**.jpeg', '**.gif', '**.svg']
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
 jobs:
+  # Fast gate: portable core with ASan/UBSan, registry freshness and documentation validation.
   linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          # PR merge commits are not the feature head; qualify and label the exact source commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON
       - run: cmake --build build --parallel 4
       - run: ctest --test-dir build --output-on-failure --parallel 4
+      - name: Plugin generated tables are fresh
+        run: python3 plugin/tools/gen_plugin_tables.py --check
+
+  # Windows: MSVC build of the core, the plugin products (VST3, CLAP, Standalone x2) and their tests.
+  windows:
+    needs: linux
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      CD_DEPS_CACHE_DIR: ${{ github.workspace }}/.deps-cache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          # PR merge commits are not the feature head; qualify and label the exact source commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test shared Windows validation gate
+        shell: pwsh
+        timeout-minutes: 2
+        run: ./plugin/packaging/test_validate_windows.ps1
+      # Dependency sources only; FetchContent subbuild scripts stay in this run's build tree.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            .deps-cache/juce-src
+            .deps-cache/clap_juce_extensions-src
+          key: deps-sources-v2-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake', 'cmake/PinnedDependencies.cmake') }}
+      # Default generator = newest installed Visual Studio on the image (no hard-coded VS year).
+      - name: Toolchain info
+        shell: bash
+        run: |
+          cmake --version | head -1
+          "/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property displayName || true
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build-plugin -A x64
+          -DCD_BUILD_PLUGIN=ON
+          -DCD_DEPS_CACHE_DIR="$CD_DEPS_CACHE_DIR"
+          -DCMAKE_MSVC_RUNTIME_LIBRARY='MultiThreaded$<$<CONFIG:Debug>:Debug>'
+      - name: Build core, tests and plugins (Release)
+        shell: bash
+        run: cmake --build build-plugin --config Release --parallel 4
+      # Python-based registry/docs checks already run in the Linux gate.
+      - name: Test
+        shell: bash
+        run: >
+          ctest --test-dir build-plugin -C Release --output-on-failure --parallel 4
+          -E "registry_codegen_fresh|docs_validation_only"
+      - name: Stage artefacts and smoke-check entry points
+        shell: bash
+        run: bash plugin/packaging/stage_windows.sh build-plugin dist Release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: circuitdrift-windows-x64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist
+          retention-days: 14
+          if-no-files-found: error
+      # Same pinned, hash-verified validator as release.yml (GPLv3 CI tool, never packaged), so
+      # host-compatibility failures surface on the PR instead of at release time.
+      - name: pluginval (VST3, strictness 5)
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          PLUGINVAL_URL: https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          PLUGINVAL_SHA256: c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab
+        run: |
+          Invoke-WebRequest -Uri $env:PLUGINVAL_URL -OutFile pluginval.zip
+          $actual = (Get-FileHash pluginval.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:PLUGINVAL_SHA256) { throw "pluginval hash mismatch: $actual" }
+          Expand-Archive pluginval.zip -DestinationPath pluginval-tool
+          ./plugin/packaging/validate_windows.ps1 -ValidatorPath 'pluginval-tool/pluginval.exe' -BundleDirectory 'dist/VST3' -LogDirectory 'pluginval-logs' -TimeoutMilliseconds 300000
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: pluginval-logs-${{ github.event.pull_request.head.sha || github.sha }}
+          path: pluginval-logs
+          retention-days: 14
+          if-no-files-found: ignore

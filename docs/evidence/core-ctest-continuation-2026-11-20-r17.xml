@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="31"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="211"
+	timestamp="2026-11-20T08:46:55"
+	>
+	<testcase name="acceptance_core" classname="acceptance_core" time="2.40755" status="run">
+		<properties/>
+		<system-out>[section] registry
+[section] t20_thermal
+[section] t21_oversampling
+T21 nominal 64x reference self-alias  -190.43 dB
+T21 nominal Studio 4x FIR        alias  -150.33 dB (limit -70 dB)
+T21 nominal Render 16x FIR       alias  -150.19 dB (limit -85 dB)
+T21 nominal 4x IIR               alias  -135.29 dB (no spec, info 0 dB)
+T21 nominal 2x FIR Draft         alias   -81.72 dB (no spec, info 0 dB)
+T21 hot     64x reference self-alias  -172.08 dB
+T21 hot     Studio 4x FIR        alias   -53.13 dB (ungated, spec -70 dB) FINDING: exceeds spec
+T21 hot     Render 16x FIR       alias  -126.09 dB (ungated, spec -85 dB)
+T21 hot     4x IIR               alias   -53.09 dB (no spec, info 0 dB)
+T21 hot     2x FIR Draft         alias   -29.56 dB (no spec, info 0 dB)
+[section] t21_halfband
+[section] t22_hpf
+[section] t23_clip_match
+[section] p02_json
+[section] p02_manifest
+[section] p02_mna
+[section] p04_state
+P04 checkpoint continuation peak error 0 V (T24 limit 1e-6)
+ALL PASSED
+</system-out>
+	</testcase>
+	<testcase name="state_safety" classname="state_safety" time="2.30657" status="run">
+		<properties/>
+		<system-out>comma-locale execution: 3 locale selections passed
+state safety regressions: PASSED (0 failures)
+</system-out>
+	</testcase>
+	<testcase name="oversampling_safety" classname="oversampling_safety" time="0.0837334" status="run">
+		<properties/>
+		<system-out>oversampling safety: PASS (0 failures)
+</system-out>
+	</testcase>
+	<testcase name="solver_safety" classname="solver_safety" time="0.00970329" status="run">
+		<properties/>
+		<system-out>SOLVER SAFETY PASSED
+</system-out>
+	</testcase>
+	<testcase name="primitive_safety" classname="primitive_safety" time="0.0271406" status="run">
+		<properties/>
+		<system-out>PRIMITIVE SAFETY PASSED
+</system-out>
+	</testcase>
+	<testcase name="ui_numeric_input" classname="ui_numeric_input" time="0.00544521" status="run">
+		<properties/>
+		<system-out>UI numeric-input regressions passed
+</system-out>
+	</testcase>
+	<testcase name="registry_codegen_fresh" classname="registry_codegen_fresh" time="0.0255484" status="run">
+		<properties/>
+		<system-out></system-out>
+	</testcase>
+	<testcase name="docs_validation_only" classname="docs_validation_only" time="0.0965523" status="run">
+		<properties/>
+		<system-out>PASS: 23 feature mappings, 23 acceptance IDs, 10 UX contracts
+PASS: 116 parameter IDs, defaults, enums and mapping roundtrips
+PASS: synthetic diode manifest example matches device-manifest schema
+PASS: blueprint schema, synthetic fixture semantics and three invalid cases
+PASS: synthetic thermal and tempo-recovery formula checks
+PASS: 131 repository-local Markdown link targets
+DOCUMENT PACKAGE VALIDATED. No plugin/audio/GPU/host tests were run.
+</system-out>
+	</testcase>
+	<testcase name="engine_devices" classname="engine_devices" time="0.0475877" status="run">
+		<properties/>
+		<system-out>ENGINE DEVICES PASSED
+</system-out>
+	</testcase>
+	<testcase name="engine_runtime" classname="engine_runtime" time="54.2771" status="run">
+		<properties/>
+		<system-out>[ok] t20EngineClock 0.09 s
+[ok] macroEndpoints 1.75 s
+latency: FIR pad 84, IIR pad 5, total FIR 168 samples @48k
+[ok] latency 2.98 s
+[ok] mixZeroAndGains 1.38 s
+[ok] abUnity 2.89 s
+[ok] containment 2.95 s
+[ok] quality 2.86 s
+[ok] conditions 1.50 s
+[ok] checkpoint 1.14 s
+partition invariance: 7 partitions incl. 0-frame calls compared
+[ok] partitionInvariance 9.18 s
+T22: fs 48000 dry 15 Hz -3.0103 dB, wet on/off ratio -3.0103 dB
+T22 DC step dry: mean -256.5 dBFS, peak -256.5 dBFS (peak includes AC ripple/LF tails)
+T22 DC step wet: mean -213.4 dBFS, peak -112.3 dBFS (peak includes AC ripple/LF tails)
+[ok] t22Integrated 12.38 s
+T23 RMS match: residual 0.034 dB, compensation 0.402
+soft clip Studio 4x: sample peak 1.40602 (bound 2.10664)
+soft clip Draft 1x: sample peak 1.00000 (bound 1.00000)
+soft clip ZeroLatency: sample peak 1.00000 (bound 1.00000)
+[ok] t23MatchAndClip 10.51 s
+[ok] telemetryAndThermal 4.64 s
+ENGINE RUNTIME PASSED
+</system-out>
+	</testcase>
+	<testcase name="engine_checkpoint" classname="engine_checkpoint" time="0.830817" status="run">
+		<properties/>
+		<system-out>engine checkpoint safety: PASS (0 failures)
+</system-out>
+	</testcase>
+	<testcase name="engine_t21" classname="engine_t21" time="56.0854" status="run">
+		<properties/>
+		<system-out>T21 integrated nominal (drive 12.04 dB, A=0.1) 64x reference floor: published window  -136.83 dB, settled window  -164.22 dB
+T21 integrated nominal circuit lane Studio 4x FIR   alias  -136.86 dB published,  -164.25 dB settled (limit -70 dB)
+T21 integrated nominal circuit lane Render 16x FIR  alias  -136.85 dB published,  -164.24 dB settled (limit -85 dB)
+T21 integrated nominal circuit lane 4x IIR          alias  -136.93 dB published,  -164.25 dB settled (no spec, info 0 dB)
+T21 integrated nominal circuit lane 2x FIR Draft    alias  -136.88 dB published,  -164.25 dB settled (no spec, info 0 dB)
+T21 integrated nominal full engine  Studio 4x FIR   alias  -105.60 dB published,  -105.72 dB settled (limit -70 dB)
+T21 integrated nominal full engine  Render 16x FIR  alias  -105.60 dB published,  -105.73 dB settled (limit -85 dB)
+T21 integrated hot     (drive 18.06 dB, A=0.3) 64x reference floor: published window   -81.82 dB, settled window  -109.68 dB
+T21 integrated hot     circuit lane Studio 4x FIR   alias   -79.57...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="engine_stress" classname="engine_stress" time="66.818" status="run">
+		<properties/>
+		<system-out>stress scale 0.042 (sanitized build)
+stress Eco healthy       2.50 s audio: peak 1.021, non-finite 0, |y|&gt;8 0, fallbacks 0, solver failures 0
+stress Studio healthy    2.50 s audio: peak 1.021, non-finite 0, |y|&gt;8 0, fallbacks 0, solver failures 0
+stress Render healthy    0.62 s audio: peak 1.020, non-finite 0, |y|&gt;8 0, fallbacks 0, solver failures 0
+stress Eco hostile       2.50 s audio: peak 7.996, non-finite 0, |y|&gt;8 0, fallbacks 11, solver failures 344
+stress Studio hostile    2.50 s audio: peak 7.985, non-finite 0, |y|&gt;8 0, fallbacks 20, solver failures 367
+stress Render hostile    0.62 s audio: peak 7.985, non-finite 0, |y|&gt;8 0, fallbacks 4, solver failures 0
+stress wall time 53.4 s
+rate smoke  44100 Hz Studio 4x: peak 1.020 failures 0
+rate smoke  96000 Hz Studio 4x: peak 1.031 failures 0
+rate smoke 192000 Hz Render 16x: peak 1.007 failures 0
+BENCH Eco (4x, cap 6)          143749 ns/stereo sample  18.400 ms per 128-frame block (max 93.576)  690.0% of real time  [sanitized build: not representative]
+BENCH...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="control_macros" classname="control_macros" time="0.172631" status="run">
+		<properties/>
+		<system-out>macros: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_key" classname="control_key" time="0.0485645" status="run">
+		<properties/>
+		<system-out>key: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_pitch" classname="control_pitch" time="4.4522" status="run">
+		<properties/>
+		<system-out>pitch: worst pure-sine error 12.05 cents
+pitch: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_tempo" classname="control_tempo" time="0.0188547" status="run">
+		<properties/>
+		<system-out>tempo: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_harmonic" classname="control_harmonic" time="0.764268" status="run">
+		<properties/>
+		<system-out>harmonic: synthetic map valid points 201 / 697
+harmonic: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_dynamics" classname="control_dynamics" time="0.108292" status="run">
+		<properties/>
+		<system-out>dynamics: all passed
+</system-out>
+	</testcase>
+	<testcase name="control_safety" classname="control_safety" time="0.176626" status="run">
+		<properties/>
+		<system-out>control safety: all passed
+</system-out>
+	</testcase>
+	<testcase name="state_queue" classname="state_queue" time="0.225741" status="run">
+		<properties/>
+		<system-out>  stress: pushed=5692 coalesced=10308
+test_queue: ok
+</system-out>
+	</testcase>
+	<testcase name="state_history" classname="state_history" time="0.172942" status="run">
+		<properties/>
+		<system-out>  worst case: 20 transactions, 50.08 MiB of 56 MiB
+test_history: ok
+</system-out>
+	</testcase>
+	<testcase name="state_preset" classname="state_preset" time="1.53953" status="run">
+		<properties/>
+		<system-out>test_preset: ok
+</system-out>
+	</testcase>
+	<testcase name="blueprint_compile" classname="blueprint_compile" time="1.91022" status="run">
+		<properties/>
+		<system-out>T10 cancellation: interrupted check 5 after 1 probe Newton iterations
+T10 fuzz: 2000 mutants, 17 accepted, 1983 rejected
+blueprint_compile: all checks passed
+</system-out>
+	</testcase>
+	<testcase name="blueprint_timeline" classname="blueprint_timeline" time="0.00818518" status="run">
+		<properties/>
+		<system-out>blueprint_timeline: all checks passed
+</system-out>
+	</testcase>
+	<testcase name="blueprint_faults" classname="blueprint_faults" time="10.262" status="run">
+		<properties/>
+		<system-out>blueprint_faults: all checks passed
+</system-out>
+	</testcase>
+	<testcase name="blueprint_validation_worker" classname="blueprint_validation_worker" time="0.298922" status="run">
+		<properties/>
+		<system-out>blueprint validation worker: ok
+</system-out>
+	</testcase>
+	<testcase name="cd_media_tests" classname="cd_media_tests" time="0.458944" status="run">
+		<properties/>
+		<system-out>  queue: producer 20000 pushes in 6 ms, consumed 32, torn 0, disorder 0, dropped 19968
+media tests passed
+</system-out>
+	</testcase>
+	<testcase name="cd_network_tests" classname="cd_network_tests" time="1.75904" status="run">
+		<properties/>
+		<system-out>  concurrent: 8 members x 3000 ticks, worst publish+consume 7861 us (informational)
+network tests passed
+</system-out>
+	</testcase>
+	<testcase name="cd_community_tests" classname="cd_community_tests" time="0.0617233" status="run">
+		<properties/>
+		<system-out>community tests passed
+</system-out>
+	</testcase>
+	<testcase name="runtime_processor" classname="runtime_processor" time="6.40164" status="run">
+		<properties/>
+		<system-out>runtime_processor: PASS (0 failures)
+</system-out>
+	</testcase>
+</testsuite>

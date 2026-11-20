@@ -45,6 +45,17 @@ public:
     // Non-finite/negative powers or overflowing updates are ignored without changing state.
     double updateMeanSquares(double dryPower, double wetPower) noexcept;
     double gain() const noexcept { return std::exp(logGain_); }
+    // Checkpoint state {E_dry, E_wet, log gain}; rejected input leaves the state unchanged.
+    void getState(double* s3) const noexcept { s3[0] = ed_; s3[1] = ew_; s3[2] = logGain_; }
+    bool isStateValid(const double* s3) const noexcept {
+        return s3 && s3[0] >= 0.0 && s3[1] >= 0.0 && std::isfinite(s3[0]) &&
+               std::isfinite(s3[1]) && std::isfinite(s3[2]) && std::abs(s3[2]) <= std::log(4.0);
+    }
+    bool setState(const double* s3) noexcept {
+        if (!isStateValid(s3)) return false;
+        ed_ = s3[0]; ew_ = s3[1]; logGain_ = s3[2];
+        return true;
+    }
 private:
     double aEnv_ = 0, aGain_ = 0, ed_ = 0, ew_ = 0, logGain_ = 0;
 };

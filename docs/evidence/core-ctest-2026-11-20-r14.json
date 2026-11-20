@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-20",
+  "local_source_sha": "4ae50007c512f02202b966f239fbdfbc25c2c2ce",
+  "remote_source_sha": "5fd0a291f831bc05a39a3ac9f2eef45be32df93f",
+  "source_tree": "8225a21e93550fbb4ee47f6a73a84fcac2d1c32d",
+  "result": "passed",
+  "passed_suites": 30,
+  "total_suites": 30,
+  "elapsed_seconds": 335.45,
+  "compiler": "GCC 14.2.0",
+  "optimization": "-O1 -g0 -DNDEBUG",
+  "instrumentation": [
+    "AddressSanitizer",
+    "UndefinedBehaviorSanitizer",
+    "float-cast-overflow"
+  ],
+  "leak_detection": "disabled under the tracing environment; no leak qualification",
+  "command": "ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build-core --output-on-failure --parallel 2",
+  "environment_note": "The first part overlapped the native incremental build; elapsed time is not a performance qualification.",
+  "suites": [
+    {
+      "name": "acceptance_core",
+      "result": "passed",
+      "elapsed_seconds": 2.91094
+    },
+    {
+      "name": "state_safety",
+      "result": "passed",
+      "elapsed_seconds": 1.22787
+    },
+    {
+      "name": "oversampling_safety",
+      "result": "passed",
+      "elapsed_seconds": 0.152881
+    },
+    {
+      "name": "solver_safety",
+      "result": "passed",
+      "elapsed_seconds": 0.147917
+    },
+    {
+      "name": "primitive_safety",
+      "result": "passed",
+      "elapsed_seconds": 0.058327
+    },
+    {
+      "name": "ui_numeric_input",
+      "result": "passed",
+      "elapsed_seconds": 0.0139595
+    },
+    {
+      "name": "registry_codegen_fresh",
+      "result": "passed",
+      "elapsed_seconds": 0.0806953
+    },
+    {
+      "name": "docs_validation_only",
+      "result": "passed",
+      "elapsed_seconds": 0.17196
+    },
+    {
+      "name": "engine_devices",
+      "result": "passed",
+      "elapsed_seconds": 0.118481
+    },
+    {
+      "name": "engine_runtime",
+      "result": "passed",
+      "elapsed_seconds": 257.514
+    },
+    {
+      "name": "engine_checkpoint",
+      "result": "passed",
+      "elapsed_seconds": 1.14628
+    },
+    {
+      "name": "engine_t21",
+      "result": "passed",
+      "elapsed_seconds": 211.526
+    },
+    {
+      "name": "engine_stress",
+      "result": "passed",
+      "elapsed_seconds": 123.879
+    },
+    {
+      "name": "control_macros",
+      "result": "passed",
+      "elapsed_seconds": 0.363932
+    },
+    {
+      "name": "control_key",
+      "result": "passed",
+      "elapsed_seconds": 0.160649
+    },
+    {
+      "name": "control_pitch",
+      "result": "passed",
+      "elapsed_seconds": 10.3511
+    },
+    {
+      "name": "control_tempo",
+      "result": "passed",
+      "elapsed_seconds": 0.048907
+    },
+    {
+      "name": "control_harmonic",
+      "result": "passed",
+      "elapsed_seconds": 1.73769
+    },
+    {
+      "name": "control_dynamics",
+      "result": "passed",
+      "elapsed_seconds": 0.259914
+    },
+    {
+      "name": "control_safety",
+      "result": "passed",
+      "elapsed_seconds": 0.328552
+    },
+    {
+      "name": "state_queue",
+      "result": "passed",
+      "elapsed_seconds": 0.328729
+    },
+    {
+      "name": "state_history",
+      "result": "passed",
+      "elapsed_seconds": 0.0241272
+    },
+    {
+      "name": "state_preset",
+      "result": "passed",
+      "elapsed_seconds": 2.60588
+    },
+    {
+      "name": "blueprint_compile",
+      "result": "passed",
+      "elapsed_seconds": 3.60679
+    },
+    {
+      "name": "blueprint_timeline",
+      "result": "passed",
+      "elapsed_seconds": 0.0239038
+    },
+    {
+      "name": "blueprint_faults",
+      "result": "passed",
+      "elapsed_seconds": 26.1493
+    },
+    {
+      "name": "cd_media_tests",
+      "result": "passed",
+      "elapsed_seconds": 0.805434
+    },
+    {
+      "name": "cd_network_tests",
+      "result": "passed",
+      "elapsed_seconds": 2.92404
+    },
+    {
+      "name": "cd_community_tests",
+      "result": "passed",
+      "elapsed_seconds": 0.141487
+    },
+    {
+      "name": "runtime_processor",
+      "result": "passed",
+      "elapsed_seconds": 9.48601
+    }
+  ],
+  "later_ui_only_source": {
+    "local_sha": "b78430cd941201be382a09809ca40be997e959c1",
+    "remote_sha": "e2d91a45d6a45ab8987622a00a19fbed1049e7e6",
+    "only_source_change": "plugin/src/ui/panels/LifecyclePanels.cpp: refresh stored blueprint text colours on theme changes",
+    "portable_source_equivalence": "git diff --exit-code passed for CMakeLists.txt, cmake, src, tests, tools and parameters.json; no portable source/build-input change."
+  }
+}

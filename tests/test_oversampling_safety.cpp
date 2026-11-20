@@ -122,12 +122,45 @@ void streaming() {
         CHECK(reference == render(os, in, 64));
     }
 }
+
+void checkpointRejection() {
+    PolyphaseHalfband2x fir;
+    CHECK(fir.design(0.225, 100));
+    double pair[2];
+    fir.up(0.25, pair);
+    fir.down(pair);
+    std::vector<double> before(fir.stateSize()), after(before.size());
+    fir.getState(before.data());
+    for (double position : {-1.0, 0.5, 1e100}) {
+        auto invalid = before;
+        invalid.back() = position;
+        CHECK(!fir.setState(invalid.data()));
+        fir.getState(after.data());
+        CHECK(after == before);
+    }
+    CHECK(!fir.setState(nullptr));
+
+    // An invalid later stage must not leave an earlier, otherwise valid stage changed.
+    Oversampler cascade;
+    CHECK(cascade.prepare({4, OsFamily::Fir}, 1));
+    before.resize(cascade.stateSize());
+    after.resize(before.size());
+    cascade.getState(before.data());
+    auto invalid = before;
+    invalid.front() = 0.125;
+    invalid.back() = -1;
+    CHECK(!cascade.setState(invalid.data()));
+    cascade.getState(after.data());
+    CHECK(after == before);
+    CHECK(cascade.setState(before.data()));
+}
 } // namespace
 
 int main() {
     stageBoundaries();
     cascadeBoundaries();
     streaming();
+    checkpointRejection();
     std::printf("oversampling safety: %s (%d failures)\n", failures == 0 ? "PASS" : "FAIL", failures);
     return failures == 0 ? 0 : 1;
 }

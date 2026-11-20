@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-20",
+  "integrated_source_sha": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
+  "integrated_source_tree": "57c2368dc5cb4e2bd8540c54a2ab3dbd7a0b5431",
+  "remote_source_sha": "0c425f815320ebbc2568af8e6428d536fa6e76c4",
+  "worker_source_commits": [
+    "18c3ac4553b744f2f00da53e8dd54367590a5d87",
+    "ed0e0550eadc72e8ff2420320e47c81e4b8cfdf5",
+    "c2f8a88bbdf76e8c72081da655c0bc4aa4592646"
+  ],
+  "integrated_commits": [
+    "041b672b3be3b1cf72fb3cf3a6262106ad8f3e2c",
+    "6ae78a59890e6a69d2b56cf6a9fadd53191d2592",
+    "51029e0cf8f1e62f42fab11999923ab076f57ab5"
+  ],
+  "dependency_fixture_worker": {
+    "passed": 24,
+    "total": 24,
+    "elapsed_seconds": 3.848,
+    "cmake": "4.4.5",
+    "git": "2.47.3",
+    "python": "3.12.14",
+    "log": "docs/evidence/dependency-gate-2026-11-20-r25.log"
+  },
+  "root_native_configuration": {
+    "result": "passed",
+    "source_sha": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
+    "log": "docs/evidence/dependency-gate-native-configure-2026-11-20-r26.log",
+    "scope": "Real pinned source overrides verified before JUCE/CLAP configuration; generated Full/LITE plugin targets."
+  },
+  "root_ctest": {
+    "result": "passed",
+    "passed": 1,
+    "total": 1,
+    "child_fixture_cases": 24,
+    "elapsed_seconds": 4.48,
+    "case_seconds": 4.46922,
+    "log": "docs/evidence/dependency-gate-ctest-2026-11-20-r26.log",
+    "junit": "docs/evidence/dependency-gate-ctest-2026-11-20-r26.xml"
+  },
+  "incremental_native_build": {
+    "result": "passed_no_work",
+    "targets": 6,
+    "source_equivalence": "No runtime, plugin production or native/media regression C++ input changes from b84d2ba to51029e0. Prior native execution remains pinned to b84d2ba.",
+    "log": "docs/evidence/dependency-gate-incremental-2026-11-20-r26.log"
+  },
+  "powershell_fixture": {
+    "cases": 16,
+    "state": "not_executed_locally_no_powershell_runtime",
+    "windows_exact_source_ci": "required"
+  },
+  "real_windows_pluginval": "Required for both staged products; no new execution claimed.",
+  "review": {
+    "r25": "All three workers completed; gate repairs integrated and session-state publication defect handed off.",
+    "r26_defensive": "Completed source-only review without new actionable finding.",
+    "r26_code": "Completed immutable source, YAML/Python parsing and workflow/fixture checks without new actionable finding. No fixture executions.",
+    "r26_host_restore": "Test/repair owner active; separate adapter defect."
+  },
+  "limitations": [
+    "Only CMake4.4.5 executed; supported older versions not executed.",
+    "Trusted local Git/toolchain metadata and immutable dependency sources during configuration.",
+    "No upstream advisory/CVE assessment or whole-system security signoff.",
+    "No release or deployment."
+  ]
+}
