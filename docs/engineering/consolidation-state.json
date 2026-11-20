@@ -7,91 +7,68 @@
   "current_checkpoint": {
     "date": "2026-11-20",
     "branch": "codex/cdfx-consolidation-20261119",
-    "source_head": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
-    "production_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
-    "source_head_difference": "Audit documentation follows the last tested production/test commit; the containing publication adds validation artifacts and handoff documentation only.",
+    "local_branch": "codex/cdfx-integration-r14-20261120",
+    "source_head": "e2d91a45d6a45ab8987622a00a19fbed1049e7e6",
+    "local_source_head": "b78430cd941201be382a09809ca40be997e959c1",
+    "source_tree": "8bad08aa4a5bca5b2ef796536cd1ceff3806d797",
+    "source_head_difference": "The containing publication adds evidence and handoff documentation only. Resolve the live PR ref for its publication head.",
+    "stage": "local_qualified_pending_new_exact_head_ci",
+    "inherited_head": "c6ebb22daab9c46edffa761b21f3fd45320e5074",
+    "inherited_scope": "Nine continuation branches form one 19-commit chain; separate pitch branch imported byte-identically. Original refs and older PRs preserved.",
     "validation": {
       "combined_core": {
         "result": "passed",
         "passed_suites": 30,
         "total_suites": 30,
-        "elapsed_seconds": 127.89,
-        "source_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+        "elapsed_seconds": 335.45,
+        "local_source_sha": "4ae50007c512f02202b966f239fbdfbc25c2c2ce",
+        "remote_source_sha": "5fd0a291f831bc05a39a3ac9f2eef45be32df93f",
         "compiler": "GCC 14.2",
         "optimization": "-O1",
         "instrumentation": [
-          "AddressSanitizer",
-          "UndefinedBehaviorSanitizer",
+          "ASan",
+          "UBSan",
           "float-cast-overflow"
         ],
-        "leak_detection": "disabled under environment tracer; no leak-check qualification",
-        "generated_table_freshness": "passed separately"
-      },
-      "queue_followup": {
-        "initial_combined_result": "29/30 passed; state_queue monotonic ordering failed",
-        "status": "repair integrated and final combined suite passed",
-        "worker_source_sha": "43d2d777670e068c6be3d6aa7724a7afca403035",
-        "integrated_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
-        "worker_audit_sha": "1999eb2bf0e6d63a193b01946d2038173c2c0fbc",
-        "integrated_audit_sha": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
-        "targeted_repetitions_passed": 25,
-        "targeted_elapsed_seconds": 4.52,
-        "independent_review": "No blocking ownership/memory-order finding; lock-free assertion request resolved.",
-        "acceptance": "Existing monotonicity assertion and thresholds retained."
+        "leak_detection": "disabled under tracer",
+        "later_source_equivalence": "Only later source change is Blueprint text recoloring; portable source/build inputs are unchanged.",
+        "evidence": "docs/evidence/core-ctest-2026-11-20-r14.json"
       },
       "native": {
-        "compiler": "Clang 19",
-        "build_type": "Custom",
+        "result": "passed",
+        "passed_suites": 6,
+        "total_suites": 6,
+        "elapsed_seconds": 25.23,
+        "source_sha": "e2d91a45d6a45ab8987622a00a19fbed1049e7e6",
+        "compiler": "Clang 19.1.7",
         "optimization": "-O0",
-        "passed": [
-          {
-            "suite": "plugin_param_consistency",
-            "elapsed_seconds": 4.02599
-          },
-          {
-            "suite": "ui_snap_contract",
-            "elapsed_seconds": 0.826973
-          },
-          {
-            "suite": "ui_snap_live_bridge",
-            "elapsed_seconds": 0.220642
-          },
-          {
-            "suite": "ui_snap_panels",
-            "elapsed_seconds": 10.5696
-          },
-          {
-            "suite": "ui_snap_shell",
-            "elapsed_seconds": 19.6912
-          },
-          {
-            "suite": "ui_snap_workbench",
-            "elapsed_seconds": 12.3445
-          }
-        ],
-        "pending": [],
-        "compile_evidence": "All six native processor/UI console-test applications linked and executed successfully against pinned JUCE.",
-        "listener_fix_sha": "ffab6d29487daea5e42c76fdf6751d1f1ddb33ed",
-        "qualification": "Native processor and all five offscreen UI applications; not an interactive DAW, MSVC, leak, deadline or release qualification.",
-        "evidence": "docs/evidence/native-ctest-2026-11-20.json",
-        "invocations": 5
+        "sanitizers": false,
+        "scope": "Offscreen native processor/editor console suites; final theme repair included",
+        "evidence": "docs/evidence/native-ctest-2026-11-20-r14.json"
       },
-      "record": "docs/engineering/VALIDATION_2026-11-20.md"
+      "generated_registry_and_plugin_tables": "passed",
+      "prior_pr16_ci": {
+        "head": "b3e05b652147a584ad5fb22e5715d1e61b702318",
+        "run": 44690495993,
+        "result": "Linux, Windows and pluginval passed"
+      },
+      "inherited_chain_ci": {
+        "head": "c6ebb22daab9c46edffa761b21f3fd45320e5074",
+        "run": 44764678463,
+        "result": "Linux, Windows and pluginval passed"
+      },
+      "new_publication_ci": "Required on the containing R14 publication; read live PR16 checks. Prior results do not qualify this new source."
     },
-    "publication": {
-      "status": "local_qualification_complete",
-      "target_branch": "codex/cdfx-consolidation-20261119",
-      "pr": 16,
-      "implementation_source_sha": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
-      "implementation_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51",
-      "head_resolution": "Read the live PR head; the containing commit adds evidence and documentation to the implementation source.",
-      "head_observed_before_publication": "cb53cd812700e5edbcf7323653b84e470da77cfc",
-      "commit_mapping": "docs/evidence/commit-map-2026-11-20.json",
-      "new_exact_source_ci": "Required on the containing published commit; previous cb53cd8 pass does not cover this continuation."
-    },
-    "local_work_branch": "codex/cdfx-continuation-20261120",
-    "local_source_head": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
-    "source_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51"
+    "record": "docs/engineering/VALIDATION_2026-11-20_R14.md",
+    "commit_map": "docs/evidence/commit-map-2026-11-20-r14.json",
+    "behavior": [
+      "Real cancellable asynchronous Blueprint validation with synthetic models, exact diagnostics, configuration and arithmetic/memory estimates; Apply unavailable",
+      "Local preset catalog/import/export/delete and atomic PNG services integrated; complete sound load/save remains unavailable",
+      "Stable preset selection across filter/reorder/removal and explicit double-click identities",
+      "Preset scans budget examined entries before filtering and expose truncation/directory errors",
+      "Duplicate scene parameter identities rejected; opaque state JSON admitted for depth/encoded bytes before recursive copying"
+    ],
+    "next_owner": "Read live PR16 head and its exact-source CI. Resolve concrete failures without weakening tests. Continue dynamic session/seed and sound-transaction work; preserve older refs and semantic review gates."
   },
   "main": "44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6",
   "candidate_base": "0c0d6897caf36d4057ac3d8db8cfb346dd5412b4",
@@ -333,13 +310,34 @@
     {
       "path": "docs/audits/INTEGRATION_REVIEW_2026-11-20.md",
       "scope": "Processor lifecycle/serialization source review; open-editor restore and PCB persistence fixes; worker ran no native tests."
+    },
+    {
+      "path": "docs/audits/R14_INTEGRATION_REVIEW_2026-11-20.md",
+      "scope": "Independent continuation lineage/source review; exact inherited branch heads and pitch equivalence"
+    },
+    {
+      "path": "docs/audits/PRESET_SELECTION_REVIEW_2026-11-20_R14.md",
+      "scope": "Stable preset identity bug repair; final native panels and live bridge suites passed"
+    },
+    {
+      "path": "docs/audits/CATALOG_PUBLICATION_GUARDS_2026-11-20.md",
+      "scope": "Directory entry budget and duplicate publication identities; focused and combined sanitizer passes"
+    },
+    {
+      "path": "docs/audits/STATE_WRITER_RESOURCES_2026-11-20_R14.md",
+      "scope": "Independent pre-copy depth/byte accounting review; combined state_safety passed"
+    },
+    {
+      "path": "docs/audits/R14_BLUEPRINT_CANCELLATION_REVIEW_2026-11-20.md",
+      "scope": "Cooperative compiler cancellation; independent worker lifetime/latest-result review; integrated native validation passed"
     }
   ],
   "remaining_work": [
-    "Exact-head Linux/Windows/pluginval CI for the published continuation; local core and all six native processor/UI suites passed",
+    "Exact-head Linux/Windows/pluginval qualification for the R14 publication; local 30 core and 6 native suites passed",
     "Full dynamic runtime/control/engine/seed checkpoint capture, compatibility, migration and stopped-audio restore handoff",
     "Coordinated dynamic A/B state transfer and host-automation boundaries",
-    "Live preset/blueprint/fault/restoration/capture/provider services",
+    "Live Blueprint graph application and complete sound-preset load/save transactions",
+    "Fault/restoration seed actions, GIF/MP4 capture and configured community/provider services",
     "Older PR 9/10/14 analysis, edition, snapshot, RT-trap and runtime semantic reconciliation",
     "Real-host, detector-corpus, native reset/CPU budgets, sustained performance and physical calibration gates"
   ],
@@ -540,5 +538,94 @@
     "next": "Qualify changed head Linux/Windows strictness-5 pluginval; independent review; guarded coordinator integration after exact branch comparison",
     "remains_open": "Full runtime/seed/session capture and stopped-audio restoration; live sound-preset/blueprint transactions; old PR 9/10/14 semantic reconciliation",
     "untouched": "PR16 and parent branch heads, main, releases and deployments"
+  },
+  "previous_checkpoint_before_r14": {
+    "date": "2026-11-20",
+    "branch": "codex/cdfx-consolidation-20261119",
+    "source_head": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
+    "production_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+    "source_head_difference": "Audit documentation follows the last tested production/test commit; the containing publication adds validation artifacts and handoff documentation only.",
+    "validation": {
+      "combined_core": {
+        "result": "passed",
+        "passed_suites": 30,
+        "total_suites": 30,
+        "elapsed_seconds": 127.89,
+        "source_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+        "compiler": "GCC 14.2",
+        "optimization": "-O1",
+        "instrumentation": [
+          "AddressSanitizer",
+          "UndefinedBehaviorSanitizer",
+          "float-cast-overflow"
+        ],
+        "leak_detection": "disabled under environment tracer; no leak-check qualification",
+        "generated_table_freshness": "passed separately"
+      },
+      "queue_followup": {
+        "initial_combined_result": "29/30 passed; state_queue monotonic ordering failed",
+        "status": "repair integrated and final combined suite passed",
+        "worker_source_sha": "43d2d777670e068c6be3d6aa7724a7afca403035",
+        "integrated_sha": "1f21fe95a2d495be8abe797437730577575f9d58",
+        "worker_audit_sha": "1999eb2bf0e6d63a193b01946d2038173c2c0fbc",
+        "integrated_audit_sha": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
+        "targeted_repetitions_passed": 25,
+        "targeted_elapsed_seconds": 4.52,
+        "independent_review": "No blocking ownership/memory-order finding; lock-free assertion request resolved.",
+        "acceptance": "Existing monotonicity assertion and thresholds retained."
+      },
+      "native": {
+        "compiler": "Clang 19",
+        "build_type": "Custom",
+        "optimization": "-O0",
+        "passed": [
+          {
+            "suite": "plugin_param_consistency",
+            "elapsed_seconds": 4.02599
+          },
+          {
+            "suite": "ui_snap_contract",
+            "elapsed_seconds": 0.826973
+          },
+          {
+            "suite": "ui_snap_live_bridge",
+            "elapsed_seconds": 0.220642
+          },
+          {
+            "suite": "ui_snap_panels",
+            "elapsed_seconds": 10.5696
+          },
+          {
+            "suite": "ui_snap_shell",
+            "elapsed_seconds": 19.6912
+          },
+          {
+            "suite": "ui_snap_workbench",
+            "elapsed_seconds": 12.3445
+          }
+        ],
+        "pending": [],
+        "compile_evidence": "All six native processor/UI console-test applications linked and executed successfully against pinned JUCE.",
+        "listener_fix_sha": "ffab6d29487daea5e42c76fdf6751d1f1ddb33ed",
+        "qualification": "Native processor and all five offscreen UI applications; not an interactive DAW, MSVC, leak, deadline or release qualification.",
+        "evidence": "docs/evidence/native-ctest-2026-11-20.json",
+        "invocations": 5
+      },
+      "record": "docs/engineering/VALIDATION_2026-11-20.md"
+    },
+    "publication": {
+      "status": "local_qualification_complete",
+      "target_branch": "codex/cdfx-consolidation-20261119",
+      "pr": 16,
+      "implementation_source_sha": "d6d20df93bfc13eeb98874b3489b8030f5aaef23",
+      "implementation_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51",
+      "head_resolution": "Read the live PR head; the containing commit adds evidence and documentation to the implementation source.",
+      "head_observed_before_publication": "cb53cd812700e5edbcf7323653b84e470da77cfc",
+      "commit_mapping": "docs/evidence/commit-map-2026-11-20.json",
+      "new_exact_source_ci": "Required on the containing published commit; previous cb53cd8 pass does not cover this continuation."
+    },
+    "local_work_branch": "codex/cdfx-continuation-20261120",
+    "local_source_head": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
+    "source_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51"
   }
 }
