@@ -42,8 +42,8 @@ inline int run() {
     for (const auto edition : {Edition::Full, Edition::Lite}) {
         CircuitDriftProcessor source(edition, "Source"), restored(edition, "Restored");
         StateListener sourceListener, restoreListener;
-        source.addListener(&sourceListener);
-        restored.addListener(&restoreListener);
+        source.juce::AudioProcessor::addListener(&sourceListener);
+        restored.juce::AudioProcessor::addListener(&restoreListener);
         UiSettings settings;
         settings.scale = 1.75f;
         settings.darkTheme = false;
@@ -97,8 +97,8 @@ inline int run() {
             check(std::abs(restored.parameters().getRawParameterValue(id)->load() - 0.6f) < 1e-6f,
                   "legacy host state retains its sound parameters");
         }
-        source.removeListener(&sourceListener);
-        restored.removeListener(&restoreListener);
+        source.juce::AudioProcessor::removeListener(&sourceListener);
+        restored.juce::AudioProcessor::removeListener(&restoreListener);
     }
 
     {

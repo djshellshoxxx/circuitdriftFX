@@ -350,7 +350,7 @@ void testOpenEditorStateRestore() {
             if (details.nonParameterStateChanged) ++dirty;
         }
     } listener;
-    target.addListener(&listener);
+    target.juce::AudioProcessor::addListener(&listener);
     const auto restore = [&](const UiSettings& settings) {
         source.setEditorSettings(settings);
         juce::MemoryBlock state;
@@ -411,7 +411,7 @@ void testOpenEditorStateRestore() {
     core->pumpFrame(0.0, ++g_now);
     check(core->view() == EditorView::Easy && target.editorSettings().lastWidth == 1280 && listener.dirty == 2,
           "subsequent refresh neither reverts resize nor repeats dirty notification");
-    target.removeListener(&listener);
+    target.juce::AudioProcessor::removeListener(&listener);
 }
 
 void testStatusBadges(const juce::File& outDir) {
