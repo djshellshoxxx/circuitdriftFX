@@ -230,3 +230,40 @@ persistence work advances G11/G12 without closing their full acceptance criteria
 ADR-0001 records the build/license decision. Do not weaken acceptance criteria or
 convert source, stub, mock, sanitizer timing or documentation checks into physical
 or release qualification.
+
+
+## Parallel isolated preset service and PNG integrity checkpoint — 2026-11-20
+
+Branch `codex/cdfx-preset-services-20261120-r4` was created from the exact
+published PR #16 head `b3e05b652147a584ad5fb22e5715d1e61b702318`
+while its [new exact-head CI run](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44690495993)
+remained queued. This branch does **not** advance PR #16 or replace that run.
+The source continuation is deliberately confined to the live editor adapter,
+its native UI regression and this handoff.
+
+The live bridge now uses the existing validated, bounded `PresetLibrary`
+for factory/user catalog search, canonical local import/export, and user-preset
+deletion. A supplied directory constructor isolates test storage; production
+uses per-user application data. Imports never overwrite an existing name;
+factory presets cannot be deleted. **Load/save of the current sound remains
+explicitly unavailable** until a prepared-runtime transaction can carry slot
+seeds and blueprint identities alongside APVTS parameter values; do not
+silently substitute parameter-only preset application.
+
+PNG capture now fully encodes in memory and uses the existing same-directory
+atomic local-file writer rather than truncating the destination before
+encoding. The native UI regression extends coverage for catalog lookup,
+canonical factory export/import, no-overwrite, factory deletion rejection,
+user deletion and PNG decoding. These tests are **added but not yet executed**
+against this new branch: the connector environment has no network-accessible
+local Git clone or native JUCE dependency cache. They require exact-source
+native Windows/Linux qualification before integration.
+
+This branch has not been independently code/bug/security-reviewed: no worker
+spawn facility is available in this execution context. Security follow-up
+should inspect path handling, user-selected export destinations, directory
+permissions/symlinks, binary atomic writes, and the boundary between disk
+catalog operations and dynamic preset application. Integrate with the
+coordinator's newer branch only after checking its live head and conflicts;
+preserve the pending PR #16 CI attribution. No changes to the audio thread,
+model calibration, releases or deployments were made.

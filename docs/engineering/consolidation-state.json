@@ -364,5 +364,28 @@
     ],
     "build_license_decision": "ADR-0001",
     "review_boundary": "Scoped historical and current reviews; partial interrupted attempts are not completed audits; no new whole-repository security signoff claimed."
+  },
+  "parallel_preset_service_20261120": {
+    "branch": "codex/cdfx-preset-services-20261120-r4",
+    "base_sha": "b3e05b652147a584ad5fb22e5715d1e61b702318",
+    "ownership": "isolated native editor preset library and PNG integrity; do not advance PR16 while exact-head CI queued",
+    "changes": [
+      "Factory and local user preset enumeration/search via existing bounded PresetLibrary",
+      "Canonical local preset import/export and user-only deletion with no-overwrite",
+      "Isolated per-directory native UI regression fixtures",
+      "PNG encode-before-write and atomic destination replace"
+    ],
+    "deliberately_unwired": [
+      "Live sound preset load/save until seed and blueprint IDs are transactional",
+      "Full dynamic runtime/session persistence",
+      "Releases, deployments and physical calibration"
+    ],
+    "verification": {
+      "source_review": "manual invariant/contract review only",
+      "native_ui_tests": "added, not executed on isolated branch",
+      "exact_head_windows_ci": "not run on this isolated branch",
+      "pr16_run": 44690495993
+    },
+    "review_workers": "unavailable in current connector execution environment"
   }
 }

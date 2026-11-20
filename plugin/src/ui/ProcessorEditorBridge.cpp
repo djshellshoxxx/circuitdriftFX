@@ -2,6 +2,9 @@
 #include "PluginProcessor.h"
 #include "ParameterLayout.h"
 #include "core/ParameterRegistry.h"
+#include <filesystem>
+#include <string>
+#include <utility>
 #include <algorithm>
 #include <cmath>
 
@@ -14,7 +17,24 @@ bool unavailable(juce::String& error) {
     error = "Service not connected to the live processor (G11)";
     return false;
 }
+std::filesystem::path nativePath(const juce::File& file) {
+    // JUCE paths are Unicode. u8path handles non-ASCII user profiles on Windows.
+    return std::filesystem::u8path(file.getFullPathName().toStdString());
+}
+std::filesystem::path defaultPresetDirectory() {
+    return nativePath(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("CircuitDrift").getChildFile("Presets"));
+}
+juce::String displayUtf8(const std::string& str) {
+    return juce::String::fromUTF8(str.data(), static_cast<int>(str.size()));
+}
 }  // namespace
+
+ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor)
+    : ProcessorEditorBridge(processor, defaultPresetDirectory()) {}
+ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor,
+                                             std::filesystem::path userPresetDirectory)
+    : processor_(processor), presetLibrary_(std::move(userPresetDirectory)) {}
 
 juce::AudioProcessorValueTreeState& ProcessorEditorBridge::parameters() { return processor_.parameters(); }
 juce::String ProcessorEditorBridge::slotParamId(const juce::String& name) const {
@@ -232,12 +252,51 @@ void ProcessorEditorBridge::swapSlots() {
     endGesture();
 }
 
-std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String&) { return {}; }
+std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& query) {
+    // Local, bounded directory scan on the message thread; no audio ownership.
+    std::vector<PresetEntry> entries;
+    for (const auto& preset : presetLibrary_.list(query.toStdString())) {
+        PresetEntry entry;
+        entry.id = displayUtf8(preset.id);
+        entry.name = displayUtf8(preset.title);
+        entry.factory = preset.factory;
+        entry.category = preset.factory ? "Factory" : preset.valid ? "User" : "Unreadable user preset";
+        entry.description = preset.valid ? displayUtf8(preset.author)
+                                         : "Unreadable preset: " + displayUtf8(preset.error);
+        entries.push_back(std::move(entry));
+    }
+    return entries;
+}
+// Applying or capturing a sound requires atomic slot seed/blueprint transactions.
+// Do not pretend that APVTS-only changes have loaded or saved a complete scene.
 bool ProcessorEditorBridge::loadPreset(const juce::String&, int, juce::String& error) { return unavailable(error); }
 bool ProcessorEditorBridge::savePreset(const juce::String&, juce::String& error) { return unavailable(error); }
-bool ProcessorEditorBridge::deletePreset(const juce::String&, juce::String& error) { return unavailable(error); }
-bool ProcessorEditorBridge::importPreset(const juce::File&, juce::String& error) { return unavailable(error); }
-bool ProcessorEditorBridge::exportPreset(const juce::String&, const juce::File&, juce::String& error) { return unavailable(error); }
+bool ProcessorEditorBridge::deletePreset(const juce::String& id, juce::String& error) {
+    std::string why;
+    if (!presetLibrary_.remove(id.toStdString(), why)) { error = displayUtf8(why); return false; }
+    error.clear();
+    return true;
+}
+bool ProcessorEditorBridge::importPreset(const juce::File& file, juce::String& error) {
+    if (file.getFullPathName().isEmpty()) { error = "Select a preset file"; return false; }
+    std::string id, why;
+    if (!presetLibrary_.importFile(nativePath(file), {}, false, id, why)) {
+        error = displayUtf8(why);
+        return false;
+    }
+    error.clear();
+    return true;
+}
+bool ProcessorEditorBridge::exportPreset(const juce::String& id, const juce::File& file, juce::String& error) {
+    if (file.getFullPathName().isEmpty()) { error = "Select a destination"; return false; }
+    std::string why;
+    if (!presetLibrary_.exportPreset(id.toStdString(), nativePath(file), why)) {
+        error = displayUtf8(why);
+        return false;
+    }
+    error.clear();
+    return true;
+}
 void ProcessorEditorBridge::commitRestoration(int) {} // Requires runtime seed transaction; not yet wired.
 std::vector<FaultInfo> ProcessorEditorBridge::faults(int) { return {}; }
 bool ProcessorEditorBridge::applyFault(int, const FaultInfo&, juce::String& error) { return unavailable(error); }
@@ -269,16 +328,23 @@ CaptureStatus ProcessorEditorBridge::captureStatus() {
 }
 bool ProcessorEditorBridge::savePng(const juce::Image& image, const juce::File& file, juce::String& error) {
     if (!image.isValid()) { error = "Invalid screenshot"; return false; }
-    juce::FileOutputStream output(file);
-    if (!output.openedOk()) { error = "Cannot open screenshot destination"; return false; }
+    if (file.getFullPathName().isEmpty()) { error = "Select a screenshot destination"; return false; }
+    // Encode before opening the destination. Failed encoding, flush, or rename
+    // must never truncate an existing screenshot. The existing atomic local-file
+    // writer also accepts binary strings (including embedded NUL bytes).
+    juce::MemoryOutputStream encoded;
     juce::PNGImageFormat png;
-    output.setPosition(0);
-    output.truncate();
-    if (!png.writeImageToStream(image, output)) {
+    if (!png.writeImageToStream(image, encoded) || encoded.getDataSize() == 0) {
         error = "Could not encode PNG image";
         return false;
     }
-    output.flush();
+    const std::string bytes(static_cast<const char*>(encoded.getData()), encoded.getDataSize());
+    std::string why;
+    if (!state::saveStateFileAtomic(file.getFullPathName().toStdString(), bytes, why)) {
+        error = "Cannot save PNG: " + displayUtf8(why);
+        return false;
+    }
+    error.clear();
     return true;
 }
 UiSettings ProcessorEditorBridge::uiSettings() { return processor_.editorSettings(); }

@@ -3,7 +3,9 @@
 // Unimplemented services fail explicitly; never substitute synthetic FakeBridge data.
 #pragma once
 #include "ui/EditorBridge.h"
+#include "state/PresetLibrary.h"
 #include <cstddef>
+#include <filesystem>
 #include <utility>
 #include <vector>
 
@@ -12,7 +14,10 @@ class CircuitDriftProcessor;
 
 class ProcessorEditorBridge final : public EditorBridge {
 public:
-    explicit ProcessorEditorBridge(CircuitDriftProcessor& processor) : processor_(processor) {}
+    explicit ProcessorEditorBridge(CircuitDriftProcessor& processor);
+    // Tests/embedders can inject a sandboxed directory; production selects the
+    // current user's application data. No storage is touched by construction.
+    ProcessorEditorBridge(CircuitDriftProcessor& processor, std::filesystem::path userPresetDirectory);
 
     juce::AudioProcessorValueTreeState& parameters() override;
     juce::String slotParamId(const juce::String& baseName) const override;
@@ -68,6 +73,7 @@ private:
     void syncStateEpoch();
 
     CircuitDriftProcessor& processor_;
+    state::PresetLibrary presetLibrary_;
     int editSlot_ = 0;
     bool gestureOpen_ = false;
     Snapshot gestureBefore_;

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <filesystem>
 
 using namespace cd::plugin;
 namespace {
@@ -156,7 +157,52 @@ int main() {
           "live UI must disable unavailable seed-restoration action");
     juce::String error;
     check(!bridge.loadPreset("factory:clean-console", 0, error) && error.isNotEmpty(),
-          "unwired preset service fails explicitly");
+          "scene apply remains disabled until slot seed/blueprint transactions exist");
+    // Exercise the real local library with an injected temporary directory, not
+    // the developer's own presets. Factory lookup, import/export and deletion are
+    // independent of the missing sound-apply service.
+    const auto tempRoot = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("cdfx-preset-service", "", true);
+    check(tempRoot.createDirectory(), "create isolated preset test directory");
+    {
+        ProcessorEditorBridge catalog(processor, std::filesystem::u8path(tempRoot.getFullPathName().toStdString()));
+        const auto factories = catalog.listPresets("factory:clean-console");
+        check(factories.size() == 1 && factories[0].factory &&
+              factories[0].id == "factory:clean-console", "real factory catalog and search");
+        const auto sourceDir = tempRoot.getChildFile("source");
+        check(sourceDir.createDirectory(), "create separate export source directory");
+        const auto exported = sourceDir.getChildFile("preview.circuitdrift.json");
+        error.clear();
+        check(catalog.exportPreset("factory:clean-console", exported, error) && exported.existsAsFile(),
+              "export real factory scene to canonical JSON");
+        error.clear();
+        check(catalog.importPreset(exported, error), "import validated local scene without overwrite");
+        const auto users = catalog.listPresets("user:preview");
+        check(users.size() == 1 && !users[0].factory && users[0].category == "User",
+              "imported scene is discoverable as user preset");
+        error.clear();
+        check(!catalog.importPreset(exported, error) && error.isNotEmpty(),
+              "duplicate import never overwrites existing preset");
+        error.clear();
+        check(!catalog.deletePreset("factory:clean-console", error) && error.isNotEmpty(),
+              "factory scenes remain read-only");
+        error.clear();
+        check(catalog.deletePreset("user:preview", error) && catalog.listPresets("user:preview").empty(),
+              "delete only the selected user preset");
+        juce::Image image(juce::Image::ARGB, 4, 4, true);
+        const auto screenshot = tempRoot.getChildFile("capture.png");
+        error.clear();
+        check(catalog.savePng(image, screenshot, error) && screenshot.existsAsFile(),
+              "PNG export writes through atomic local-file replacement");
+        juce::FileInputStream pngStream(screenshot);
+        juce::PNGImageFormat decoder;
+        check(pngStream.openedOk() && decoder.decodeImage(pngStream).isValid(),
+              "atomic PNG contains decodable image bytes");
+        error.clear();
+        check(!catalog.savePng(juce::Image{}, screenshot, error) && screenshot.existsAsFile(),
+              "invalid capture does not destroy an existing file");
+    }
+    check(tempRoot.deleteRecursively(), "remove isolated preset test directory");
     error.clear();
     check(!bridge.applyBlueprint(0, "{}", error) && error.isNotEmpty(),
           "unwired runtime blueprint installation fails explicitly");
