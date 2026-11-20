@@ -159,14 +159,20 @@
         "change": "corrupt or missing offline-cache entry clears its obsolete persisted pin"
       }
     ],
-    "integration_status": "isolated_not_in_pr16",
+    "integration_status": "source_changes_integrated_into_pr16_at_cb53cd812700e5edbcf7323653b84e470da77cfc",
     "validation": {
       "pr16_linux": "passed_on_base_sha",
-      "pr16_windows": "failed_pluginval_invocation_only_after_build_ctest_and_staging_passed",
-      "child": "not_yet_ci_qualified",
+      "pr16_windows": "old_earlier_sha_failed_due_to_process_launcher; new exact head pending",
+      "child": "integrated_but_unqualified_pending_new_exact_head_CI",
       "windows_run_id": 44662769491,
       "windows_tested_checkout": "33fbe24c62c134998bf6fe080b592772c390300c (PR synthetic merge checkout)",
-      "exact_head_requalification": "pending_after_ref_move"
+      "exact_head_requalification": "pending_after_ref_move",
+      "new_pr16_run": {
+        "id": 44674618903,
+        "head_sha": "cb53cd812700e5edbcf7323653b84e470da77cfc",
+        "status": "queued",
+        "conclusion": null
+      }
     },
     "unresolved": [
       "Exact PR-head Windows/pluginval rerun after GUI-process wait fix",
