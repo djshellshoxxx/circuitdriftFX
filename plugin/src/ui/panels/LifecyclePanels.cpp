@@ -377,34 +377,69 @@ private:
 // ------------------------------------------------------------------------------------ Blueprint
 enum class BpState { Idle, Draft, Validating, Ready, Invalid, Applying };
 
+// Same synthetic fixture as docs/planned-features/examples/rc-blueprint.json and
+// tests/blueprint/test_compile.cpp. Loading this text never installs a circuit.
+constexpr auto kExampleRcBlueprint = R"json({
+  "schemaVersion": 1,
+  "id": "example.rc",
+  "name": "Synthetic RC validation fixture",
+  "modelRegistryVersion": "fixture-v1",
+  "nodes": ["0", "in", "out"],
+  "components": [
+    {"id":"R1", "modelId":"fixture.resistor", "pins":{"p":"in","n":"out"},
+     "parameters":{"resistanceOhm":10000}, "position":[0,0,0]},
+    {"id":"C1", "modelId":"fixture.capacitor", "pins":{"p":"out","n":"0"},
+     "parameters":{"capacitanceF":1e-8}, "position":[1,0,0]}
+  ],
+  "ports": {"input":"in", "output":"out", "ground":"0"},
+  "macroBindings": []
+})json";
+
 class BlueprintPanel final : public PanelBase {
 public:
     explicit BlueprintPanel(EditorBridge& b) : PanelBase(b) {
         setTitle("Blueprint");
         heading("Circuit blueprint");
+        note("Edit or paste blueprint JSON. Example RC inserts a synthetic validation fixture into this draft. Validation never changes the audio.");
         state_ = note("", Tone::Normal);
+        tip(*state_, "Blueprint state", "State of this blueprint draft");
         editor_.setMultiLine(true, true);
         editor_.setReturnKeyStartsNewLine(true);
         editor_.setScrollbarsShown(true);
         editor_.setFont(juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::plain)));
-        tip(editor_, "Blueprint JSON", "Blueprint of the edit slot as JSON; edit, then Validate before Apply");
-        editor_.onTextChange = [this] { if (!loading_) setState(BpState::Draft); };
+        tip(editor_, "Blueprint JSON", "Blueprint draft as JSON; edit, then Validate to preview its report");
+        editor_.onTextChange = [this] { if (!loading_) draftChanged(); };
         content_.addItem(editor_, 240, 240, true);
         validate_ = makeButton("Validate", "Check the blueprint on a worker thread without changing the sound");
         reload_ = makeButton("Reload", "Discard edits and reload the blueprint of the edit slot");
+        example_ = makeButton("Example RC", "Replace this draft with the synthetic RC validation example; audio stays unchanged");
         apply_ = makeButton("Apply...", "Apply the validated blueprint to the edit slot (asks first)");
         validate_->onClick = [this] { startValidation(); };
         reload_->onClick = [this] { load(); };
+        example_->onClick = [this] {
+            editor_.setText(kExampleRcBlueprint, false);
+            draftChanged("Synthetic RC example loaded as a draft.");
+        };
         apply_->onClick = [this] { confirmApply(); };
         content_.addItem(*validate_, buttonBasis("Validate"), 30);
         content_.addItem(*reload_, buttonBasis("Reload"), 30);
+        content_.addItem(*example_, buttonBasis("Example RC"), 30);
         content_.addItem(*apply_, buttonBasis("Apply..."), 30);
+        applyNote_ = note("", Tone::Dim);
+        tip(*applyNote_, "Blueprint apply availability", "Whether this build can apply a validated blueprint");
         heading("Report");
         counts_ = note("", Tone::Normal);
+        estimates_ = note("", Tone::Dim);
+        configuration_ = note("", Tone::Dim);
+        models_ = note("", Tone::Warn);
         diag_ = note("", Tone::Normal);
-        note("Validation never changes the audio. Apply swaps the circuit only after it compiled; containment and dry fallback stay on. Applying is one undo step.");
+        tip(*counts_, "Blueprint counts", "Counts returned by validation");
+        tip(*estimates_, "Blueprint estimates", "Arithmetic and storage estimates, not measured CPU time");
+        tip(*configuration_, "Blueprint validation configuration", "Sample rate and oversampling used for this report");
+        tip(*models_, "Blueprint model provenance", "Whether validation used synthetic fixture models");
         load();
     }
+    ~BlueprintPanel() override { bridge.cancelBlueprintValidation(); }
 
     void refresh(const StatusInfo& s) override {
         if (s.editSlot != slot_ && state_v_ != BpState::Draft) { slot_ = s.editSlot; load(); }
@@ -412,19 +447,29 @@ public:
         if (state_v_ == BpState::Validating) {
             BlueprintReport r;
             if (bridge.blueprintReport(r)) {
+                if (editor_.getText() != validatedText_) { draftChanged(); return; }
                 report_ = r;
                 hasReport_ = true;
-                const bool stale = editor_.getText() != validatedText_;
                 showReport();
-                setState(stale ? BpState::Draft : (r.ok ? BpState::Ready : BpState::Invalid));
+                setState(r.ok ? BpState::Ready : BpState::Invalid);
             }
         }
     }
 
 private:
+    void draftChanged(const juce::String& message = {}) {
+        bridge.cancelBlueprintValidation();
+        validatedText_.clear();
+        hasReport_ = false;
+        showReport();
+        setState(BpState::Draft, message);
+    }
     void load() {
+        bridge.cancelBlueprintValidation();
+        validatedText_.clear();
+        slot_ = bridge.status().editSlot;
         loading_ = true;
-        editor_.setText(bridge.blueprintJson(bridge.status().editSlot), false);
+        editor_.setText(bridge.blueprintJson(slot_), false);
         loading_ = false;
         hasReport_ = false;
         showReport();
@@ -438,18 +483,25 @@ private:
         setState(BpState::Validating);
     }
     void confirmApply() {
-        if (state_v_ != BpState::Ready) return;
+        if (!bridge.supportsBlueprintApply() || state_v_ != BpState::Ready || editor_.getText() != validatedText_) return;
+        const auto text = validatedText_;
+        const int slot = bridge.status().editSlot;
         auto opts = juce::MessageBoxOptions::makeOptionsOkCancel(juce::MessageBoxIconType::WarningIcon, "Apply blueprint",
                                                                  "Apply this blueprint to the edit slot? The current circuit is replaced once the new one is ready. One undo step.",
                                                                  "Apply", "Cancel", this);
         juce::Component::SafePointer<BlueprintPanel> safe(this);
-        juce::AlertWindow::showAsync(opts, [safe](int r) {
-            if (safe == nullptr || r != 1) return;
+        juce::AlertWindow::showAsync(opts, [safe, text, slot](int r) {
+            if (safe == nullptr || r != 1 || !safe->bridge.supportsBlueprintApply() ||
+                safe->state_v_ != BpState::Ready || safe->editor_.getText() != text || safe->bridge.status().editSlot != slot) return;
             safe->setState(BpState::Applying);
-            juce::MessageManager::callAsync([safe] {
+            juce::MessageManager::callAsync([safe, text, slot] {
                 if (safe == nullptr) return;
+                if (!safe->bridge.supportsBlueprintApply() || safe->editor_.getText() != text || safe->bridge.status().editSlot != slot) {
+                    safe->draftChanged("Validate again before applying.");
+                    return;
+                }
                 juce::String err;
-                if (safe->bridge.applyBlueprint(safe->bridge.status().editSlot, safe->editor_.getText(), err)) {
+                if (safe->bridge.applyBlueprint(slot, text, err)) {
                     safe->setState(BpState::Idle, "Applied.");
                 } else {
                     safe->setState(BpState::Invalid, "Apply failed: " + err);
@@ -461,12 +513,27 @@ private:
         bool ch = false;
         if (!hasReport_) {
             ch |= counts_->set("No validation report yet.", Tone::Dim);
+            ch |= estimates_->set("");
+            ch |= configuration_->set("");
+            ch |= models_->set("");
             ch |= diag_->set("");
         } else {
             ch |= counts_->set((report_.ok ? "Valid. " : "Invalid. ") + juce::String("Components ") + juce::String(report_.components) + ", nodes " + juce::String(report_.nodes) +
-                                   ", nonlinear " + juce::String(report_.nonlinear) + ", unknowns " + juce::String(report_.unknowns) + ", estimated cost " +
-                                   juce::String(report_.estimatedCostNsPerSample, 0) + " ns/sample (estimate).",
+                                   ", nonlinear " + juce::String(report_.nonlinear) + ", unknowns " + juce::String(report_.unknowns) + ".",
                                report_.ok ? Tone::Ok : Tone::Danger);
+            const auto arithmetic = std::isfinite(report_.estimatedFlopsPerSample) && report_.estimatedFlopsPerSample > 0
+                ? juce::String(report_.estimatedFlopsPerSample, 0) + " FLOPs per electrical sample" : juce::String("unavailable");
+            const auto storage = report_.estimatedBytes > 0
+                ? juce::String(static_cast<juce::int64>(report_.estimatedBytes)) + " bytes" : juce::String("unavailable");
+            ch |= estimates_->set("Estimated arithmetic: " + arithmetic + ". Estimated storage: " + storage + ". CPU time has not been measured.", Tone::Dim);
+            const bool hasConfiguration = std::isfinite(report_.sampleRate) && report_.sampleRate > 0 && report_.oversampling > 0;
+            const auto configuration = hasConfiguration
+                ? juce::String(report_.previewConfiguration ? "Preview configuration: " : "Audio configuration: ") +
+                    "Fs " + juce::String(report_.sampleRate, 0) + " Hz; OS " + juce::String(report_.oversampling) + "x. Report covers this Fs/OS only." +
+                    (report_.previewConfiguration ? " Live audio configuration was unavailable; validate again after audio starts." : "")
+                : juce::String("Validation configuration was not reported.");
+            ch |= configuration_->set(configuration, report_.previewConfiguration ? Tone::Warn : Tone::Dim);
+            ch |= models_->set(report_.syntheticModels ? "Models: synthetic validation fixtures. Physical device behavior has not been validated." : "", Tone::Warn);
             ch |= diag_->set(report_.diagnostics.isEmpty() ? juce::String(report_.ok ? "No diagnostics." : "No details reported.") : report_.diagnostics.joinIntoString("\n"),
                              report_.ok ? Tone::Dim : Tone::Danger);
         }
@@ -479,14 +546,21 @@ private:
         const int i = static_cast<int>(s);
         state_->set(juce::String("State: ") + names[i] + (extra.isEmpty() ? juce::String() : "  -  " + extra), tones[i]);
         validate_->setEnabled(s != BpState::Validating && s != BpState::Applying);
-        apply_->setEnabled(s == BpState::Ready);
+        const bool canApply = bridge.supportsBlueprintApply();
+        apply_->setEnabled(canApply && s == BpState::Ready);
+        applyNote_->set(canApply ? "Apply asks before replacing the edit slot with the validated draft. Applying is one undo step."
+                                : "Apply is unavailable in this build. You can validate drafts; the active circuit stays unchanged.",
+                        canApply ? Tone::Dim : Tone::Warn);
+        reload_->setEnabled(s != BpState::Applying);
+        example_->setEnabled(s != BpState::Applying);
         editor_.setReadOnly(s == BpState::Applying);
         relayout();
     }
 
-    NoteLabel *state_ = nullptr, *counts_ = nullptr, *diag_ = nullptr;
+    NoteLabel *state_ = nullptr, *applyNote_ = nullptr, *counts_ = nullptr, *estimates_ = nullptr,
+              *configuration_ = nullptr, *models_ = nullptr, *diag_ = nullptr;
     juce::TextEditor editor_;
-    std::unique_ptr<juce::TextButton> validate_, reload_, apply_;
+    std::unique_ptr<juce::TextButton> validate_, reload_, example_, apply_;
     BpState state_v_ = BpState::Idle;
     BlueprintReport report_;
     bool hasReport_ = false, loading_ = false;

@@ -2,6 +2,7 @@
 // narrow 360 px width, then checks layout invariants (no clipping, no overlap, text fits, every
 // control has an accessible name and tooltip) and the required labels and interactions.
 #include <cstdio>
+#include "BlueprintPanelRegressions.h"
 #include "FakeBridge.h"
 #include "PresetSelectionRegressions.h"
 #include "ui/panels/PanelCommon.h"
@@ -277,6 +278,7 @@ int main(int argc, char** argv) {
     }
 
     failures += test::preset_selection_regressions::run();
+    failures += test::blueprint_panel_regressions::run();
     std::printf(failures ? "UI panels snapshot FAILED (%d)\n" : "UI panels snapshot passed\n", failures);
     return failures ? 1 : 0;
 }
