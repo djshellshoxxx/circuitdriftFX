@@ -74,7 +74,7 @@ bool validateLayout(const void* mem, std::size_t size, std::string& error) {
     if (h.slotCount != kMaxMembers || h.ringQuanta != kRingQuanta || h.quantumFrames != kQuantumFrames) { error = "unexpected layout constants"; return false; }
     if (h.channels < 1 || h.channels > kAudioChannels) { error = "invalid channel count"; return false; }
     if (!std::isfinite(h.sampleRate) || h.sampleRate < 8000.0 || h.sampleRate > 384000.0) { error = "invalid sample rate"; return false; }
-    if (!std::isfinite(h.nominalRailV) || std::abs(h.nominalRailV) > 10000.0f) { error = "invalid nominal rail voltage"; return false; }
+    if (!std::isfinite(h.nominalRailV) || std::abs(h.nominalRailV) > kMaxNominalRailV) { error = "invalid nominal rail voltage"; return false; }
     error.clear();
     return true;
 }
@@ -94,7 +94,7 @@ SharedLayout* initializeLayout(void* mem, std::size_t size, const GroupSpec& spe
     if (reinterpret_cast<std::uintptr_t>(mem) % alignof(SharedLayout) != 0) { error = "misaligned region"; return nullptr; }
     if (spec.channels < 1 || spec.channels > kAudioChannels || !std::isfinite(spec.sampleRate) || spec.sampleRate < 8000.0 ||
         spec.sampleRate > 384000.0 || !std::isfinite(spec.nominalRailV) ||
-        std::abs(spec.nominalRailV) > 10000.0f) {
+        std::abs(spec.nominalRailV) > kMaxNominalRailV) {
         error = "invalid group specification"; return nullptr;
     }
     auto* l = new (mem) SharedLayout();
@@ -249,7 +249,7 @@ void Group::bumpEpoch() noexcept { L_->header.epoch.fetch_add(1, std::memory_ord
 
 JoinResult Group::join(const Uuid128& id, double fs, std::uint32_t rail, float nominalV, std::unique_ptr<Member>& out, std::string* reason) {
     auto fail = [&](JoinResult r) { if (reason) *reason = joinResultText(r); return r; };
-    if ((id.hi == 0 && id.lo == 0) || !std::isfinite(fs) || fs < 8000.0 || fs > 384000.0 || !std::isfinite(nominalV)) return fail(JoinResult::InvalidArgument);
+    if ((id.hi == 0 && id.lo == 0) || !std::isfinite(fs) || fs < 8000.0 || fs > 384000.0 || (!std::isfinite(nominalV) || std::abs(nominalV) > kMaxNominalRailV)) return fail(JoinResult::InvalidArgument);
     SharedHeader& h = L_->header;
     if (std::abs(fs - h.sampleRate) > 0.5) return fail(JoinResult::IncompatibleSampleRate);
     if (rail != h.railModelId || std::abs(nominalV - h.nominalRailV) > 1.0e-3f * std::max(1.0f, std::abs(h.nominalRailV))) return fail(JoinResult::IncompatibleRail);
@@ -327,7 +327,10 @@ Registry::Entry* Registry::find(const GroupSpec& spec) const {
 JoinResult Registry::join(const GroupSpec& spec, const Uuid128& memberId, std::unique_ptr<Member>& out, std::string* reason) {
     std::lock_guard<std::mutex> lock(m_);
     auto fail = [&](JoinResult r) { if (reason) *reason = joinResultText(r); return r; };
-    if ((spec.groupId.hi == 0 && spec.groupId.lo == 0) || spec.channels < 1 || spec.channels > kAudioChannels) return fail(JoinResult::InvalidArgument);
+    if ((spec.groupId.hi == 0 && spec.groupId.lo == 0) || spec.channels < 1 || spec.channels > kAudioChannels ||
+        !std::isfinite(spec.sampleRate) || spec.sampleRate < 8000.0 || spec.sampleRate > 384000.0 ||
+        !std::isfinite(spec.nominalRailV) || std::abs(spec.nominalRailV) > kMaxNominalRailV)
+        return fail(JoinResult::InvalidArgument);
     Entry* e = find(spec);
     bool fresh = false;
     if (!e) {
