@@ -1,5 +1,6 @@
 #include "ui/ProcessorEditorBridge.h"
 #include "ui/BlueprintValidationService.h"
+#include "ui/GifCaptureSession.h"
 #include "PluginProcessor.h"
 #include "ParameterLayout.h"
 #include "core/ParameterRegistry.h"
@@ -8,6 +9,8 @@
 #include <utility>
 #include <algorithm>
 #include <cmath>
+#include <exception>
+#include <memory>
 
 namespace cd::plugin {
 namespace {
@@ -356,13 +359,45 @@ void ProcessorEditorBridge::resetEngine(bool cold) {
 bool ProcessorEditorBridge::supportsEngineReset() const {
     return processor_.edition() == Edition::Full && processor_.editorSampleRate() > 0.0;
 }
-bool ProcessorEditorBridge::startCapture(const CaptureRequest&, juce::String& error) { return unavailable(error); }
-void ProcessorEditorBridge::submitCaptureFrame(const juce::Image&) {}
-void ProcessorEditorBridge::stopCapture() {}
+bool ProcessorEditorBridge::startCapture(const CaptureRequest& request, juce::String& error) {
+    if (request.format != CaptureFormat::Gif) {
+        error = request.format == CaptureFormat::Mp4
+            ? "Native MP4 encoder not available (G07)" : "PNG is a single-frame export; use Save PNG";
+        return false;
+    }
+    if (gifCapture_) {
+        const auto state = gifCapture_->status().state;
+        if (state == CaptureState::Recording || state == CaptureState::Finalizing ||
+            state == CaptureState::Armed) {
+            error = "Finish the existing capture before starting another";
+            return false;
+        }
+    }
+    try {
+        auto next = std::make_unique<GifCaptureSession>(request);
+        if (!next->ready()) {
+            error = displayUtf8(next->startError());
+            return false;
+        }
+        gifCapture_ = std::move(next);
+        error.clear();
+        return true;
+    } catch (const std::exception& e) {
+        error = "Cannot initialize GIF capture: " + displayUtf8(e.what());
+        return false;
+    }
+}
+void ProcessorEditorBridge::submitCaptureFrame(const juce::Image& frame) {
+    if (gifCapture_) gifCapture_->submit(frame);
+}
+void ProcessorEditorBridge::stopCapture() {
+    if (gifCapture_) gifCapture_->stop();
+}
 CaptureStatus ProcessorEditorBridge::captureStatus() {
+    if (gifCapture_) return gifCapture_->status();
     CaptureStatus s;
     s.mp4Reason = "Native MP4 encoder not available (G07)";
-    s.message = "Capture service not connected (G11)";
+    s.message = "Silent GIF capture ready; MP4 requires a native encoder";
     return s;
 }
 bool ProcessorEditorBridge::savePng(const juce::Image& image, const juce::File& file, juce::String& error) {
