@@ -627,5 +627,26 @@
     "local_work_branch": "codex/cdfx-continuation-20261120",
     "local_source_head": "9d8ba78e31e232a097aa3ae18a74de9ff7b5cb9b",
     "source_tree": "9b2c2b42644c1e7b4f3e5b9b2010998085bf1a51"
+  },
+  "isolated_history_conflict_replay_20261120": {
+    "branch": "codex/cdfx-history-conflict-20261120-r15",
+    "base_sha": "02a7331cc687e710f3a3c7c0ab023e651601685e",
+    "scope": "Portable configuration history stale-replay preflight and field-level meta replay; no audio-thread or live host graph transaction",
+    "changed_paths": [
+      "src/state/ConfigDelta.h",
+      "src/state/ConfigDelta.cpp",
+      "src/state/History.h",
+      "src/state/History.cpp",
+      "tests/state/test_history.cpp"
+    ],
+    "regression_cases": [
+      "unrelated parameter automation retained",
+      "touched parameter conflict leaves config and history intact",
+      "blueprint-only and seed-only replay retains independent meta edits",
+      "invalid/duplicate delta identities fail closed"
+    ],
+    "qualification": "source-level reasoning only; exact-head CI and independent code/bug/security review required",
+    "coordinator": "PR16 head intentionally unmodified while R14 CI queued; GIF work owned by PR26",
+    "next_owner": "Inspect child exact-head Linux/Windows/pluginval, review history stack exception safety and partial metadata replay, guard-integrate after parent and sibling heads stabilize"
   }
 }
