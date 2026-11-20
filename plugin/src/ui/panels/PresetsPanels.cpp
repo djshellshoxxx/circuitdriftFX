@@ -61,6 +61,8 @@ public:
         search_.setTextToShowWhenEmpty("Search presets", content_.theme().textDim);
         search_.onTextChange = [this] { rebuild(); };
         content_.addItem(search_, 240, 28, true);
+        catalogStatus_ = note("", Tone::Warn);
+        tip(*catalogStatus_, "Preset catalog status", "Preset directory errors and incomplete catalog results");
 
         for (auto* l : {&factory_, &user_}) {
             l->model.box = &l->box;
@@ -77,7 +79,9 @@ public:
         content_.addItem(user_.box, 240, 116, true);
         factory_.model.onSelect = [this](const PresetEntry* p) { if (p) { user_.box.deselectAllRows(); setSelected(*p); } else if (user_.box.getSelectedRow() < 0) clearSelection(); };
         user_.model.onSelect = [this](const PresetEntry* p) { if (p) { factory_.box.deselectAllRows(); setSelected(*p); } else if (factory_.box.getSelectedRow() < 0) clearSelection(); };
-        factory_.model.onOpen = user_.model.onOpen = [this](const PresetEntry&) { doLoad(); };
+        factory_.model.onOpen = user_.model.onOpen = [this](const PresetEntry& p) {
+            if (selectPreset(p.id)) doLoad();
+        };
 
         load_ = makeButton("Load into Slot A", "Load the selected preset into the slot being edited");
         remove_ = makeButton("Delete", "Delete the selected user preset (asks first)");
@@ -124,14 +128,37 @@ private:
     struct Pane { juce::ListBox box; PresetList model; NoteLabel* title = nullptr; };
 
     void rebuild() {
+        const auto selectedId = hasSel_ ? selected_.id : juce::String{};
         const auto all = bridge.listPresets(search_.getText());
+        // ListBox retains an in-range row index when its contents change. A
+        // different preset can occupy that row after filtering or importing.
+        // Clear the old indices before replacing their data, then restore by ID.
+        factory_.box.deselectAllRows();
+        user_.box.deselectAllRows();
+        clearSelection();
         factory_.model.rows.clear();
         user_.model.rows.clear();
         for (const auto& p : all) (p.factory ? factory_ : user_).model.rows.push_back(p);
         factory_.box.updateContent();
         user_.box.updateContent();
+        if (selectedId.isNotEmpty()) selectPreset(selectedId);
         updateButtons();
+        if (catalogStatus_->set(bridge.presetCatalogMessage(), Tone::Warn)) relayout();
         repaint();
+    }
+    bool selectPreset(const juce::String& id) {
+        for (auto* pane : {&factory_, &user_}) {
+            for (int row = 0; row < pane->model.getNumRows(); ++row) {
+                const auto& entry = pane->model.rows[static_cast<std::size_t>(row)];
+                if (entry.id != id) continue;
+                (pane == &factory_ ? user_ : factory_).box.deselectAllRows();
+                pane->box.selectRow(row);
+                // selectRow does not notify when this row was already selected.
+                setSelected(entry);
+                return true;
+            }
+        }
+        return false;
     }
     void setSelected(const PresetEntry& p) {
         selected_ = p;
@@ -140,7 +167,7 @@ private:
         updateButtons();
         relayout();
     }
-    void clearSelection() { hasSel_ = false; updateButtons(); }
+    void clearSelection() { hasSel_ = false; selected_ = {}; updateButtons(); }
     void updateButtons() {
         load_->setEnabled(hasSel_);
         export_->setEnabled(hasSel_);
@@ -211,7 +238,7 @@ private:
     juce::TextEditor search_, name_;
     Pane factory_, user_;
     std::unique_ptr<juce::TextButton> load_, remove_, import_, export_, save_;
-    NoteLabel *current_ = nullptr, *error_ = nullptr, *info_ = nullptr;
+    NoteLabel *current_ = nullptr, *catalogStatus_ = nullptr, *error_ = nullptr, *info_ = nullptr;
     PresetEntry selected_;
     bool hasSel_ = false;
     juce::String slot_ = "A";

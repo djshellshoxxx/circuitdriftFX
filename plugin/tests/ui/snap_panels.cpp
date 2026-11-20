@@ -3,6 +3,7 @@
 // control has an accessible name and tooltip) and the required labels and interactions.
 #include <cstdio>
 #include "FakeBridge.h"
+#include "PresetSelectionRegressions.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/panels/Panels.h"
 
@@ -275,6 +276,7 @@ int main(int argc, char** argv) {
         } else fail("preset name/save controls");
     }
 
+    failures += test::preset_selection_regressions::run();
     std::printf(failures ? "UI panels snapshot FAILED (%d)\n" : "UI panels snapshot passed\n", failures);
     return failures ? 1 : 0;
 }
