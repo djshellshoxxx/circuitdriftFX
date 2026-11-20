@@ -281,14 +281,15 @@ bool ProcessorEditorBridge::savePng(const juce::Image& image, const juce::File& 
     output.flush();
     return true;
 }
-UiSettings ProcessorEditorBridge::uiSettings() { return ui_; }
+UiSettings ProcessorEditorBridge::uiSettings() { return processor_.editorSettings(); }
 void ProcessorEditorBridge::setUiSettings(const UiSettings& value) {
-    ui_ = value;
-    ui_.scale = std::isfinite(ui_.scale) ? std::clamp(ui_.scale, 0.75f, 2.0f) : 1.0f;
-    if (ui_.view != EditorView::Easy && ui_.view != EditorView::Workbench) ui_.view = EditorView::Easy;
-    ui_.overlay = std::clamp(ui_.overlay, 0, 3);
-    ui_.pcbView = std::clamp(ui_.pcbView, 0, 2);
-    ui_.lastWidth = std::clamp(ui_.lastWidth, 750, 4096);
-    ui_.lastHeight = std::clamp(ui_.lastHeight, 540, 4096);
+    auto bounded = value;
+    bounded.scale = std::isfinite(bounded.scale) ? std::clamp(bounded.scale, 0.75f, 2.0f) : 1.0f;
+    if (bounded.view != EditorView::Easy && bounded.view != EditorView::Workbench) bounded.view = EditorView::Easy;
+    bounded.overlay = std::clamp(bounded.overlay, 0, 3);
+    bounded.pcbView = std::clamp(bounded.pcbView, 0, 2);
+    bounded.lastWidth = std::clamp(bounded.lastWidth, 750, 4096);
+    bounded.lastHeight = std::clamp(bounded.lastHeight, 540, 4096);
+    processor_.setEditorSettings(bounded);
 }
 }  // namespace cd::plugin

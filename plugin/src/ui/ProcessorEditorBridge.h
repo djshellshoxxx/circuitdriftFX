@@ -68,7 +68,6 @@ private:
     void syncStateEpoch();
 
     CircuitDriftProcessor& processor_;
-    UiSettings ui_{};
     int editSlot_ = 0;
     bool gestureOpen_ = false;
     Snapshot gestureBefore_;
