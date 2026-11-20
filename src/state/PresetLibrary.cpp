@@ -137,7 +137,10 @@ bool PresetLibrary::save(std::string_view name, const ScenePreset& preset, bool 
     if (!overwrite && fs::exists(fs::symlink_status(target, ec))) { error = "preset already exists"; return false; }
     fs::create_directories(dir_, ec);
     if (ec) { error = "cannot create preset directory"; return false; }
-    if (!saveStateFileAtomic(utf8(target), text, error)) return false;
+    // The earlier exists() check provides a friendly error only. Exclusivity
+    // must be enforced at the final filesystem operation, not before it.
+    if (!(overwrite ? saveStateFileAtomic(utf8(target), text, error)
+                    : saveStateFileAtomicNoReplace(utf8(target), text, error))) return false;
     savedId = "user:" + stem;
     error.clear();
     return true;
