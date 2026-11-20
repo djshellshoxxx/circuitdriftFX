@@ -43,8 +43,14 @@ struct ConfigDelta {
 
 // Exactly the fields that differ (exact double comparison).
 ConfigDelta diff(const Config& before, const Config& after);
-void applyForward(Config& c, const ConfigDelta& d) noexcept;  // sets `after` values
-void applyReverse(Config& c, const ConfigDelta& d) noexcept;  // sets `before` values
+// Replays only fields that actually changed, so unrelated external edits are retained.
+// Config meta writes may allocate and therefore propagate allocation errors on UI threads.
+void applyForward(Config& c, const ConfigDelta& d);  // sets changed `after` values
+void applyReverse(Config& c, const ConfigDelta& d);  // sets changed `before` values
+// Preflight an undo/redo against the current config without mutating it. Rejects
+// stale touched values, duplicate/out-of-range identities and invalid delta values.
+// Unrelated host changes are permitted; forward requires `before`, reverse `after`.
+bool canReplayDelta(const Config& current, const ConfigDelta& delta, bool forward) noexcept;
 // Apply `after` values to a plain-value snapshot (host/adapter side); meta edits are ignored.
 void applyForward(core::ParamValues& v, const ConfigDelta& d) noexcept;
 // Merge `next` (which follows `last` directly) into `last`: first `before` and last `after` win;

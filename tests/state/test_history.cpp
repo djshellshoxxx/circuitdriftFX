@@ -109,6 +109,86 @@ void testAB() {
     CHECK(Config::fromParams(v, &c).slots[1].params == c.slots[0].params);
 }
 
+void testHistoryConflictReplay() {
+    const auto mix = core::indexOf("mix");
+    const auto gain = core::indexOf("output.gain");
+    Config before;
+    before.set(mix, 0.2);
+    Config edited = before;
+    edited.set(mix, 0.8);
+    History h;
+    CHECK(h.commit(before, edited, "User mix", EditKind::Numeric) == CommitResult::Recorded);
+
+    // Host automation to an unrelated parameter survives an undo/redo roundtrip.
+    Config live = edited;
+    live.set(gain, 3.5);
+    CHECK(h.undo(live) != nullptr);
+    CHECK(live.get(mix) == 0.2 && live.get(gain) == 3.5);
+    CHECK(h.redo(live) != nullptr);
+    CHECK(live.get(mix) == 0.8 && live.get(gain) == 3.5);
+
+    // A same-parameter host edit fails closed, retaining the config and both stacks.
+    live.set(mix, 0.6);
+    const auto undoCount = h.undoSize(), redoCount = h.redoSize(), retainedBytes = h.bytes();
+    CHECK(h.undo(live) == nullptr);
+    CHECK(live.get(mix) == 0.6 && h.undoSize() == undoCount &&
+          h.redoSize() == redoCount && h.bytes() == retainedBytes);
+    live.set(mix, 0.8);
+    CHECK(h.undo(live) != nullptr && live.get(mix) == 0.2);
+    live.set(mix, 0.4);
+    CHECK(h.redo(live) == nullptr && live.get(mix) == 0.4 &&
+          h.undoSize() == 0 && h.redoSize() == 1);
+    live.set(mix, 0.2);
+    CHECK(h.redo(live) != nullptr && live.get(mix) == 0.8);
+
+    // Slot meta is checked and written at field granularity: a blueprint edit
+    // must not overwrite an unrelated external seed change.
+    Config bpBefore;
+    Config bpAfter = bpBefore;
+    bpAfter.slots[0].blueprintId = "synthetic.test";
+    History blueprintHistory;
+    CHECK(blueprintHistory.commit(bpBefore, bpAfter, "Blueprint", EditKind::GraphApply) ==
+          CommitResult::Recorded);
+    Config bpLive = bpAfter;
+    bpLive.slots[0].seed = 42;
+    CHECK(blueprintHistory.undo(bpLive) != nullptr);
+    CHECK(bpLive.slots[0].blueprintId == bpBefore.slots[0].blueprintId && bpLive.slots[0].seed == 42);
+    CHECK(blueprintHistory.redo(bpLive) != nullptr);
+    CHECK(bpLive.slots[0].blueprintId == bpAfter.slots[0].blueprintId && bpLive.slots[0].seed == 42);
+    bpLive.slots[0].blueprintId = "synthetic.foreign";
+    CHECK(blueprintHistory.undo(bpLive) == nullptr);
+    CHECK(bpLive.slots[0].blueprintId == "synthetic.foreign" && blueprintHistory.undoSize() == 1);
+
+    // Conversely, seed-only undo must preserve external blueprint changes.
+    Config seedAfter = bpBefore;
+    seedAfter.slots[1].seed = 71;
+    History seedHistory;
+    CHECK(seedHistory.commit(bpBefore, seedAfter, "Seed", EditKind::ABOperation) ==
+          CommitResult::Recorded);
+    Config seedLive = seedAfter;
+    seedLive.slots[1].blueprintId = "synthetic.foreign";
+    CHECK(seedHistory.undo(seedLive) != nullptr);
+    CHECK(seedLive.slots[1].seed == bpBefore.slots[1].seed &&
+          seedLive.slots[1].blueprintId == "synthetic.foreign");
+
+    // Defensive preflight also refuses malformed/ambiguous deltas, not just stale values.
+    ConfigDelta delta = diff(before, edited);
+    CHECK(canReplayDelta(before, delta, true));
+    CHECK(canReplayDelta(edited, delta, false));
+    ConfigDelta invalid = delta;
+    invalid.params[0].index = static_cast<std::uint32_t>(core::kParamCount);
+    CHECK(!canReplayDelta(before, invalid, true));
+    invalid = delta;
+    invalid.params.push_back(invalid.params.front());
+    CHECK(!canReplayDelta(before, invalid, true));
+    invalid = delta;
+    invalid.params[0].after = std::numeric_limits<double>::infinity();
+    CHECK(!canReplayDelta(before, invalid, true));
+    invalid = delta;
+    invalid.meta.push_back({2, "base.default", "synthetic.test", 0, 1});
+    CHECK(!canReplayDelta(before, invalid, true));
+}
+
 void testHistoryT09() {
     std::mt19937_64 rng(42);
     constexpr int kN = 25;
@@ -268,6 +348,7 @@ void testWheelTransactionBoundaries() {
 int main() {
     testConfigModel();
     testAB();
+    testHistoryConflictReplay();
     testHistoryT09();
     testHistoryMisc();
     testWheelTransactionBoundaries();

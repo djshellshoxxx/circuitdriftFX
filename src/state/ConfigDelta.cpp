@@ -1,5 +1,7 @@
 #include "state/ConfigDelta.h"
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <utility>
 
 namespace cd::state {
@@ -25,13 +27,46 @@ ConfigDelta diff(const Config& a, const Config& b) {
     return d;
 }
 
-void applyForward(Config& c, const ConfigDelta& d) noexcept {
-    for (const auto& e : d.params) c.set(e.index, e.after);
-    for (const auto& m : d.meta) { c.slots[m.slot].blueprintId = m.afterBlueprint; c.slots[m.slot].seed = m.afterSeed; }
+bool canReplayDelta(const Config& current, const ConfigDelta& delta, bool forward) noexcept {
+    std::array<bool, core::kParamCount> seen{};
+    for (const auto& edit : delta.params) {
+        if (edit.index >= core::kParamCount || seen[edit.index]) return false;
+        seen[edit.index] = true;
+        const auto& spec = core::kParams[edit.index];
+        for (double value : {edit.before, edit.after}) {
+            if (!std::isfinite(value) || value < spec.min || value > spec.max ||
+                (spec.kind != core::ParamKind::Float && value != std::floor(value))) return false;
+        }
+        if (current.get(edit.index) != (forward ? edit.before : edit.after)) return false;
+    }
+    bool seenSlot[2] = {};
+    for (const auto& meta : delta.meta) {
+        if (meta.slot >= 2 || seenSlot[meta.slot] ||
+            !validBlueprintId(meta.beforeBlueprint) || !validBlueprintId(meta.afterBlueprint) ||
+            meta.beforeSeed > kMaxSeed || meta.afterSeed > kMaxSeed) return false;
+        seenSlot[meta.slot] = true;
+        const auto& slot = current.slots[meta.slot];
+        if (meta.beforeBlueprint != meta.afterBlueprint &&
+            slot.blueprintId != (forward ? meta.beforeBlueprint : meta.afterBlueprint)) return false;
+        if (meta.beforeSeed != meta.afterSeed &&
+            slot.seed != (forward ? meta.beforeSeed : meta.afterSeed)) return false;
+    }
+    return true;
 }
-void applyReverse(Config& c, const ConfigDelta& d) noexcept {
+
+void applyForward(Config& c, const ConfigDelta& d) {
+    for (const auto& e : d.params) c.set(e.index, e.after);
+    for (const auto& m : d.meta) {
+        if (m.beforeBlueprint != m.afterBlueprint) c.slots[m.slot].blueprintId = m.afterBlueprint;
+        if (m.beforeSeed != m.afterSeed) c.slots[m.slot].seed = m.afterSeed;
+    }
+}
+void applyReverse(Config& c, const ConfigDelta& d) {
     for (const auto& e : d.params) c.set(e.index, e.before);
-    for (const auto& m : d.meta) { c.slots[m.slot].blueprintId = m.beforeBlueprint; c.slots[m.slot].seed = m.beforeSeed; }
+    for (const auto& m : d.meta) {
+        if (m.beforeBlueprint != m.afterBlueprint) c.slots[m.slot].blueprintId = m.beforeBlueprint;
+        if (m.beforeSeed != m.afterSeed) c.slots[m.slot].seed = m.beforeSeed;
+    }
 }
 void applyForward(core::ParamValues& v, const ConfigDelta& d) noexcept {
     for (const auto& e : d.params) v[e.index] = e.after;

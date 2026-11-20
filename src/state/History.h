@@ -68,8 +68,12 @@ public:
     void cancelGesture() noexcept { gestureOpen_ = false; }
     bool gestureOpen() const noexcept { return gestureOpen_; }
 
-    // Apply to `cfg` and move the step between stacks. Return the applied transaction (valid until the
-    // next mutating call) or nullptr when nothing to do / a gesture is open.
+    // Replay changed fields and move the step between stacks. A stale touched
+    // parameter/slot-meta value rejects the replay without changing cfg or stacks;
+    // unrelated external edits survive. Stage config before stack mutation so an
+    // allocation failure cannot partially apply a transaction.
+    // Return the applied transaction (valid until next mutating call) or nullptr
+    // when nothing to do, a gesture is open, or the touched state conflicts.
     const Transaction* undo(Config& cfg);
     const Transaction* redo(Config& cfg);
 

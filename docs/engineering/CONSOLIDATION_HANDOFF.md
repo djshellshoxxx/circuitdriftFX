@@ -1,5 +1,24 @@
 # CircuitDriftFX consolidation handoff — 2026-11-20
 
+## Isolated R15 worker: configuration history stale-replay guard
+
+The `codex/cdfx-history-conflict-20261120-r15` branch is a scoped child of draft PR #16 R14
+(`02a7331cc687e710f3a3c7c0ab023e651601685e`). It makes portable configuration
+undo/redo fail closed when host or another owner has changed a *touched* value,
+while preserving independent parameter changes and independent slot blueprint/seed
+metadata. Replay preflights duplicate or invalid delta identities and values.
+History stages the candidate before moving its stack entry, so allocation failure
+cannot leave a partially applied state. Additional synthetic regression cases are
+in `tests/state/test_history.cpp`.
+
+See [focused source-review handoff](../audits/HISTORY_CONFLICT_REPLAY_2026-11-20.md).
+**CI/build and fresh independent code/bug/security worker reviews are still required**
+for this child; this record claims source-level review only. It does **not** implement
+dynamic A/B audio-state capture/restore, atomic host APVTS publication or live graph
+Apply. The GIF owner is working separately on PR #26; this branch does not touch
+GIF/editor/Blueprint files. PR #16 and `main` remain unchanged.
+
+
 ## Current checkpoint — R14
 
 R14 integrates the nine-branch continuation chain through

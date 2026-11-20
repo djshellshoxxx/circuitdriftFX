@@ -110,18 +110,26 @@ CommitResult History::endGesture(const Config& after) {
 }
 
 const Transaction* History::undo(Config& cfg) {
-    if (gestureOpen_ || undo_.empty()) return nullptr;
+    if (gestureOpen_ || undo_.empty() || !canReplayDelta(cfg, undo_.back().delta, false)) return nullptr;
+    // Stage before changing either stack. A failed allocation leaves the caller's
+    // configuration and both history stacks untouched.
+    Config proposed = cfg;
+    applyReverse(proposed, undo_.back().delta);
     redo_.push_back(std::move(undo_.back()));
     undo_.pop_back();
-    applyReverse(cfg, redo_.back().delta);
+    using std::swap;
+    swap(cfg, proposed);
     return &redo_.back();
 }
 
 const Transaction* History::redo(Config& cfg) {
-    if (gestureOpen_ || redo_.empty()) return nullptr;
+    if (gestureOpen_ || redo_.empty() || !canReplayDelta(cfg, redo_.back().delta, true)) return nullptr;
+    Config proposed = cfg;
+    applyForward(proposed, redo_.back().delta);
     undo_.push_back(std::move(redo_.back()));
     redo_.pop_back();
-    applyForward(cfg, undo_.back().delta);
+    using std::swap;
+    swap(cfg, proposed);
     return &undo_.back();
 }
 
