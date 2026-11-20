@@ -1,5 +1,7 @@
 #include "control/KeyTracker.h"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace cd::control {
 
@@ -15,6 +17,48 @@ void KeyTracker::reset() noexcept {
     note_ = 69.0;
     weight_ = 0.0;
     holdLeft_ = returnLeft_ = 0.0;
+}
+
+KeyTracker::State KeyTracker::save() const noexcept {
+    State s;
+    s.sampleRate = fs_; s.count = count_; s.pedal = pedal_; s.state = state_;
+    s.notePitch = note_; s.weight = weight_; s.holdLeft = holdLeft_; s.returnLeft = returnLeft_;
+    // Unused slots contain historical entries; they are not continuation state.
+    for (int i = 0; i < std::clamp(count_, 0, kMax); ++i) s.notes[std::size_t(i)] = slots_[i];
+    return s;
+}
+
+bool KeyTracker::canRestore(const State& s) const noexcept {
+    const auto in = [](double v, double lo, double hi) noexcept {
+        return std::isfinite(v) && v >= lo && v <= hi;
+    };
+    // Covers pitches from positive finite binary64 A4 tuning and admitted
+    // frequencies, with ample headroom for subsequent integer note searches.
+    constexpr double pitchLimit = 32768.0;
+    if (!std::isfinite(fs_) || fs_ <= 0 || s.sampleRate != fs_ || s.count < 0 || s.count > kMax ||
+        s.state < KeyState::ManualReference || s.state > KeyState::Returning ||
+        !in(s.notePitch, -pitchLimit, pitchLimit) || !in(s.weight, 0, 1) ||
+        !in(s.holdLeft, 0, kHoldS * fs_) || !in(s.returnLeft, 0, kReturnS * fs_)) return false;
+    for (int i = 0; i < s.count; ++i) {
+        const auto& n = s.notes[std::size_t(i)];
+        if (!n.held && !(n.sustained && s.pedal)) return false;
+        for (int j = 0; j < i; ++j)
+            if (n.note == s.notes[std::size_t(j)].note) return false;
+    }
+    if (s.state == KeyState::ManualReference && (s.weight != 0 || s.returnLeft != 0)) return false;
+    if ((s.state == KeyState::NoteActive || s.state == KeyState::NoteHold) && s.weight != 1) return false;
+    if (s.state == KeyState::Returning &&
+        std::fabs(s.weight - s.returnLeft / (kReturnS * fs_)) > 16 * std::numeric_limits<double>::epsilon()) return false;
+    // Forced returns retain an inactive hold timer; it need not be zero.
+    return true;
+}
+
+bool KeyTracker::restore(const State& s) noexcept {
+    if (!canRestore(s)) return false;
+    for (int i = 0; i < kMax; ++i) slots_[i] = i < s.count ? s.notes[std::size_t(i)] : Slot{};
+    count_ = s.count; pedal_ = s.pedal; state_ = s.state;
+    note_ = s.notePitch; weight_ = s.weight; holdLeft_ = s.holdLeft; returnLeft_ = s.returnLeft;
+    return true;
 }
 
 void KeyTracker::removeAt(int i) noexcept {

@@ -42,10 +42,21 @@ public:
     static constexpr double kTauSmoothS = 0.05;
     static constexpr double kPhaseSmoothS = 0.02;
 
+    struct State {
+        double sampleRate = 48000.0;
+        double phase = 0, phaseError = 0, recoveryTau = 0;
+        bool wasEnabled = false, havePpq = false;
+        double lastPpqEnd = 0, lastBeatsPerCycle = 0;
+        TempoOutput output{};
+    };
+
     void prepare(double sampleRate) noexcept;
     void reset() noexcept;
     TempoOutput process(const TempoInput& in, int frames) noexcept;  // frames==0: no clock advance
     const TempoOutput& last() const noexcept { return out_; }
+    State save() const noexcept;
+    bool canRestore(const State& state) const noexcept;
+    bool restore(const State& state) noexcept;  // rejection changes nothing
 
     static double beatsPerCycle(int division, int modifier, int tsNum, int tsDen) noexcept;
     static double recoveryTau(double q, double bpm) noexcept;

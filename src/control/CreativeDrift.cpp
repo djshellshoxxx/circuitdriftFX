@@ -28,9 +28,9 @@ void CreativeDrift::prepare(double sampleRate, uint64_t instanceSeed, uint32_t s
     st_.q = std::tanh((st_.u[0] + st_.u[1] + st_.u[2]) / std::sqrt(3.0));
 }
 
-void CreativeDrift::restore(const State& s) noexcept {
+bool CreativeDrift::validateState(const State& s, uint64_t& phase) const noexcept {
     if (!std::isfinite(s.q) || std::fabs(s.q) > 1.0 || !std::isfinite(s.delayUnitMs) ||
-        std::fabs(s.delayUnitMs) > kMaxDelayMs) return;
+        std::fabs(s.delayUnitMs) > kMaxDelayMs) return false;
     double sum = 0;
     for (int j = 0; j < 3; ++j) {
         const auto& rng = s.rng[j];
@@ -38,12 +38,21 @@ void CreativeDrift::restore(const State& s) noexcept {
         // three AR coefficients that bounds reachable process magnitude below 1024.
         if (!std::isfinite(s.u[j]) || std::fabs(s.u[j]) > 1024.0 ||
             !std::isfinite(rng.spare) || std::fabs(rng.spare) > 9.0 || rng.hasSpare > 1 ||
-            (rng.s[0] | rng.s[1] | rng.s[2] | rng.s[3]) == 0) return;
+            (rng.s[0] | rng.s[1] | rng.s[2] | rng.s[3]) == 0) return false;
         sum += s.u[j];
     }
-    if (std::fabs(s.q - std::tanh(sum / std::sqrt(3.0))) > 16 * std::numeric_limits<double>::epsilon()) return;
+    if (std::fabs(s.q - std::tanh(sum / std::sqrt(3.0))) > 16 * std::numeric_limits<double>::epsilon()) return false;
+    return s.ticks == clockPosition(s.samples, phase);
+}
+
+bool CreativeDrift::canRestore(const State& s) const noexcept {
     uint64_t phase = 0;
-    if (s.ticks != clockPosition(s.samples, phase)) return;
+    return validateState(s, phase);
+}
+
+void CreativeDrift::restore(const State& s) noexcept {
+    uint64_t phase = 0;
+    if (!validateState(s, phase)) return;
     st_ = s;
     samplePhase_ = phase;
     for (int j = 0; j < 3; ++j) rng_[j].setState(st_.rng[j]);
