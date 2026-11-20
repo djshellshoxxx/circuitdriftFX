@@ -359,7 +359,9 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
     return true;
 }
 
-bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error) {
+namespace {
+bool writeStateFileAtomicImpl(const std::string& path, const std::string& text,
+                              bool allowReplace, std::string& error) {
     if (path.empty() || path.find('\0') != std::string::npos) { error = "invalid destination path"; return false; }
 #if defined(_WIN32)
     if (path.size() > std::size_t(std::numeric_limits<int>::max())) { error = "destination path too long"; return false; }
@@ -394,8 +396,13 @@ bool saveStateFileAtomic(const std::string& path, const std::string& text, std::
     if (!written || !flushed || !closed) {
         DeleteFileW(temporary.c_str()); error = "temporary write, flush or close failed"; return false;
     }
-    if (!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(temporary.c_str()); error = "replace failed"; return false;
+    // Omitting REPLACE_EXISTING is an exclusive destination install; unlike an
+    // exists() precheck, a competing file creator cannot be silently overwritten.
+    const DWORD flags = (allowReplace ? MOVEFILE_REPLACE_EXISTING : DWORD{0}) | MOVEFILE_WRITE_THROUGH;
+    if (!MoveFileExW(temporary.c_str(), destination.c_str(), flags)) {
+        DeleteFileW(temporary.c_str());
+        error = allowReplace ? "replace failed" : "destination exists or atomic creation failed";
+        return false;
     }
 #else
     std::string pattern = path + ".tmp.XXXXXX";
@@ -421,12 +428,30 @@ bool saveStateFileAtomic(const std::string& path, const std::string& text, std::
     if (!written || !flushed || !closed) {
         ::unlink(temporary.data()); error = "temporary write, flush or close failed"; return false;
     }
-    if (::rename(temporary.data(), path.c_str()) != 0) {
-        ::unlink(temporary.data()); error = "replace failed"; return false;
+    // link() creates the destination only if it is absent, atomically; rename()
+    // retains the overwrite contract for existing callers. Both files reside
+    // in the same directory/filesystem. A dangling destination symlink also
+    // causes EEXIST, preventing accidental replacement.
+    const int installed = allowReplace ? ::rename(temporary.data(), path.c_str())
+                                      : ::link(temporary.data(), path.c_str());
+    if (installed != 0) {
+        ::unlink(temporary.data());
+        error = allowReplace ? "replace failed" : "destination exists or atomic creation failed";
+        return false;
     }
+    if (!allowReplace) (void)::unlink(temporary.data());
 #endif
     error.clear();
     return true;
+}
+}  // namespace
+
+bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error) {
+    return writeStateFileAtomicImpl(path, text, true, error);
+}
+
+bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& text, std::string& error) {
+    return writeStateFileAtomicImpl(path, text, false, error);
 }
 
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason) {
