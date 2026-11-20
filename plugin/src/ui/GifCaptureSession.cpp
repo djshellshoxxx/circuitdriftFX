@@ -78,7 +78,7 @@ GifCaptureSession::GifCaptureSession(const CaptureRequest& request, std::uint64_
     // shared resource is initialized before the worker can observe this object.
     started_ = clock_();
     state_.store(CaptureState::Recording, std::memory_order_release);
-    setMessage("Recording silent GIF");
+    setMessage("Recording silent GIF", CaptureState::Recording);
     worker_ = std::thread([this] {
         run();
         workerFinished_.store(true, std::memory_order_release);
@@ -191,7 +191,7 @@ void GifCaptureSession::beginStop(std::uint32_t frames) noexcept {
         // Close admission only after publishing the winning (manual/deadline)
         // endpoint. An already admitted producer may finish its publication.
         stopping_.store(true, std::memory_order_seq_cst);
-        setMessage("Finalizing silent GIF");
+        setMessage("Finalizing silent GIF", CaptureState::Finalizing);
         wake_.notify_one();
     }
 }
@@ -205,11 +205,11 @@ void GifCaptureSession::stop() noexcept {
     beginStop(frames);
 }
 
-void GifCaptureSession::setMessage(std::string_view text) noexcept {
+void GifCaptureSession::setMessage(std::string_view text, CaptureState expected) noexcept {
     try {
         std::lock_guard<std::mutex> lock(messageMutex_);
         const auto state = state_.load(std::memory_order_acquire);
-        if (state == CaptureState::Failed) return;
+        if (state != expected) return;
         message_.assign(text.data(), std::min(text.size(), kDiagnosticBytes));
         messageState_ = state;
     } catch (...) {}
@@ -351,7 +351,7 @@ void GifCaptureSession::run() noexcept {
         try {
             if (hooks_.beforeCompletionMessage) hooks_.beforeCompletionMessage();
             const auto message = std::string("Saved ") + destinationPath_;
-            setMessage(message);
+            setMessage(message, CaptureState::Completed);
         } catch (...) {}
     } catch (...) {
         fail(Failure::WorkerException);

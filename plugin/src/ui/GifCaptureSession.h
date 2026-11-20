@@ -77,7 +77,7 @@ private:
     void beginStop(std::uint32_t frames) noexcept;
     void run() noexcept;
     void fail(Failure, std::string_view detail = {}) noexcept;
-    void setMessage(std::string_view) noexcept;
+    void setMessage(std::string_view, CaptureState expected) noexcept;
     static const char* failureMessage(Failure) noexcept;
 
     const CaptureRequest request_;
