@@ -8,9 +8,11 @@
 #include <condition_variable>
 #include <cstdio>
 #include <exception>
+#include <future>
 #include <initializer_list>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 
@@ -81,6 +83,33 @@ private:
     std::thread writer_;
 };
 
+// Exercise host callbacks that reenter save/restore or abort one notification.
+// The first notification is one-shot; no production hook or allocator failure is needed.
+class NotificationProbe final : private juce::AudioProcessorValueTreeState::Listener {
+public:
+    NotificationProbe(CircuitDriftProcessor& processor, const juce::String& id,
+                      const juce::MemoryBlock* nestedRestore, bool fail)
+        : processor_(processor), id_(id), nestedRestore_(nestedRestore), fail_(fail) {
+        processor_.parameters().addParameterListener(id_, this);
+    }
+    ~NotificationProbe() override { processor_.parameters().removeParameterListener(id_, this); }
+    bool called = false;
+    juce::MemoryBlock savedDuringNotification;
+private:
+    void parameterChanged(const juce::String&, float) override {
+        if (called) return;
+        called = true;
+        processor_.getStateInformation(savedDuringNotification);
+        if (nestedRestore_)
+            processor_.setStateInformation(nestedRestore_->getData(), static_cast<int>(nestedRestore_->getSize()));
+        if (fail_) throw std::runtime_error("synthetic host notification failure");
+    }
+    CircuitDriftProcessor& processor_;
+    juce::String id_;
+    const juce::MemoryBlock* nestedRestore_;
+    bool fail_;
+};
+
 inline int run() {
     int failures = 0;
     const auto check = [&](bool value, const char* message) {
@@ -114,9 +143,7 @@ inline int run() {
     const auto restore = [](CircuitDriftProcessor& processor, const juce::MemoryBlock& state) {
         processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
     };
-    const auto savedValue = [&](CircuitDriftProcessor& processor, const char* id, double expected) {
-        juce::MemoryBlock state;
-        processor.getStateInformation(state);
+    const auto encodedValue = [&](const juce::MemoryBlock& state, const char* id, double expected) {
         const auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize()));
         bool found = false;
         if (xml) for (const auto* child : xml->getChildIterator()) {
@@ -126,6 +153,11 @@ inline int run() {
             }
         }
         return found;
+    };
+    const auto savedValue = [&](CircuitDriftProcessor& processor, const char* id, double expected) {
+        juce::MemoryBlock state;
+        processor.getStateInformation(state);
+        return encodedValue(state, id, expected);
     };
     auto snapshot = std::make_unique<CircuitDriftProcessor::EditorSnapshot>();
     juce::AudioBuffer<float> empty, block(2, 16);
@@ -228,6 +260,60 @@ inline int run() {
         const auto reprepared = observe(processor);
         check(isNew(reprepared) && reprepared.generation != before.generation,
               "reprepare uses the latest complete host state without an old pending generation");
+
+        // Both threads enter the host API while the first publication is paused.
+        // Source synchronization serializes publishers; audio still never waits.
+        {
+            PausedRestore first(processor, firstId, oldState);
+            const bool paused = first.waitUntilPaused();
+            check(paused, "first of two concurrent publishers reaches its notification");
+            std::promise<void> secondEntered;
+            auto secondReady = secondEntered.get_future();
+            std::exception_ptr secondFailure;
+            std::thread second([&] {
+                secondEntered.set_value();
+                try { restore(processor, newState); }
+                catch (...) { secondFailure = std::current_exception(); }
+            });
+            check(secondReady.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                  "second host publisher starts within the bounded setup window");
+            if (paused) check(isNew(observe(processor)), "overlapping host publishers keep the previous complete audio configuration");
+            first.finish();
+            second.join();
+            check(first.completedNormally() && !secondFailure, "both concurrent host publications complete normally");
+        }
+        check(isNew(observe(processor)), "latest serialized host publisher supplies a complete configuration");
+        {
+            NotificationProbe probe(processor, firstId, &newState, false);
+            restore(processor, oldState);
+            check(probe.called && encodedValue(probe.savedDuringNotification, firstId, lite ? 1 : 95) &&
+                  encodedValue(probe.savedDuringNotification, secondId, lite ? 0.8 : 125),
+                  "reentrant save sees the complete preceding host state while replacement is active");
+            check(isOld(observe(processor)), "nested restore cannot invalidate its outer APVTS traversal");
+        }
+        {
+            NotificationProbe probe(processor, firstId, nullptr, true);
+            bool threw = false;
+            try { restore(processor, newState); }
+            catch (const std::runtime_error&) { threw = true; }
+            check(threw && probe.called, "controlled notification failure aborts a real partial replacement");
+            check(isOld(observe(processor)) && savedValue(processor, firstId, lite ? 0 : 111) &&
+                  savedValue(processor, secondId, lite ? 0.1 : 119),
+                  "failed replacement leaves audio and host saves on the complete preceding configuration");
+        }
+        processor.releaseResources();
+        processor.prepareToPlay(48000, 64);
+        check(isOld(observe(processor)), "reprepare after a failed notification uses the complete fallback");
+        const auto recovery = candidate(processor, {{secondId, lite ? 0.8f : 125.0f}});
+        restore(processor, recovery);
+        const auto recovered = observe(processor);
+        check(lite ? near(recovered.sag, 2.4) && near(recovered.age, 12) && !recovered.bypassed
+                   : near(recovered.mainsA, 111) && near(recovered.mainsB, 125),
+              "successful legacy-subset recovery retains omitted fallback values and reopens audio reads");
+        set(processor, firstId, lite ? 1.0f : 103.0f);
+        const auto afterRecoveryAutomation = observe(processor);
+        check(lite ? afterRecoveryAutomation.bypassed : near(afterRecoveryAutomation.mainsA, 103),
+              "ordinary automation resumes after exceptional restore recovery");
 
         CircuitDriftProcessor initiallyStopped(edition, "Unprepared restore");
         restore(initiallyStopped, newState);

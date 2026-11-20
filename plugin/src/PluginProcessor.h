@@ -85,7 +85,12 @@ public:
 
 private:
     static BusesProperties makeBuses();
-    core::ParamValues parameterSnapshot() const noexcept;
+    struct ParameterSnapshot {
+        core::ParamValues values = core::defaultValues();
+        bool bypassed = false;  // LITE wrapper parameter, outside the core registry
+    };
+    ParameterSnapshot parameterSnapshot() const noexcept;
+    const ParameterSnapshot& audioParameterSnapshot() noexcept;
     void run() override;  // bounded pitch work, never on the audio thread
     void stopPitchWorker();
     const EditorSnapshot* latestEditorSnapshot() noexcept;
@@ -98,6 +103,20 @@ private:
     juce::AudioProcessorValueTreeState apvts_;
     std::array<std::atomic<float>*, core::kParamCount> rawParameters_{};
     std::atomic<float>* rawBypass_ = nullptr;
+    // Non-audio host publishers/lifecycle only. Recursive access permits an APVTS
+    // notification to save state; a nested restore is rejected below.
+    mutable std::recursive_mutex hostStateMutex_;
+    bool replacingHostState_ = false;
+    // The previous complete host state remains available to reentrant saves and
+    // after an exceptional JUCE notification. Never read these fields on audio.
+    juce::ValueTree hostStateFallback_;
+    UiSettings hostStateFallbackSettings_{};
+    ParameterSnapshot hostStateFallbackParameters_{};
+    // Odd while replacement is incomplete, even after successful publication.
+    // Only the non-audio publisher writes this sequence; audio makes one attempt.
+    std::atomic<std::uint64_t> hostStateSequence_{0};
+    // Audio-owned while prepared; preparation initializes it with audio quiescent.
+    ParameterSnapshot audioParameters_{};
     runtime::Processor runtime_;
     std::array<std::vector<double>, engine::kMaxChannels> audioScratch_, sidechainScratch_;
     std::array<control::MidiEvent, runtime::Processor::kMaxMidiEvents> midiEvents_{}, chunkMidi_{};

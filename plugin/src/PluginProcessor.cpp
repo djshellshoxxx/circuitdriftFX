@@ -45,11 +45,27 @@ CircuitDriftProcessor::CircuitDriftProcessor(Edition edition, const juce::String
 
 CircuitDriftProcessor::~CircuitDriftProcessor() { releaseResources(); }
 
-core::ParamValues CircuitDriftProcessor::parameterSnapshot() const noexcept {
-    auto values = core::defaultValues();
-    for (std::size_t i = 0; i < values.size(); ++i)
-        if (rawParameters_[i]) values[i] = rawParameters_[i]->load(std::memory_order_relaxed);
-    return values;
+CircuitDriftProcessor::ParameterSnapshot CircuitDriftProcessor::parameterSnapshot() const noexcept {
+    ParameterSnapshot snapshot;
+    for (std::size_t i = 0; i < snapshot.values.size(); ++i)
+        if (rawParameters_[i]) snapshot.values[i] = rawParameters_[i]->load(std::memory_order_seq_cst);
+    snapshot.bypassed = rawBypass_ && rawBypass_->load(std::memory_order_seq_cst) >= 0.5f;
+    return snapshot;
+}
+
+const CircuitDriftProcessor::ParameterSnapshot& CircuitDriftProcessor::audioParameterSnapshot() noexcept {
+    const auto before = hostStateSequence_.load(std::memory_order_seq_cst);
+    if ((before & 1u) == 0) {
+        const auto candidate = parameterSnapshot();
+        // The pinned JUCE APVTS writes its raw atomic floats with seq_cst stores.
+        // Keeping both sequence observations and raw reads in that same total
+        // order prevents accepting a read that spans any part of replacement.
+        // Ordinary independent host automation retains its existing semantics.
+        if (hostStateSequence_.load(std::memory_order_seq_cst) == before)
+            audioParameters_ = candidate;
+    }
+    // No retry, publisher wait, callback lock or allocation on the audio owner.
+    return audioParameters_;
 }
 
 void CircuitDriftProcessor::run() {
@@ -133,6 +149,7 @@ bool CircuitDriftProcessor::isBusesLayoutSupported(const BusesLayout& layouts) c
 
 void CircuitDriftProcessor::prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock) {
     releaseResources();
+    const std::lock_guard stateLock(hostStateMutex_);
     prepareError_.clear();
     if (!std::isfinite(sampleRate) || sampleRate <= 0) return;
     engine::EngineConfig config;
@@ -142,7 +159,10 @@ void CircuitDriftProcessor::prepareToPlay(double sampleRate, int maximumExpected
     if (config.channels < 1 || config.channels > engine::kMaxChannels) return;
     for (auto& channel : audioScratch_) channel.assign(static_cast<std::size_t>(config.maxBlock), 0.0);
     for (auto& channel : sidechainScratch_) channel.assign(static_cast<std::size_t>(config.maxBlock), 0.0);
-    if (!runtime_.prepare(config, parameterSnapshot(), edition_ == Edition::Lite, prepareError_)) return;
+    // Lifecycle calls are quiescent with respect to audio. A failed notification
+    // must not make reprepare adopt a partially replaced APVTS configuration.
+    audioParameters_ = hostStateFallback_.isValid() ? hostStateFallbackParameters_ : parameterSnapshot();
+    if (!runtime_.prepare(config, audioParameters_.values, edition_ == Edition::Lite, prepareError_)) return;
     sampleRate_ = sampleRate;
     maxBlock_ = config.maxBlock;
     sampleCursor_ = expectedHostSample_ = 0;
@@ -165,6 +185,7 @@ void CircuitDriftProcessor::prepareToPlay(double sampleRate, int maximumExpected
 }
 
 void CircuitDriftProcessor::releaseResources() {
+    const std::lock_guard stateLock(hostStateMutex_);
     editorReadsEnabled_.store(false, std::memory_order_release);
     editorGeneration_.fetch_add(1, std::memory_order_acq_rel);
     pendingReset_.store(0, std::memory_order_release);
@@ -198,8 +219,9 @@ void CircuitDriftProcessor::processAudio(juce::AudioBuffer<Sample>& buffer, juce
     auto input = frames > 0 ? getBusBuffer(buffer, true, 0) : juce::AudioBuffer<Sample>{};
     auto sidechain = frames > 0 ? getBusBuffer(buffer, true, 1) : juce::AudioBuffer<Sample>{};
     const int sidechainChannels = std::min(sidechain.getNumChannels(), engine::kMaxChannels);
-    const auto parameters = parameterSnapshot();
-    bypassed = bypassed || (rawBypass_ && rawBypass_->load(std::memory_order_relaxed) >= 0.5f);
+    const auto& snapshot = audioParameterSnapshot();
+    const auto& parameters = snapshot.values;
+    bypassed = bypassed || snapshot.bypassed;
 
     control::ControlContext controls;
     std::int64_t blockStart = sampleCursor_;
@@ -324,12 +346,14 @@ juce::AudioProcessorEditor* CircuitDriftProcessor::createEditor() {
 }
 
 void CircuitDriftProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    auto state = apvts_.copyState();
+    const std::lock_guard stateLock(hostStateMutex_);
+    auto state = hostStateFallback_.isValid() ? hostStateFallback_.createCopy() : apvts_.copyState();
+    const auto settings = hostStateFallback_.isValid() ? hostStateFallbackSettings_ : editorSettings();
     state.setProperty("schemaVersion", kAdapterStateVersion, nullptr);
     state.setProperty("edition", editionName(edition_), nullptr);
     if (edition_ == Edition::Lite) state.setProperty("liteMappingVersion", kLiteMappingVersion, nullptr);
     if (const auto xml = state.createXml()) {
-        writeEditorSettings(*xml, editorSettings());
+        writeEditorSettings(*xml, settings);
         copyXmlToBinary(*xml, destData);
     }
 }
@@ -337,7 +361,7 @@ void CircuitDriftProcessor::getStateInformation(juce::MemoryBlock& destData) {
 void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInBytes) {
     if (data == nullptr || sizeInBytes <= 0 || sizeInBytes > kMaxStateBytes) return;
     const auto xml = getXmlFromBinary(data, sizeInBytes);
-    if (xml == nullptr || !xml->hasTagName(apvts_.state.getType())) return;
+    if (xml == nullptr || !xml->hasTagName(kStateType)) return;
     if (xml->hasAttribute("schemaVersion") && xml->getStringAttribute("schemaVersion") != kAdapterStateVersion) return;
     if (xml->hasAttribute("edition") && xml->getStringAttribute("edition") != editionName(edition_)) return;
     if (edition_ == Edition::Lite && xml->hasAttribute("liteMappingVersion") &&
@@ -365,12 +389,50 @@ void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInByte
         seen[count++] = parameter;
     }
     if (count == 0) return;
-    apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+    auto nextState = juce::ValueTree::fromXml(*xml);
+    if (!nextState.isValid()) return;
+    const std::lock_guard stateLock(hostStateMutex_);
+    // A host notification may save recursively, but replacing recursively would
+    // invalidate the outer JUCE child traversal. Other publisher threads wait
+    // here, never on the audio thread.
+    if (replacingHostState_) return;
+    const juce::ScopedValueSetter<bool> replacing(replacingHostState_, true);
+    auto fallback = hostStateFallback_.isValid() ? hostStateFallback_ : apvts_.copyState();
+    const auto fallbackSettings = hostStateFallback_.isValid() ? hostStateFallbackSettings_ : editorSettings();
+    const auto fallbackParameters = hostStateFallback_.isValid() ? hostStateFallbackParameters_ : parameterSnapshot();
+    // Materialize omitted legacy-subset parameters before publication. This also
+    // recovers from a previous failed notification using the complete fallback,
+    // rather than retaining any partially changed raw values from that failure.
+    const auto completeParameter = [&](const char* id, float value) {
+        if (!nextState.getChildWithProperty("id", id).isValid()) {
+            juce::ValueTree child("PARAM");
+            child.setProperty("id", id, nullptr);
+            child.setProperty("value", value, nullptr);
+            nextState.appendChild(child, nullptr);
+        }
+    };
+    for (std::size_t i = 0; i < rawParameters_.size(); ++i)
+        if (rawParameters_[i]) completeParameter(core::kParams[i].id, static_cast<float>(fallbackParameters.values[i]));
+    if (rawBypass_) completeParameter(kBypassParamId, fallbackParameters.bypassed ? 1.0f : 0.0f);
+
+    // Staging allocation is finished before the fallback or odd marker becomes
+    // visible. The shared fallback is only accessed under the non-audio lock.
+    hostStateFallbackSettings_ = fallbackSettings;
+    hostStateFallbackParameters_ = fallbackParameters;
+    hostStateFallback_ = std::move(fallback);
+    // Derive a fresh odd sequence even after an exceptional previous replacement.
+    // If JUCE/user notification code throws, leave audio and host saves on the
+    // previous complete configuration. A later successful restore reopens reads.
+    const auto writingSequence = (hostStateSequence_.load(std::memory_order_seq_cst) + 2u) | std::uint64_t{1};
+    hostStateSequence_.store(writingSequence, std::memory_order_seq_cst);
+    apvts_.replaceState(nextState);
     {
         const std::lock_guard lock(editorSettingsMutex_);
         editorSettings_ = settings;  // Loading host state is not a new user edit.
     }
     editorStateEpoch_.fetch_add(1, std::memory_order_release);
+    hostStateFallback_ = juce::ValueTree{};
+    hostStateSequence_.store(writingSequence + 1u, std::memory_order_seq_cst);
 }
 
 }  // namespace cd::plugin
