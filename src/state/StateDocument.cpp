@@ -255,6 +255,141 @@ void validateCheckpointForSave(const EngineCheckpoint& c) {
         throw std::invalid_argument("invalid checkpoint dynamic vector for schema v1");
 }
 
+// Count exactly what writeJson emits, without building an output string or
+// copying recursive JsonValues. Recursion stops at the reader's depth limit;
+// every token is charged with checked arithmetic before further traversal.
+struct JsonWriteBudget {
+    std::size_t limit, used = 0;
+    const char* sizeError;
+    JsonWriteBudget(std::size_t maxBytes, const char* error) : limit(maxBytes), sizeError(error) {}
+
+    void add(std::size_t bytes) {
+        if (bytes > limit - used) throw std::invalid_argument(sizeError);
+        used += bytes;
+    }
+    void string(std::string_view text) {
+        add(2);  // quotes
+        add(text.size());
+        for (unsigned char c : text) {
+            if (c < 0x20) add(5);  // writeJson emits every control byte as \u00xx
+            else if (c == '"' || c == '\\') add(1);
+        }
+    }
+    void number(double value) {
+        // Reuse the writer's locale-independent token format; at most 32 bytes.
+        add(core::writeJson(JsonValue::makeNumber(value)).size());
+    }
+    void array(std::size_t items) {
+        add(2);
+        if (items) add(items - 1);  // commas
+    }
+    void field(std::string_view key, bool& first) {
+        if (!first) add(1);
+        first = false;
+        string(key);
+        add(1);  // colon
+    }
+    void strings(const std::vector<std::string>& values) {
+        array(values.size());
+        for (const auto& text : values) string(text);
+    }
+    void value(const JsonValue& v, int ancestors) {
+        // JsonValue's default copy includes all members, including storage that
+        // the type tag excludes from serialization. Do not copy hidden trees.
+        if ((!v.isString() && !v.string.empty()) || (!v.isArray() && !v.array.empty()) ||
+            (!v.isObject() && !v.object.empty()))
+            throw std::invalid_argument("state writer resource preflight: inactive JSON storage");
+        if ((v.isArray() || v.isObject()) && ancestors >= core::JsonLimits{}.maxDepth)
+            throw std::invalid_argument("state writer resource preflight: nesting exceeds JSON depth bound");
+        switch (v.type) {
+            case JsonValue::Type::Null: add(4); break;
+            case JsonValue::Type::Bool: add(v.boolean ? 4 : 5); break;
+            case JsonValue::Type::Number: number(v.number); break;
+            case JsonValue::Type::String: string(v.string); break;
+            case JsonValue::Type::Array:
+                array(v.array.size());
+                for (const auto& child : v.array) value(child, ancestors + 1);
+                break;
+            case JsonValue::Type::Object: {
+                add(2);
+                bool first = true;
+                for (const auto& member : v.object) {
+                    field(member.first, first);
+                    value(member.second, ancestors + 1);
+                }
+                break;
+            }
+            default: throw std::invalid_argument("state writer resource preflight: invalid JSON type");
+        }
+    }
+};
+
+// The field names and nesting below mirror toJson. Keep this admission pass
+// ahead of that function: checking the completed tree is already too late to
+// bound its recursive copies. Reader roundtrip still owns semantic validation.
+void validateWriteResources(const StateDocument& d, bool forPublish) {
+    JsonWriteBudget budget(d.kind == DocKind::Scene ? kSceneMaxBytes : kSessionMaxBytes,
+                           "state writer resource preflight: document exceeds encoded byte bound");
+    budget.add(2);  // root object
+    bool first = true;
+    const auto field = [&](std::string_view key) { budget.field(key, first); };
+    field("schemaVersion"); budget.number(kSchemaVersion);
+    field("product"); budget.string("CircuitDrift");
+    field("kind"); budget.string(d.kind == DocKind::Scene ? "scene" : "session");
+    field("engineModelVersion"); budget.string(d.engineModelVersion);
+    field("minReaderVersion"); budget.number(d.minReaderVersion);
+    field("author"); budget.string(d.author);
+    field("title"); budget.string(d.title);
+    field("tags"); budget.strings(d.tags);
+    field("requiredFeatures"); budget.strings(d.requiredFeatures);
+    field("createdAt"); budget.string(d.createdAt);
+    const auto blueprint = [&](const JsonValue& value, int ancestors) {
+        JsonWriteBudget bounded(kBlueprintMaxBytes,
+                                "state writer resource preflight: blueprint exceeds encoded byte bound");
+        bounded.value(value, ancestors);
+        budget.add(bounded.used);
+    };
+    if (d.kind == DocKind::Scene) {
+        field("blueprint");
+        if (d.blueprints.empty()) budget.add(2);  // toJson's empty-object fallback
+        else blueprint(d.blueprints.front(), 1);
+    } else {
+        field("blueprints"); budget.array(d.blueprints.size());
+        for (const auto& value : d.blueprints) blueprint(value, 2);
+    }
+    field("baseParameters"); budget.add(2);
+    bool firstParameter = true;
+    for (const auto& parameter : d.baseParameters) {
+        budget.field(parameter.first, firstParameter);
+        budget.number(parameter.second);
+    }
+    field("macros"); budget.value(d.macros, 1);
+    field("timeline"); budget.value(d.timeline, 1);
+    field("faults"); budget.value(d.faults, 1);
+    field("seed"); budget.number(double(d.seed));
+    if (!forPublish) {
+        if (d.ui) { field("ui"); budget.value(*d.ui, 1); }
+        if (d.checkpoint) {
+            if (d.kind != DocKind::Session)
+                throw std::invalid_argument("checkpoint only allowed in sessions");
+            // This typed payload is already bounded before its small JSON tree
+            // is built; opaque input trees above are traversed only by reference.
+            validateCheckpointForSave(*d.checkpoint);
+            field("checkpoint"); budget.value(checkpointJson(*d.checkpoint), 1);
+        }
+        JsonWriteBudget metadata(kMetadataMaxBytes,
+                                 "state writer resource preflight: metadata exceeds encoded byte bound");
+        for (const auto& member : d.metadata) {
+            // validateV1 charges raw key bytes plus encoded value bytes here;
+            // the complete envelope separately charges escaped keys/punctuation.
+            metadata.add(member.first.size());
+            const auto beforeValue = metadata.used;
+            metadata.value(member.second, 1);
+            field(member.first); budget.add(metadata.used - beforeValue);
+        }
+    }
+}
+
 JsonValue toJson(const StateDocument& d, bool forPublish) {
     if (!forPublish && d.checkpoint) {
         if (d.kind != DocKind::Session)
@@ -393,6 +528,7 @@ std::string saveState(const StateDocument& doc) {
     } else {
         throw std::invalid_argument("invalid document kind");
     }
+    validateWriteResources(doc, false);
     if (!hasUniqueParameterIdentities(doc))
         throw std::invalid_argument("duplicate in-memory parameter identity");
     std::set<std::string> identities;
@@ -413,13 +549,16 @@ std::string saveState(const StateDocument& doc) {
 
 bool publishScene(const StateDocument& doc, std::string& out, std::string& error) {
     if (doc.kind != DocKind::Scene) { error = "only scenes are published"; return false; }
-    if (!hasUniqueParameterIdentities(doc)) {
-        error = "duplicate in-memory parameter identity";
-        return false;
-    }
-    if (!publishableContent(doc, error)) return false;
     std::string candidate;
-    try { candidate = core::writeJson(toJson(doc, true)); }
+    try {
+        validateWriteResources(doc, true);
+        if (!hasUniqueParameterIdentities(doc)) {
+            error = "duplicate in-memory parameter identity";
+            return false;
+        }
+        if (!publishableContent(doc, error)) return false;
+        candidate = core::writeJson(toJson(doc, true));
+    }
     catch (const std::invalid_argument& e) { error = e.what(); return false; }
     StateDocument check;
     if (!loadState(candidate, check, error)) return false;  // publishing never emits an unreadable scene
