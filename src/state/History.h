@@ -56,7 +56,9 @@ public:
     CommitResult commit(const Config& before, const Config& after, std::string_view label, EditKind kind,
                         std::size_t blobBytes = 0);
     // Wheel gesture: merges into the previous Wheel transaction with the same label when the gap since
-    // its last event is <= kWheelGroupMs.
+    // its last event is <= kWheelGroupMs, its edited values still match `before`, and no undo branch
+    // is pending. Non-finite timestamps are rejected. A merge that exceeds the hard byte budget
+    // leaves the original transaction unchanged.
     CommitResult commitWheel(const Config& before, const Config& after, std::string_view label, double nowMs);
 
     // Mouse drag / continuous gesture: begin with the config at pointer-down, end with the config at

@@ -1,6 +1,7 @@
 // Config model, A/B operations and 20-step undo/redo (CD-F09/F24; T09, T24 state parts).
 // Synthetic data only.
 #include <cmath>
+#include <limits>
 #include <random>
 #include <string>
 #include <vector>
@@ -210,6 +211,58 @@ void testHistoryMisc() {
     Config s3 = s2; ab.undo(s3);
     CHECK(s3 == s);
 }
+
+void testWheelTransactionBoundaries() {
+    Config initial;
+    Config first = initial;
+    first.set(core::indexOf("mix"), 0.5);
+
+    // Measure one legitimate wheel edit, then allow precisely that footprint.
+    // A second edit with the same label adds metadata and must not silently
+    // grow the retained group beyond the configured budget.
+    History measured;
+    CHECK(measured.commitWheel(initial, first, "Wheel", 0) == CommitResult::Recorded);
+    History bounded(measured.bytes());
+    CHECK(bounded.commitWheel(initial, first, "Wheel", 0) == CommitResult::Recorded);
+    const std::size_t originalBytes = bounded.bytes();
+    Config expanded = first;
+    expanded.slots[0].blueprintId.assign(kBlueprintIdMaxLen, 'b');
+    CHECK(bounded.commitWheel(first, expanded, "Wheel", 100) == CommitResult::RejectedBudget);
+    CHECK(bounded.bytes() == originalBytes && bounded.undoSize() == 1);
+    CHECK(bounded.peekUndo()->timeMs == 0 && bounded.peekUndo()->delta.meta.empty());
+    Config restored = first;
+    CHECK(bounded.undo(restored) != nullptr && restored == initial);
+    CHECK(bounded.redo(restored) != nullptr && restored == first);
+
+    // Undo followed by another wheel edit creates a distinct transaction.
+    // One subsequent undo returns to the user's branch point.
+    History branch;
+    Config second = first;
+    second.set(core::indexOf("mix"), 0.25);
+    CHECK(branch.commitWheel(initial, first, "Wheel", 0) == CommitResult::Recorded);
+    CHECK(branch.commitWheel(first, second, "Other wheel", 50) == CommitResult::Recorded);
+    restored = second;
+    CHECK(branch.undo(restored) != nullptr && restored == first);
+    Config replacement = first;
+    replacement.set(core::indexOf("mix"), 0.75);
+    CHECK(branch.commitWheel(first, replacement, "Wheel", 100) == CommitResult::Recorded);
+    CHECK(branch.undoSize() == 2 && !branch.canRedo());
+    restored = replacement;
+    CHECK(branch.undo(restored) != nullptr && restored == first);
+
+    const std::size_t undoBefore = branch.undoSize(), redoBefore = branch.redoSize(), bytesBefore = branch.bytes();
+    CHECK(branch.commitWheel(first, replacement, "Wheel", std::numeric_limits<double>::quiet_NaN()) == CommitResult::RejectedInvalid);
+    CHECK(branch.undoSize() == undoBefore && branch.redoSize() == redoBefore && branch.bytes() == bytesBefore);
+
+    // An intervening host edit to the same value also ends the wheel group.
+    // Undoing the new user edit restores the host value, not the older value.
+    History automation;
+    CHECK(automation.commitWheel(initial, first, "Wheel", 0) == CommitResult::Recorded);
+    CHECK(automation.commit(first, second, "Host", EditKind::Automation) == CommitResult::ExcludedAutomation);
+    CHECK(automation.commitWheel(second, replacement, "Wheel", 100) == CommitResult::Recorded);
+    restored = replacement;
+    CHECK(automation.undo(restored) != nullptr && restored == second);
+}
 }  // namespace
 
 int main() {
@@ -217,5 +270,6 @@ int main() {
     testAB();
     testHistoryT09();
     testHistoryMisc();
+    testWheelTransactionBoundaries();
     return TEST_RESULT("test_history");
 }

@@ -1,4 +1,5 @@
 #include "state/History.h"
+#include <cmath>
 #include <utility>
 
 namespace cd::state {
@@ -9,6 +10,16 @@ std::string clipLabel(std::string_view s) {
     std::size_t n = std::min(s.size(), kMaxLabelBytes);
     while (n > 0 && n < s.size() && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;  // keep UTF-8 whole
     return std::string(s.substr(0, n));
+}
+
+bool continuesEdit(const Config& before, const ConfigDelta& previous) noexcept {
+    for (const auto& edit : previous.params)
+        if (before.get(edit.index) != edit.after) return false;
+    for (const auto& edit : previous.meta) {
+        const auto& slot = before.slots[edit.slot];
+        if (slot.blueprintId != edit.afterBlueprint || slot.seed != edit.afterSeed) return false;
+    }
+    return true;
 }
 }  // namespace
 
@@ -45,20 +56,33 @@ CommitResult History::commit(const Config& before, const Config& after, std::str
 }
 
 CommitResult History::commitWheel(const Config& before, const Config& after, std::string_view label, double nowMs) {
+    if (!std::isfinite(nowMs)) return CommitResult::RejectedInvalid;
     ConfigDelta d = diff(before, after);
     if (d.empty()) return CommitResult::NoChange;
     const std::string lab = clipLabel(label);
-    if (!undo_.empty()) {
+    // An edit after undo starts a new history branch, even when it has the same
+    // label and timestamp as the preceding wheel group.
+    if (!undo_.empty() && redo_.empty()) {
         Transaction& last = undo_.back();
-        if (last.kind == EditKind::Wheel && last.label == lab && nowMs >= last.timeMs && nowMs - last.timeMs <= kWheelGroupMs) {
-            std::size_t redoBytes = 0;
-            for (const auto& r : redo_) redoBytes += r.accounted;
-            bytes_ -= redoBytes;
-            redo_.clear();
-            bytes_ -= last.accounted;
-            mergeInto(last.delta, d);
-            last.timeMs = nowMs;
-            if (last.delta.empty()) undo_.pop_back(); else { last.accounted = last.bytes(); bytes_ += last.accounted; }
+        if (last.kind == EditKind::Wheel && last.label == lab && nowMs >= last.timeMs && nowMs - last.timeMs <= kWheelGroupMs &&
+            continuesEdit(before, last.delta)) {
+            // Validate the complete replacement before touching either stack.
+            // A grouped edit can add fields or larger slot metadata, so its
+            // storage must pass the same hard budget as a new transaction.
+            Transaction merged = last;
+            mergeInto(merged.delta, d);
+            merged.timeMs = nowMs;
+            const std::size_t retainedBytes = bytes_ - last.accounted;
+            merged.accounted = merged.bytes();
+            if (!merged.delta.empty() &&
+                (retainedBytes > budget_ || merged.accounted > budget_ - retainedBytes))
+                return CommitResult::RejectedBudget;
+            bytes_ = retainedBytes;
+            if (merged.delta.empty()) undo_.pop_back();
+            else {
+                bytes_ += merged.accounted;
+                last = std::move(merged);
+            }
             return CommitResult::Merged;
         }
     }
