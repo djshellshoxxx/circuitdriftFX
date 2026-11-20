@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -98,9 +99,13 @@ struct CompileResult {
 };
 
 // Worker only; bounded input already parsed. `generation` is stored in the graph.
-CompileResult compile(const Blueprint&, const ModelRegistry&, const RuntimeConfig&, Generation generation = 0);
+// Cancellation is cooperative at compiler stages and every numerical probe sample;
+// it returns DiagCode::Cancelled, no graph, and the cost collected so far.
+CompileResult compile(const Blueprint&, const ModelRegistry&, const RuntimeConfig&, Generation generation = 0,
+                      std::stop_token stop = {});
 // Parse + compile.
-CompileResult compileText(std::string_view json, const ModelRegistry&, const RuntimeConfig&, Generation generation = 0);
+CompileResult compileText(std::string_view json, const ModelRegistry&, const RuntimeConfig&, Generation generation = 0,
+                          std::stop_token stop = {});
 
 // Components whose capacitor charge/magnetic/thermal state may carry from `from` to `to`:
 // same component ID, model ID, model revision and identical pin->node wiring. Pairs of indices.

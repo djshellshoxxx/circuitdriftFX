@@ -2,11 +2,15 @@
 // nothing here validates any physical device (G01 open).
 #include "blueprint/BlueprintGraph.h"
 #include "blueprint/Compiler.h"
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <future>
 #include <limits>
 #include <random>
 #include <string>
+#include <thread>
 
 namespace {
 using namespace cd::blueprint;
@@ -122,6 +126,70 @@ void t10TypedInputs() {
     bp.components[0].params.resize(kMaxParamsPerComponent + 1);
     CHECK(rejects(bp, DiagCode::LimitExceeded));
     CHECK(compile(baseline, kReg, kCfg8).ok);
+}
+
+void t10Cancellation() {
+    const auto isCancelled = [](const CompileResult& r) {
+        return !r.ok && !r.graph && r.failedCheck >= 1 && r.failedCheck <= 6 &&
+               r.diagnostics.items.size() == 1 && r.diagnostics.has(DiagCode::Cancelled) &&
+               !r.cost.validatedForThisConfigurationOnly;
+    };
+    CHECK(std::string(diagCodeName(DiagCode::Cancelled)) == "Cancelled");
+    std::stop_source stopped;
+    CHECK(stopped.request_stop());
+    Blueprint bp;
+    Diagnostics d;
+    CHECK(parseBlueprint(kRc, bp, d));
+    CHECK(isCancelled(compile(bp, kReg, kCfg8, 7, stopped.get_token())));
+    CHECK(isCancelled(compileText(kRc, kReg, kCfg8, 7, stopped.get_token())));
+    // Pre-cancellation happens before either parser/config/schema validation.
+    const auto beforeParse = compileText("{", kReg, kCfg8, 7, stopped.get_token());
+    CHECK(isCancelled(beforeParse) && beforeParse.failedCheck == 1 && beforeParse.cost.components == 0);
+    CHECK(isCancelled(compile(Blueprint{}, kReg, RuntimeConfig{0, 3, 0}, 7, stopped.get_token())));
+
+    std::stop_source live;
+    const auto accepted = compileText(kRc, kReg, kCfg8, 8, live.get_token());
+    CHECK(accepted.ok && accepted.graph && accepted.graph->generation == 8 && accepted.diagnostics.empty());
+    CHECK(live.request_stop());
+    CHECK(isCancelled(compile(bp, kReg, kCfg8, 9, live.get_token())));
+    CHECK(accepted.ok && accepted.graph && accepted.graph->generation == 8);  // completed result stays immutable
+
+    // A valid, high-cost fixture keeps the maximum-rate probe in flight. The
+    // worker announces its start before the caller requests cancellation, and
+    // the returned costs prove cancellation happened after probe work began.
+    std::string nodes = R"(["0","in","out")";
+    std::string components = "[" + R("R1", "in", "out") + "," + C("C1", "out", "0");
+    for (int i = 0; i < kMaxNodes - 3; ++i) {
+        const std::string suffix = std::to_string(i), node = "v" + suffix;
+        nodes += ",\"" + node + "\"";
+        components += "," + V("V" + suffix, node, "0", 0) + "," + R("RL" + suffix, node, "out");
+    }
+    const std::string longProbe = doc(nodes + "]", components + "]");
+    std::promise<void> started;
+    auto start = started.get_future();
+    std::promise<CompileResult> completed;
+    auto result = completed.get_future();
+    std::jthread worker([&](std::stop_token stop) {
+        started.set_value();
+        completed.set_value(compileText(longProbe, kReg, RuntimeConfig{384000, 16, 1}, 10, stop));
+    });
+    start.wait();
+    CHECK(result.wait_for(std::chrono::milliseconds(250)) == std::future_status::timeout);
+    CHECK(worker.request_stop());
+    // This is a shutdown bound, not a solver throughput benchmark. A missing
+    // in-probe cancellation check must fail without hanging this test's join.
+    if (result.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+        std::fprintf(stderr, "FAIL: blueprint compiler did not stop within 5 seconds\n");
+        std::fflush(stderr);
+        std::_Exit(EXIT_FAILURE);  // do not destroy shared fixtures under a stuck worker
+    }
+    const auto interrupted = result.get();
+    CHECK(isCancelled(interrupted) && interrupted.failedCheck == 5);
+    CHECK(interrupted.cost.dcIterations > 0 && interrupted.cost.probeMaxNewton > 0);
+    CHECK(interrupted.cost.sampleRate == 384000 && interrupted.cost.oversampling == 16);
+    CHECK(interrupted.cost.components == 62 && interrupted.cost.nodes == kMaxNodes);
+    std::printf("T10 cancellation: interrupted check %d after %d probe Newton iterations\n",
+                interrupted.failedCheck, interrupted.cost.probeMaxNewton);
 }
 
 void t10Rejects() {
@@ -373,6 +441,7 @@ void t10Fuzz() {
 int main() {
     t10Valid();
     t10TypedInputs();
+    t10Cancellation();
     t10Rejects();
     t10ParseBounds();
     t10ActiveGraphUnchanged();
