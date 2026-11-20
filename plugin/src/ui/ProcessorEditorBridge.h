@@ -5,16 +5,19 @@
 #include "ui/EditorBridge.h"
 #include "state/PresetLibrary.h"
 #include <cstddef>
+#include <memory>
 #include <filesystem>
 #include <utility>
 #include <vector>
 
 namespace cd::plugin {
 class CircuitDriftProcessor;
+class GifCaptureSession;
 
 class ProcessorEditorBridge final : public EditorBridge {
 public:
     explicit ProcessorEditorBridge(CircuitDriftProcessor& processor);
+    ~ProcessorEditorBridge() override;
     // Tests/embedders can inject a sandboxed directory; production selects the
     // current user's application data. No storage is touched by construction.
     ProcessorEditorBridge(CircuitDriftProcessor& processor, std::filesystem::path userPresetDirectory);
@@ -74,6 +77,7 @@ private:
 
     CircuitDriftProcessor& processor_;
     state::PresetLibrary presetLibrary_;
+    std::unique_ptr<GifCaptureSession> gifCapture_; // owned, stopped and joined off audio
     int editSlot_ = 0;
     bool gestureOpen_ = false;
     Snapshot gestureBefore_;
