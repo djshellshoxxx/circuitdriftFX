@@ -353,6 +353,21 @@ void testValidateLayout() {
     mutate([](SharedHeader& h) { h.sampleRate = std::nan(""); }, "NaN rate");
     mutate([](SharedHeader& h) { h.sampleRate = 10; }, "rate low");
     mutate([](SharedHeader& h) { h.nominalRailV = INFINITY; }, "rail inf");
+    // A producer must not create a region that the receiver's structural
+    // admission will reject. Bounds are inclusive and symmetric.
+    auto checkInitRail = [&](float rail, bool expected) {
+        auto target = std::make_unique<SharedLayout>();
+        auto candidate = s;
+        candidate.nominalRailV = rail;
+        std::string e;
+        auto* initialized = initializeLayout(target.get(), sizeof(SharedLayout), candidate, e);
+        CHECK((initialized != nullptr) == expected);
+        if (initialized) CHECK(validateLayout(initialized, sizeof(SharedLayout), e));
+    };
+    checkInitRail(10000.0f, true);
+    checkInitRail(-10000.0f, true);
+    checkInitRail(10000.125f, false);
+    checkInitRail(-10000.125f, false);
     CHECK(!validateLayout(lay.get(), sizeof(SharedHeader) - 1, err));
     CHECK(!validateLayout(lay.get(), sizeof(SharedLayout) - 1, err));
     CHECK(!validateLayout(nullptr, 100, err));
