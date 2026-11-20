@@ -14,10 +14,12 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <array>
 #include <atomic>
+#include <memory>
 #include <vector>
 
 namespace cd::plugin {
 
+class EditorBridge;
 class CircuitDriftProcessor final : public juce::AudioProcessor, private juce::Thread {
 public:
     CircuitDriftProcessor(Edition edition, const juce::String& displayName);
@@ -26,6 +28,12 @@ public:
     Edition edition() const noexcept { return edition_; }
     juce::AudioProcessorValueTreeState& parameters() noexcept { return apvts_; }
     bool midiOverflowed() const noexcept { return midiOverflowed_.load(std::memory_order_relaxed); }
+    // Message-thread read-only UI snapshot. Readers are quiesced before host reprepare/release.
+    bool readEditorTelemetry(engine::TelemetryFrame& out) noexcept;
+    int editorLatency() const noexcept { return editorLatency_.load(std::memory_order_acquire); }
+    int editorChannels() const noexcept { return editorChannels_.load(std::memory_order_acquire); }
+    double editorSampleRate() const noexcept { return editorSampleRate_.load(std::memory_order_acquire); }
+    std::uint64_t editorStateEpoch() const noexcept { return editorStateEpoch_.load(std::memory_order_acquire); }
 
     // --- juce::AudioProcessor ---
     const juce::String getName() const override { return displayName_; }
@@ -62,6 +70,7 @@ private:
     core::ParamValues parameterSnapshot() const noexcept;
     void run() override;  // bounded pitch work, never on the audio thread
     void stopPitchWorker();
+    void suspendEditorReaders() noexcept;
     template <typename Sample>
     void processAudio(juce::AudioBuffer<Sample>& buffer, juce::MidiBuffer& midi, bool bypassed) noexcept;
 
@@ -80,6 +89,12 @@ private:
     bool haveHostPosition_ = false;
     std::atomic<bool> midiOverflowed_{false};
     std::string prepareError_;
+    std::unique_ptr<EditorBridge> editorBridge_;
+    std::atomic<bool> editorReadsEnabled_{false};
+    std::atomic<unsigned> editorReaders_{0};
+    std::atomic<double> editorSampleRate_{0.0};
+    std::atomic<int> editorChannels_{2}, editorLatency_{0};
+    std::atomic<std::uint64_t> editorStateEpoch_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CircuitDriftProcessor)
 };
