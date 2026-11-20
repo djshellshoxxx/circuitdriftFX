@@ -83,6 +83,11 @@ bool publishScene(const StateDocument& doc, std::string& out, std::string& error
 // the old file; successful return does not promise directory durability after power loss.
 // POSIX and Windows local-file replacement are supported; never call from audio.
 bool saveStateFileAtomic(const std::string& path, const std::string& text, std::string& error);
+// Exclusively installs a new file without ever replacing an existing target, including
+// a dangling symlink. The existence decision is made atomically at installation,
+// not by a prior filesystem check; suitable for no-overwrite preset imports.
+// Same trusted-directory, non-audio and durability constraints as above.
+bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& text, std::string& error);
 
 struct RuntimeIdentity {
     std::string engineModelVersion, modelRevision;
