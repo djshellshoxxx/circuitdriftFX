@@ -438,6 +438,7 @@ public:
         tip(*configuration_, "Blueprint validation configuration", "Sample rate and oversampling used for this report");
         tip(*models_, "Blueprint model provenance", "Whether validation used synthetic fixture models");
         load();
+        themeChanged();
     }
     ~BlueprintPanel() override { bridge.cancelBlueprintValidation(); }
 
@@ -457,6 +458,10 @@ public:
     }
 
 private:
+    void themeChanged() override {
+        // JUCE retains colours in existing text runs across LookAndFeel changes.
+        editor_.applyColourToAllText(content_.theme().text);
+    }
     void draftChanged(const juce::String& message = {}) {
         bridge.cancelBlueprintValidation();
         validatedText_.clear();
