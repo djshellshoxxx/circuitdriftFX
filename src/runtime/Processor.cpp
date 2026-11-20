@@ -19,6 +19,13 @@ int64_t offsetSample(int64_t sample, int offset) noexcept {
     const auto max = std::numeric_limits<int64_t>::max();
     return sample > max - offset ? max : sample + offset;
 }
+bool affectsKeyTracking(const control::MidiEvent& event) noexcept {
+    // Match KeyTracker::handle: other CCs only reevaluate the unchanged note
+    // table, and other message types return without changing tracking state.
+    const auto type = event.status & 0xf0u;
+    return type == 0x80u || type == 0x90u ||
+           (type == 0xb0u && (event.data1 == 64 || event.data1 == 120 || event.data1 == 123));
+}
 }
 
 core::ParamValues sanitiseParameters(const core::ParamValues& values) noexcept {
@@ -129,9 +136,11 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
     set(controlValues, "pitchDrift.enabled", activePitchDrift_ ? 1.0 : 0.0);
     engine_.setBypassed(bypassed);
     midiOverflowed_ = controls.midi.size() > kMaxMidiEvents;
-    // LITE ignores MIDI entirely, including its effect on processing boundaries.
-    std::size_t sourceCount = lite_ ? 0 : std::min(controls.midi.size(), kMaxMidiEvents);
-    const bool releaseOverflow = midiOverflowed_ && !lite_;
+    // Inactive sources must not change control/engine boundaries. MIDI tracking
+    // remains active with scale lock disabled, so key.enabled is not a gate.
+    const bool midiSource = !lite_ && controlValues[core::indexOf("key.source")] == int(control::KeySource::Midi);
+    std::size_t sourceCount = midiSource ? std::min(controls.midi.size(), kMaxMidiEvents) : 0;
+    const bool releaseOverflow = midiOverflowed_ && midiSource;
     control::MidiEvent releaseEvent{};
     if (releaseOverflow) {
         sourceCount = kMaxMidiEvents - 1;
@@ -149,11 +158,15 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
     // A zero-frame call applies sample-zero events and targets without advancing time.
     do {
         int count = std::min(frames - offset, config_.maxBlock);
-        // Apply a note at its sample boundary, never at the start of the earlier
-        // control chunk. Equal-offset events remain ordered and are applied together.
-        while (eventIndex < eventLimit && eventAt(eventIndex).frame < uint32_t(offset)) ++eventIndex;
+        // Filter only the bounded admitted prefix; ignored input still counts
+        // toward overflow, whose terminal release remains a meaningful event.
+        // Apply tracking events at their sample boundaries. Equal-offset events
+        // remain ordered and are applied together.
+        while (eventIndex < eventLimit &&
+               (eventAt(eventIndex).frame < uint32_t(offset) || !affectsKeyTracking(eventAt(eventIndex)))) ++eventIndex;
         auto nextEvent = eventIndex;
-        while (nextEvent < eventLimit && eventAt(nextEvent).frame == uint32_t(offset)) ++nextEvent;
+        while (nextEvent < eventLimit &&
+               (eventAt(nextEvent).frame == uint32_t(offset) || !affectsKeyTracking(eventAt(nextEvent)))) ++nextEvent;
         if (count > 0 && nextEvent < eventLimit &&
             eventAt(nextEvent).frame > uint32_t(offset) &&
             eventAt(nextEvent).frame < uint32_t(offset + count))
@@ -184,7 +197,7 @@ void Processor::process(const engine::ProcessContext& context, const control::Co
             const auto& event = eventAt(eventIndex);
             if (event.frame >= uint32_t(offset + std::max(count, 1))) break;
             ++eventIndex;
-            if (event.frame < uint32_t(offset) || lite_) continue;
+            if (event.frame < uint32_t(offset) || !affectsKeyTracking(event)) continue;
             midi_[eventCount] = event;
             midi_[eventCount++].frame -= uint32_t(offset);
         }
