@@ -85,16 +85,25 @@ CacheGet OfflineCache::get(std::string_view id, std::string_view rev, std::strin
     auto it = entries_.find(name);
     if (it == entries_.end()) return CacheGet::Miss;
     const fs::path path = cfg_.directory / name;
+    // The pin belongs to this specific cached entry. When an entry is gone or
+    // corrupt, remove its marker as well; otherwise a subsequent write using
+    // the same key can inherit a stale pin after the next cache reopen.
+    auto forgetMissing = [&] {
+        total_ -= std::min(total_, it->second.size);
+        entries_.erase(it);
+        std::error_code ignored;
+        fs::remove(cfg_.directory / (name + ".pin"), ignored);
+    };
     auto drop = [&] {
         std::error_code e;
         fs::remove(path, e);
-        if (!e) { total_ -= std::min(total_, it->second.size); entries_.erase(it); }
+        if (!e) forgetMissing();
         return CacheGet::Corrupt;
     };
     std::error_code ec;
     const auto status = fs::symlink_status(path, ec);
     if (ec && ec != std::errc::no_such_file_or_directory) return CacheGet::Miss;
-    if (!fs::exists(status)) { total_ -= std::min(total_, it->second.size); entries_.erase(it); return CacheGet::Miss; }
+    if (!fs::exists(status)) { forgetMissing(); return CacheGet::Miss; }
     if (!fs::is_regular_file(status)) return drop();
     const auto size = fs::file_size(path, ec);
     if (ec) return CacheGet::Miss;

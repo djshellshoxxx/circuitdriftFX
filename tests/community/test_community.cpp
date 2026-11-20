@@ -534,7 +534,16 @@ void testCache(const fs::path& base) {
         std::fstream f(file, std::ios::in | std::ios::out | std::ios::binary); f.seekp(-10, std::ios::end); f.put('Z');
     }
     CHECK(c.get("a", "1", out) == CacheGet::Corrupt && !fs::exists(file) && !c.contains("a", "1"));
+    CHECK(!fs::exists(dir / (OfflineCache::entryName("a", "1") + ".pin")));
     CHECK(c.get("a", "1", out) == CacheGet::Miss);
+    // Restoring the same key must not resurrect the pin of the corrupt entry.
+    CHECK(c.put("a", "1", blobA, err));
+    {
+        OfflineCache reopened(CacheConfig{dir, 1u << 20, 4096});
+        CHECK(reopened.open(err));
+        CHECK(reopened.get("a", "1", out) == CacheGet::Hit && out == blobA);
+        CHECK(!fs::exists(dir / (OfflineCache::entryName("a", "1") + ".pin")));
+    }
     CHECK(c.put("t", "1", blobA, err));
     const fs::path tf = dir / OfflineCache::entryName("t", "1");
     fs::resize_file(tf, 20);                                            // truncated
