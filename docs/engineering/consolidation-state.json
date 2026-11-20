@@ -144,5 +144,33 @@
       "from": "71a263718ae7ac9ed0d4a75d624929489216ef53",
       "status": "imported_pending_build_review"
     }
-  ]
+  ],
+  "continuation": {
+    "source_pr": 16,
+    "base_sha": "e721e9eea044b352546abd3a1b945fa1f3745038",
+    "isolated_branch": "codex/cdfx-seek-epoch-20261119",
+    "engineering_commits": [
+      {
+        "sha": "edf0c21bc8b26ca928f0df8b5ed3d0459d02275c",
+        "change": "audio-thread-safe pitch-worker seek generation and runtime regressions"
+      },
+      {
+        "sha": "63c33686bca432c807c93112e6aa65dc349d49e2",
+        "change": "corrupt or missing offline-cache entry clears its obsolete persisted pin"
+      }
+    ],
+    "integration_status": "isolated_not_in_pr16",
+    "validation": {
+      "pr16_linux": "passed_on_base_sha",
+      "pr16_windows": "building_on_base_sha",
+      "child": "not_yet_ci_qualified"
+    },
+    "unresolved": [
+      "Windows/pluginval base qualification",
+      "independent regression/security review",
+      "child branch CI",
+      "custom EditorBridge and session migration",
+      "older PR 9/10/14 per-file reconciliation"
+    ]
+  }
 }

@@ -155,3 +155,19 @@ accepted post-seek samples; no audio-thread filter reset is performed.
 The earlier PR #9/#10/#14 item-level reconciliation and custom editor transaction
 layer remain separate. Do not treat this follow-up as source integration of those
 APIs. Preserve original development branches and core acceptance criteria.
+
+## Cache integrity follow-up on isolated branch
+
+Commit `63c33686bca432c807c93112e6aa65dc349d49e2` corrects a
+confirmed persisted-cache bookkeeping defect: successful cleanup of a corrupt
+entry or discovery of a missing on-disk entry previously left its `.pin`
+marker behind. A subsequent write using the same key could inherit the stale
+pin after reopening the cache, contrary to the deletion intent. The implementation
+now removes the associated marker when forgetting that entry and adds a
+regression that corrupts a previously pinned entry, checks marker cleanup,
+restores the key and reopens it. Filesystem deletion errors can still leave
+orphan markers (and external concurrent modification is unsupported); do not
+claim complete multi-process atomicity. The change has not yet run under CI.
+
+Child-branch last production commit: `63c33686bca432c807c93112e6aa65dc349d49e2`.
+Do not count the base PR #16 Linux pass as verification of this later code.
