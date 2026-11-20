@@ -84,7 +84,7 @@ inline int run() {
     const auto loadSelected = [&](const char* id, const char* message) {
         const int before = bridge->loaded.size();
         load->onClick();
-        check(bridge->loaded.size() == before + 1 && bridge->loaded.getLast() == id, message);
+        check(bridge->loaded.size() == before + 1 && bridge->loaded[bridge->loaded.size() - 1] == id, message);
     };
 
     check(noSelection(), "initial catalog has no implicit action target");
@@ -142,13 +142,13 @@ inline int run() {
     const int beforeUserDoubleClick = bridge->loaded.size();
     user->getModel()->listBoxItemDoubleClicked(0, doubleClick(*user));
     check(bridge->loaded.size() == beforeUserDoubleClick + 1 &&
-              bridge->loaded.getLast() == "user:amber" && user->getSelectedRow() == 0 &&
+              bridge->loaded[bridge->loaded.size() - 1] == "user:amber" && user->getSelectedRow() == 0 &&
               factory->getSelectedRow() == -1 && remove->isEnabled(),
           "user double-click loads and selects its explicit row instead of the old factory ID");
     const int beforeFactoryDoubleClick = bridge->loaded.size();
     factory->getModel()->listBoxItemDoubleClicked(1, doubleClick(*factory));
     check(bridge->loaded.size() == beforeFactoryDoubleClick + 1 &&
-              bridge->loaded.getLast() == "factory:warm" && factory->getSelectedRow() == 1 &&
+              bridge->loaded[bridge->loaded.size() - 1] == "factory:warm" && factory->getSelectedRow() == 1 &&
               user->getSelectedRow() == -1 && !remove->isEnabled(),
           "factory double-click loads and selects its explicit row instead of the old user ID");
 
