@@ -338,3 +338,25 @@ review, and coordinate guarded integration with PR #16's current owner. Continue
 full dynamic engine/control/seed session checkpoints, coordinated A/B handoff
 and semantic reconciliation of #9/#10/#14 separately. Models are synthetic;
 no physical, release or deployment qualification is implied.
+
+## Isolated atomic no-overwrite preset creation follow-up (2026-11-20)
+
+Child continuation from draft PR #19 source `e9c00c51cdf155127cd839c446126ae1d8f9f6c6` on
+`codex/cdfx-preset-atomic-create-20261120`. A source audit found that the existing local preset library's
+`save(name, ..., overwrite=false)` checked existence and then used
+`saveStateFileAtomic()`, whose final rename/MoveFileEx replaced the destination.
+Two independent message-thread writers could therefore overwrite one another,
+violating the no-overwrite import/save promise. The repair adds
+`saveStateFileAtomicNoReplace()` using an exclusively installed destination:
+POSIX hard-link creation after an fsynced temporary file, or Windows MoveFileEx
+without REPLACE_EXISTING. The old overwrite writer remains unchanged in behavior.
+PresetLibrary selects the correct mode; regression source covers pre-existing
+content and two competing writers, including winner-content and temp cleanup.
+
+This is **isolated reviewable work**, not a claim of compiled or verified native
+tests. Run exact-head Linux state_preset and Windows/pluginval CI; review
+filesystem symlink races, Windows locks/path encoding, destination directory trust,
+and the Windows filesystem's no-replace semantics. This does not complete
+full runtime/seed/session persistence or the live sound-load transaction.
+Separate independent reviewers are not available in this connector execution.
+Do not promote over PR #19 while its exact-head Windows validation is active.
