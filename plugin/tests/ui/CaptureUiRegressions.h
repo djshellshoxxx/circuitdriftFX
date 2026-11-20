@@ -49,6 +49,10 @@ inline bool terminal(CaptureState state) {
 
 class CaptureBridge final : public FakeBridge {
 public:
+    bool readTelemetry(engine::TelemetryFrame& frame) override {
+        if (telemetryFailuresRemaining > 0) { --telemetryFailuresRemaining; throw std::bad_alloc(); }
+        return FakeBridge::readTelemetry(frame);
+    }
     bool startCapture(const CaptureRequest& request, juce::String& error) override {
         if (rejectStart) { error = "Synthetic destination rejection"; return false; }
         indices.clear();
@@ -99,7 +103,7 @@ public:
     std::uint64_t epoch = 0;
     bool rejectStart = false, savePngOk = true;
     bool throwAfterStop = false;
-    int statusFailuresRemaining = 0;
+    int telemetryFailuresRemaining = 0, statusFailuresRemaining = 0;
     int requestPolls = 0, legacySubmits = 0, stopCalls = 0, pngCalls = 0;
     CaptureStatus idleStatus;
     std::vector<std::uint32_t> indices;
@@ -218,6 +222,42 @@ inline int run(const juce::File& outputDirectory) {
     };
     const auto directory = outputDirectory.getChildFile("capture_ui");
     if (!directory.createDirectory().wasOk()) { check(false, "capture fixture directory can be created"); return failures; }
+
+    {
+        auto bridge = std::make_unique<CaptureBridge>();
+        juce::Component host;
+        host.setSize(750, 540);
+        juce::ComponentBoundsConstrainer constrainer;
+        bridge->telemetryFailuresRemaining = 1;
+        bool initialReadThrew = false;
+        try {
+            sh::EditorCore failedCore(host, *bridge, constrainer);
+        } catch (const std::bad_alloc&) {
+            initialReadThrew = bridge->telemetryFailuresRemaining == 0;
+        }
+        check(initialReadThrew, "editor construction propagates an initial telemetry failure");
+        const bool registryClear = sh::EditorCore::find(&host) == nullptr;
+        check(registryClear, "failed editor construction leaves its persistent host unregistered");
+        // Do not resolve or dereference a registry entry if failed construction left one behind.
+        if (registryClear) {
+            sh::EditorCore healthyCore(host, *bridge, constrainer);
+            const bool registered = sh::EditorCore::find(&host) == &healthyCore;
+            check(registered, "healthy construction on the same host registers the new editor core");
+            if (registered) {
+                healthyCore.selectPanel(ui::PanelId::Capture);
+                auto* panel = control<ui::Panel>(host, "Capture");
+                const bool configured = panel && chooseFormat(*panel, "PNG screenshot") &&
+                    pc::testing::setCaptureDestination(*panel, directory.getChildFile("retried_editor.png"));
+                auto* save = configured ? control<juce::Button>(*panel, "Save PNG") : nullptr;
+                check(save != nullptr, "retried editor exposes its PNG save action");
+                if (save) save->onClick();
+                check(bridge->pngCalls == 1 && bridge->lastPng.getWidth() == 1080 && bridge->lastPng.getHeight() == 1920 &&
+                          samePixels(bridge->lastPng, healthyCore.captureSnapshot(CaptureFormat::Png, CaptureFraming::Portrait9x16)),
+                      "PNG save resolves the healthy editor after construction is retried");
+            }
+        }
+        check(sh::EditorCore::find(&host) == nullptr, "normal destruction unregisters the persistent host");
+    }
 
     {
         auto bridge = std::make_unique<CaptureBridge>();

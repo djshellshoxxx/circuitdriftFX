@@ -945,9 +945,9 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
 // =============================================================================================
 EditorCore::EditorCore(juce::Component& host, EditorBridge& bridge, juce::ComponentBoundsConstrainer& constrainer)
     : p_(std::make_unique<Parts>(*this, host, bridge, constrainer)) {
-    registry().push_back({&host, this});
     p_->hostResized();
     p_->pumpFrame(0.0, juce::Time::getMillisecondCounter());  // prime so the first paint shows real state
+    registry().push_back({&host, this});
 }
 
 EditorCore::~EditorCore() {
