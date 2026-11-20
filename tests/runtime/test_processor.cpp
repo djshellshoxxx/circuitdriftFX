@@ -321,6 +321,8 @@ void realtimeResetWithPitchWorker() {
     rig.processor.process(rig.ec, rig.cc, nullptr, nullptr, 1, nullptr, 0, 0, rig.parameters);
     CHECK(rig.processor.controlStatus().pitchState == control::PitchState::Acquired);
 }
+
+#include "test_midi_filtering.h"
 }
 
 void* operator new(std::size_t size) {
@@ -335,6 +337,10 @@ int main() {
     parameterBoundaries();
     dryLatencyAndLargeBlocks();
     liteEquivalenceAndAudibleProcessing();
+    ignoredMidiSourcesPreserveProcessing();
+    irrelevantMidiMessagesPreserveProcessing();
+    midiFilteringKeepsReceivedAdmissionLimit();
+    disabledScaleLockRetainsMidiTiming();
     midiChunkingAndZeroFrames();
     pendingLatencyModePreservesActiveControl();
     seekInvalidatesPitchWithoutResettingWorkerFromAudio();
