@@ -62,3 +62,33 @@ panel and Workbench suites.
   totals do not establish that a limiter/fallback is active now.
 - Native host/window behavior, real hardware calibration and release performance
   are not inferred from this source review or the synthetic UI regression source.
+
+## Follow-up: processor snapshot/reset review and preference ownership
+
+The UI preference bridge now delegates to `CircuitDriftProcessor::editorSettings`
+and `setEditorSettings`, retaining the existing finite/range bounds before
+publication. The coordinator owns the matching non-audio synchronization and
+host-state serialization. These changes require that interface when integrated.
+
+Read-only review of the coordinator's in-progress `PluginProcessor` snapshot and
+reset patch found no new memory-lifetime defect in the reviewed implementation:
+
+- The persistent `TripleBuffer<EditorSnapshot>` belongs to the processor and is
+  never reconstructed during runtime preparation. The single UI reader therefore
+  copies stable storage while release/reprepare changes runtime ownership.
+- Generation matching prevents a saved request for an older prepared runtime
+  from being applied to a newly prepared runtime. Repeated reset clicks coalesce;
+  a reset is applied only when the host next calls the audio processor.
+- The callback copies telemetry/control/targets into the producer slot and
+  publishes atomically. UI code does not dereference the runtime's mutable state.
+- Reset requests add no lock, allocation, file I/O or worker-thread wait in the
+  adapter's audio path. The runtime implementation and its worker ownership must
+  still be tested independently.
+
+This is source review of the snapshot/reset patch, not a concurrency execution
+result. It assumes the normal host contract that `prepareToPlay` and
+`releaseResources` do not run concurrently with `processBlock`, and the declared
+single message-thread snapshot consumer. A read overlapping release may return
+a snapshot taken just before release; it cannot expose freed runtime storage.
+The preferences/host-state serialization was not yet present when this follow-up
+was reviewed, so that part requires the coordinator's final verification.
