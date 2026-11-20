@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <thread>
 #include <vector>
 
@@ -74,8 +75,10 @@ public:
     void stopCapture() override {
         ++stopCalls;
         if (session) session->stop();
+        if (throwAfterStop) throw std::bad_alloc();
     }
     CaptureStatus captureStatus() override {
+        if (statusFailuresRemaining > 0) { --statusFailuresRemaining; throw std::bad_alloc(); }
         auto result = session ? session->status() : idleStatus;
         result.mp4Available = false;
         result.mp4Reason = "Native MP4 encoder unavailable (G07)";
@@ -95,6 +98,8 @@ public:
     std::atomic<std::int64_t> clockMs{0};
     std::uint64_t epoch = 0;
     bool rejectStart = false, savePngOk = true;
+    bool throwAfterStop = false;
+    int statusFailuresRemaining = 0;
     int requestPolls = 0, legacySubmits = 0, stopCalls = 0, pngCalls = 0;
     CaptureStatus idleStatus;
     std::vector<std::uint32_t> indices;
@@ -423,9 +428,11 @@ inline int run(const juce::File& outputDirectory) {
             bridge->setClock(2125);
             const int stops = bridge->stopCalls;
             const auto* oldHost = editor.get();
+            bridge->statusFailuresRemaining = 1;
+            bridge->throwAfterStop = true;
             editor.reset();
             check(sh::EditorCore::find(oldHost) == nullptr && bridge->stopCalls == stops + 1,
-                  "editor destruction unregisters its source and requests finalization exactly once");
+                  "editor destruction contains status/stop allocation failures and attempts finalization exactly once");
             check(waitUntil([&] { return terminal(bridge->captureStatus().state); }) &&
                       bridge->captureStatus().state == CaptureState::Completed && timing(destroyedFile).complete,
                   "worker finishes owned frame data after the editor is destroyed");

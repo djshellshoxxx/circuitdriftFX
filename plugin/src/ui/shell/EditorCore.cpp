@@ -563,9 +563,17 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
         stopTimer();
         // The editor owns frame production. Finalize before its visual surfaces disappear;
         // the bridge's worker owns any already submitted images and has no borrowed renderer.
-        const auto captureState = bridge.captureStatus().state;
-        if (captureState == CaptureState::Armed || captureState == CaptureState::Recording)
-            bridge.stopCapture();
+        bool finalizeCapture = true;
+        try {
+            const auto captureState = bridge.captureStatus().state;
+            finalizeCapture = captureState == CaptureState::Armed || captureState == CaptureState::Recording;
+        } catch (...) {
+            // Status diagnostics can allocate. If the query fails, still make one
+            // best-effort stop request without allowing an exception out of teardown.
+        }
+        if (finalizeCapture) {
+            try { bridge.stopCapture(); } catch (...) {}
+        }
         help.reset();
         if (root) root->setLookAndFeel(nullptr);
     }
