@@ -229,7 +229,31 @@ bool validateV1(const JsonValue& v, StateDocument& d, std::string& why) {
     return true;
 }
 
+// A checkpoint may be constructed directly in memory without passing the JSON
+// reader. Fail before emitting an unreadable or unbounded session document.
+// A version mismatch with the prepared runtime is permitted on disk: restore
+// compatibility is decided separately by decideRestore().
+void validateCheckpointForSave(const EngineCheckpoint& c) {
+    if (c.engineModelVersion.empty() || c.engineModelVersion.size() > 64 ||
+        c.modelRevision.empty() || c.modelRevision.size() > 64)
+        throw std::invalid_argument("checkpoint identity must be nonempty and at most 64 bytes");
+    if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||
+        c.oversampling < 1 || c.oversampling > 16 ||
+        (c.oversampling & (c.oversampling - 1)) != 0 ||
+        c.sampleIndex > 9007199254740992ULL)
+        throw std::invalid_argument("invalid checkpoint scalar for schema v1");
+    if (c.electrical.size() > 4096 || c.thermal.size() > 4096 || c.rng.size() > 64 ||
+        !std::all_of(c.electrical.begin(), c.electrical.end(), [](double v) { return std::isfinite(v); }) ||
+        !std::all_of(c.thermal.begin(), c.thermal.end(), [](double v) { return std::isfinite(v); }))
+        throw std::invalid_argument("invalid checkpoint dynamic vector for schema v1");
+}
+
 JsonValue toJson(const StateDocument& d, bool forPublish) {
+    if (!forPublish && d.checkpoint) {
+        if (d.kind != DocKind::Session)
+            throw std::invalid_argument("checkpoint only allowed in sessions");
+        validateCheckpointForSave(*d.checkpoint);
+    }
     if (d.seed > 9007199254740992ULL || (!forPublish && d.checkpoint && d.checkpoint->sampleIndex > 9007199254740992ULL))
         throw std::invalid_argument("schema v1 numeric identities must be in [0, 2^53]");
     JsonValue o = JsonValue::makeObject();

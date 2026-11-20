@@ -491,5 +491,19 @@
     "independent_workers": "not available in connector context",
     "audit": "docs/audits/SESSION_RESTORE_CI_FOLLOWUP_2026-11-20.md",
     "still_open": "G12 runtime/control/seed capture, host state serialization, stopped-audio install and migration"
+  },
+  "session_writer_preflight_20261120": {
+    "parent_pr": 22,
+    "parent_head": "7a95379554aba5d3d42f441436e58cae43ddec4b",
+    "parent_ci_run": 44742353994,
+    "parent_exact_head_linux": "passed",
+    "parent_exact_head_windows_pluginval_strictness5": "passed",
+    "branch": "codex/cdfx-session-writer-preflight-20261120-r11",
+    "scope": "Reject malformed or oversized directly constructed EngineCheckpoint values in saveState before JSON construction; maintain versioned session writer/parser shape symmetry",
+    "tests": "state_safety regressions for oversized vectors, NaN/inf, invalid sample rate/oversampling, empty revision, scene checkpoint and valid roundtrip",
+    "audit": "docs/audits/SESSION_WRITER_PREFLIGHT_2026-11-20.md",
+    "verification": "source preflight and JSON parse; child exact-head CI pending; no native local execution",
+    "independent_reviews": "requested; separate reviewer workers not available through connector",
+    "incomplete": "Full runtime/control/seed checkpoint capture, stopped-audio host restore and G12 migration remain outstanding"
   }
 }

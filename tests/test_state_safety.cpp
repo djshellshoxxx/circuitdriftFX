@@ -238,6 +238,42 @@ void exactIdentitiesAndFeatures() {
     threw = false;
     try { (void)state::saveState(doc); } catch (const std::invalid_argument&) { threw = true; }
     CHECK(threw);
+    // Session serialization must enforce the same checkpoint admission bounds
+    // as loadState(), even for snapshots assembled without a JSON reader.
+    doc.checkpoint->sampleIndex = 100;
+    const auto goodCheckpoint = *doc.checkpoint;
+    const auto rejectsSave = [&]() {
+        try { (void)state::saveState(doc); return false; }
+        catch (const std::invalid_argument&) { return true; }
+    };
+    doc.checkpoint->electrical.assign(4097, 0.25);
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->thermal.assign(4097, 0.25);
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->rng.assign(65, 42);
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->electrical = {std::numeric_limits<double>::quiet_NaN()};
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->thermal = {std::numeric_limits<double>::infinity()};
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->sampleRate = std::numeric_limits<double>::quiet_NaN();
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->oversampling = 3;
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.checkpoint->modelRevision.clear();
+    CHECK(rejectsSave());
+    doc.checkpoint = goodCheckpoint;
+    doc.kind = state::DocKind::Scene;
+    CHECK(rejectsSave());
+    doc.kind = state::DocKind::Session;
+    CHECK(state::loadState(state::saveState(doc), back, error));
 }
 
 void manyObjectKeys() {

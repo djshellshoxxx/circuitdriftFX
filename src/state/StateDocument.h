@@ -68,7 +68,8 @@ struct LoadReport { int sourceVersion = 0; int migrationsApplied = 0; };
 bool loadState(std::string_view text, StateDocument& out, std::string& error,
                const MigrationChain& chain = productionMigrations(), LoadReport* report = nullptr);
 // Numeric seed/sampleIndex identities are limited to [0, 2^53] by schema v1.
-// Throws std::invalid_argument instead of rounding larger in-memory identities.
+// Throws std::invalid_argument for unrepresentable numeric identities, invalid
+// in-memory checkpoint scalars/layouts, or checkpoints attached to scenes.
 std::string saveState(const StateDocument& doc);
 // Community/scene export: requires kind Scene; strips checkpoint, UI preferences and metadata.
 // Until P05/P10/P11 provide complete validators, only the minimal synthetic blueprint
