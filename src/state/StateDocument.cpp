@@ -233,9 +233,13 @@ bool validateV1(const JsonValue& v, StateDocument& d, std::string& why) {
 // reader. Fail before emitting an unreadable or unbounded session document.
 // A version mismatch with the prepared runtime is permitted on disk: restore
 // compatibility is decided separately by decideRestore().
+bool validCheckpointIdentity(const EngineCheckpoint& c) {
+    return !c.engineModelVersion.empty() && c.engineModelVersion.size() <= 64 &&
+           !c.modelRevision.empty() && c.modelRevision.size() <= 64;
+}
+
 void validateCheckpointForSave(const EngineCheckpoint& c) {
-    if (c.engineModelVersion.empty() || c.engineModelVersion.size() > 64 ||
-        c.modelRevision.empty() || c.modelRevision.size() > 64)
+    if (!validCheckpointIdentity(c))
         throw std::invalid_argument("checkpoint identity must be nonempty and at most 64 bytes");
     if (!std::isfinite(c.sampleRate) || c.sampleRate < 8000 || c.sampleRate > 768000 ||
         c.oversampling < 1 || c.oversampling > 16 ||
@@ -517,7 +521,9 @@ bool saveStateFileAtomicNoReplace(const std::string& path, const std::string& te
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason) {
     if (!doc.checkpoint) { reason = "no checkpoint; configuration only (no exact continuity claimed)"; return RestoreDecision::NoCheckpoint; }
     const EngineCheckpoint& c = *doc.checkpoint;
-    if (c.engineModelVersion != rt.engineModelVersion) reason = "engine model version differs";
+    if (doc.kind != DocKind::Session) reason = "checkpoint only allowed in sessions";
+    else if (!validCheckpointIdentity(c)) reason = "invalid checkpoint identity";
+    else if (c.engineModelVersion != rt.engineModelVersion) reason = "engine model version differs";
     else if (c.modelRevision != rt.modelRevision) reason = "model revision differs";
     else if (c.sampleRate != rt.sampleRate) reason = "sample rate differs";
     else if (c.oversampling != rt.oversampling) reason = "oversampling differs";

@@ -101,6 +101,8 @@ struct RuntimeIdentity {
     std::size_t electricalSize = 0, thermalSize = 0, rngSize = 0;
 };
 enum class RestoreDecision : unsigned char { Restore, ResetWarm, NoCheckpoint };
+// Directly constructed checkpoints must still satisfy session-only, identity,
+// scalar and vector admission rules before exact runtime compatibility is accepted.
 RestoreDecision decideRestore(const StateDocument& doc, const RuntimeIdentity& rt, std::string& reason);
 
 }  // namespace cd::state

@@ -276,6 +276,76 @@ void exactIdentitiesAndFeatures() {
     CHECK(state::loadState(state::saveState(doc), back, error));
 }
 
+void checkpointAdmissionBoundary() {
+    state::StateDocument doc;
+    std::string error;
+    CHECK(state::loadState(kScene, doc, error));
+    doc.kind = state::DocKind::Session;
+    doc.checkpoint = state::EngineCheckpoint{"0.0.1-dev", "fixture-v1", 48000, 4, 100,
+                                             {0.25}, {0.5}, {42}};
+    const auto original = doc;
+    const state::RuntimeIdentity runtime{"0.0.1-dev", "fixture-v1", 48000, 4, 1, 1, 1};
+    CHECK(state::decideRestore(doc, runtime, error) == state::RestoreDecision::Restore && error.empty());
+
+    // Programmatic checkpoints must retain the session-only and bounded identity
+    // admission rules enforced by both the reader and the local writer.
+    for (const auto kind : {state::DocKind::Scene, static_cast<state::DocKind>(255)}) {
+        doc.kind = kind;
+        CHECK(state::decideRestore(doc, runtime, error) == state::RestoreDecision::ResetWarm);
+        CHECK(!error.empty());
+    }
+    for (const std::string identity : {std::string{}, std::string(65, 'x')}) {
+        for (const bool engineIdentity : {false, true}) {
+            doc = original;
+            auto matchingRuntime = runtime;
+            if (engineIdentity) {
+                doc.checkpoint->engineModelVersion = identity;
+                matchingRuntime.engineModelVersion = identity;
+            } else {
+                doc.checkpoint->modelRevision = identity;
+                matchingRuntime.modelRevision = identity;
+            }
+            CHECK(state::decideRestore(doc, matchingRuntime, error) == state::RestoreDecision::ResetWarm);
+            CHECK(!error.empty());
+        }
+    }
+
+    // Inclusive schema limits must remain valid and lossless, including signed
+    // zero, finite extremes, subnormal state values and all 64 bits of RNG state.
+    for (const double rate : {8000.0, 768000.0}) {
+        doc = original;
+        auto& cp = *doc.checkpoint;
+        cp.engineModelVersion.assign(64, 'e');
+        cp.modelRevision.assign(64, 'r');
+        cp.sampleRate = rate;
+        cp.oversampling = rate == 8000.0 ? 1 : 16;
+        cp.sampleIndex = 9007199254740992ULL;
+        cp.electrical.assign(4096, std::numeric_limits<double>::denorm_min());
+        cp.electrical[0] = -0.0;
+        cp.electrical[1] = std::numeric_limits<double>::max();
+        cp.thermal.assign(4096, -std::numeric_limits<double>::denorm_min());
+        cp.thermal[0] = 0.0;
+        cp.thermal[1] = -std::numeric_limits<double>::max();
+        cp.rng.assign(64, std::numeric_limits<std::uint64_t>::max());
+        cp.rng[0] = 0;
+        const state::RuntimeIdentity exact{cp.engineModelVersion, cp.modelRevision, rate, cp.oversampling,
+                                            cp.electrical.size(), cp.thermal.size(), cp.rng.size()};
+        const auto encoded = state::saveState(doc);
+        state::StateDocument back;
+        CHECK(state::loadState(encoded, back, error));
+        CHECK(back.checkpoint.has_value());
+        if (!back.checkpoint) continue;
+        const auto& restored = *back.checkpoint;
+        CHECK(restored.engineModelVersion == cp.engineModelVersion && restored.modelRevision == cp.modelRevision);
+        CHECK(restored.sampleRate == cp.sampleRate && restored.oversampling == cp.oversampling);
+        CHECK(restored.sampleIndex == cp.sampleIndex && restored.rng == cp.rng);
+        CHECK(restored.electrical == cp.electrical && restored.thermal == cp.thermal);
+        CHECK(std::signbit(restored.electrical[0]) && !std::signbit(restored.thermal[0]));
+        CHECK(state::saveState(back) == encoded);
+        CHECK(state::decideRestore(back, exact, error) == state::RestoreDecision::Restore && error.empty());
+    }
+}
+
 // Directly assembled documents must not generate local files the v1 reader
 // cannot load, or silently erase/replace fields during serialization.
 void wholeDocumentWriterBoundary() {
@@ -498,7 +568,7 @@ void atomicFiles() {
 int main() {
     migratedUtf8Boundary();
     utf8WriterBoundary();
-    localeNumbers(); exactIdentitiesAndFeatures(); wholeDocumentWriterBoundary(); manyObjectKeys(); publicationBoundary(); atomicFiles();
+    localeNumbers(); exactIdentitiesAndFeatures(); checkpointAdmissionBoundary(); wholeDocumentWriterBoundary(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
 }
