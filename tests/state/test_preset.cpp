@@ -332,6 +332,21 @@ void testLibrary() {
     }
     CHECK(!lib2.importFile(td.path / "big.circuitdrift.json", "big", false, id2, err));
 
+    // The byte limit is inclusive. Padding with legal JSON whitespace does
+    // not change the scene, and one extra byte must reject the whole import.
+    std::string boundary = cleanText();
+    boundary.resize(kSceneMaxBytes, ' ');
+    const fs::path boundaryPath = td.path / "boundary.circuitdrift.json";
+    { std::ofstream f(boundaryPath, std::ios::binary); f.write(boundary.data(), std::streamsize(boundary.size())); }
+    CHECK_MSG(lib2.importFile(boundaryPath, "Boundary", false, id2, err), err);
+    ScenePreset boundaryScene;
+    CHECK(lib2.load(id2, boundaryScene, err) && boundaryScene == factoryPresets().front().scene);
+    const std::string previousId = id2;
+    const std::size_t previousEntries = countEntries(td.path / "other");
+    { std::ofstream f(boundaryPath, std::ios::binary | std::ios::app); f.put(' '); }
+    CHECK(!lib2.importFile(boundaryPath, "Too large", false, id2, err));
+    CHECK(id2 == previousId && countEntries(td.path / "other") == previousEntries);
+
     CHECK(lib.remove(id, err));
     CHECK(!lib.remove(id, err));
     CHECK(!lib.load(id, back, err));

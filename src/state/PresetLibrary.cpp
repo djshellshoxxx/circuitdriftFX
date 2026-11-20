@@ -20,7 +20,8 @@ std::string utf8(const fs::path& p) {
 
 bool endsWith(std::string_view s, std::string_view suf) { return s.size() >= suf.size() && s.substr(s.size() - suf.size()) == suf; }
 
-// Reads a regular file of at most `maxBytes` bytes.
+// Reads a regular file of at most `maxBytes` bytes. The initial size is also the
+// read limit: a growing file cannot turn the size check into an unbounded read.
 bool readBounded(const fs::path& p, std::size_t maxBytes, std::string& out, std::string& error) {
     std::error_code ec;
     if (!fs::is_regular_file(p, ec) || ec) { error = "not a regular file"; return false; }
@@ -29,8 +30,14 @@ bool readBounded(const fs::path& p, std::size_t maxBytes, std::string& out, std:
     if (size > maxBytes) { error = "file exceeds the 1.25 MiB scene bound"; return false; }
     std::ifstream f(p, std::ios::binary);
     if (!f) { error = "cannot open file"; return false; }
-    out.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-    if (f.bad() || out.size() != size) { error = "read failed"; return false; }
+    std::string candidate(std::size_t(size), '\0');
+    if (size != 0 && !f.read(candidate.data(), std::streamsize(candidate.size()))) {
+        error = "read failed or file changed"; return false;
+    }
+    if (f.peek() != std::char_traits<char>::eof() || f.bad()) {
+        error = "read failed or file changed"; return false;
+    }
+    out = std::move(candidate);
     return true;
 }
 
