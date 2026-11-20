@@ -100,3 +100,23 @@ connect complete sound presets and dynamic A/B. Whole-engine checkpoints alone
 do not define slot copy/swap or shared downstream/crossfade ownership. G12/T24
 remain open until those integrated behaviors are executed and mismatch fallback
 is visible.
+
+
+## Executed unchanged-production baseline — R26
+
+The fresh repair worker supplied test-only commit32d6026. Root integrated it as
+`aae757197c16e21d6a85e28e53c862349763c12b`, tree
+`ea20b70b28d0f7730585f5bd840f87d1fc20ec4a`, and confirmed all src/ and plugin/src/
+inputs remain identical to b84d2ba. The native parameter target compiled and
+executed with Clang19.1.7 Custom O0. The regression failed exactly **four**
+assertions in **4.19 s**: Full and LITE each exposed incomplete configuration
+during paused replacement for both zero-frame and positive-frame callbacks.
+No fixture timing, exception, C++ allocation or other compatibility assertion
+failed. Existing host-gesture checks passed. This turns the source-confirmed
+interleaving into a deterministic functional regression, without claiming an
+audible artifact or complete dynamic-session capture.
+
+The [baseline evidence](../evidence/host-restore-2026-11-20-r26.json),
+[log](../evidence/host-restore-baseline-2026-11-20-r26.log), and
+[JUnit](../evidence/host-restore-baseline-2026-11-20-r26.xml) preserve the failure.
+The production repair and fresh review are pending in this checkpoint.

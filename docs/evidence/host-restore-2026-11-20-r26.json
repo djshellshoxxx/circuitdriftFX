@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-20",
+  "finding": "Valid host-state replacement can expose mixed old/new parameters to audio.",
+  "baseline": {
+    "worker_test_commit": "32d6026181b07ef483657c2f6b58ec4ae5589c01",
+    "source_sha": "aae757197c16e21d6a85e28e53c862349763c12b",
+    "source_tree": "ea20b70b28d0f7730585f5bd840f87d1fc20ec4a",
+    "production_equivalence": "All src/ and plugin/src/ inputs byte-identical to previously qualified b84d2ba. Only regression header/test invocation added after gate/docs changes.",
+    "suite": "plugin_param_consistency",
+    "result": "failed_as_expected",
+    "failed_assertions": 4,
+    "elapsed_seconds": 4.19,
+    "case_seconds": 4.17514,
+    "failures": "Full and LITE each fail complete-old-configuration retention during paused valid replacement for zero-frame and positive-frame callbacks.",
+    "other_checks": "No fixture timing, exception, allocation or compatibility check failed; UI host-gesture regressions passed.",
+    "compiler": "Clang19.1.7",
+    "build_type": "Custom O0",
+    "sanitizers": false,
+    "log": "docs/evidence/host-restore-baseline-2026-11-20-r26.log",
+    "junit": "docs/evidence/host-restore-baseline-2026-11-20-r26.xml"
+  },
+  "repair": "R26 worker active; no passing result claimed yet.",
+  "qualification_boundary": "Deterministic native adapter/runtime functional regression; no measured audible artifact, full G12 continuity, TSan or real-DAW qualification."
+}

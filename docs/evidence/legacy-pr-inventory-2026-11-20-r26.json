@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-20",
+  "repository": "djshellshoxxx/circuitdriftFX",
+  "scope": "Read-only live metadata refresh; not a completed item-level semantic reconciliation or source inclusion claim.",
+  "integration_source": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
+  "pull_requests": [
+    {
+      "number": 9,
+      "url": "https://github.com/djshellshoxxx/circuitdriftFX/pull/9",
+      "title": "Engine slices P03–P16: integrated runtime, state, control, blueprint, LITE, analysis, view-model, recorder, community mock, instance network",
+      "state": "open",
+      "head": "80a59c81cf634cf6b18024f532ff9626cd944301",
+      "branch": "claude/continue-previous-work-mbfkit",
+      "commits": 57,
+      "changed_files": 177,
+      "additions": 30772,
+      "deletions": 160,
+      "disposition": "Preserved open with original source branch pending semantic reconciliation."
+    },
+    {
+      "number": 10,
+      "url": "https://github.com/djshellshoxxx/circuitdriftFX/pull/10",
+      "title": "Continue from PR #9: merge onto main, wiring completion, P15/P16 network core, P17 performance, one-hour UX-09 stress",
+      "state": "open",
+      "head": "71a263718ae7ac9ed0d4a75d624929489216ef53",
+      "branch": "claude/charming-lovelace-xsv4e5",
+      "commits": 62,
+      "changed_files": 174,
+      "additions": 29971,
+      "deletions": 169,
+      "disposition": "Preserved open with original source branch pending semantic reconciliation."
+    },
+    {
+      "number": 14,
+      "url": "https://github.com/djshellshoxxx/circuitdriftFX/pull/14",
+      "title": "feat: P04 control queue/snapshot + UX-09 RT trap harness",
+      "state": "open",
+      "head": "ed81a92891b8c753951b6cbf2cc70f7b04871491",
+      "branch": "claude/busy-newton-z2ky46",
+      "commits": 6,
+      "changed_files": 19,
+      "additions": 3332,
+      "deletions": 5,
+      "disposition": "Preserved open with original source branch pending semantic reconciliation."
+    }
+  ],
+  "pr14_source_inventory": {
+    "head": "ed81a92891b8c753951b6cbf2cc70f7b04871491",
+    "scopes": [
+      "ControlHub whole-config commits, generation-tagged capture/restore and stopped-audio save fallback primitives",
+      "CircuitStage MNA/oversampling integration and test",
+      "Linux test-only RT trap harness"
+    ],
+    "notes": [
+      "Current production has different queue/snapshot/runtime ownership APIs; filename absence does not establish missing behavior.",
+      "Legacy ControlHub explicitly declares engine wiring absent and checkpoint capacities512/128/8 as placeholders pending G12.",
+      "Do not copy placeholder capacities or substitute the legacy hub for the active host-restore repair without a source/contract comparison."
+    ],
+    "next_review": "Compare each observable contract and its tests with the consolidated implementation; retain unique work and preserve original branch history."
+  }
+}
