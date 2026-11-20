@@ -14,6 +14,14 @@ namespace {
 constexpr int kHeaderH = 48, kStatusH = 24, kMargin = 10;
 constexpr int kPanelCount = static_cast<int>(PanelId::Count);
 
+bool sameSettings(const UiSettings& a, const UiSettings& b) noexcept {
+    return a.scale == b.scale && a.darkTheme == b.darkTheme && a.view == b.view &&
+           a.educational == b.educational && a.reduceMotion == b.reduceMotion &&
+           a.lowFrameRate == b.lowFrameRate && a.overlay == b.overlay &&
+           a.xray == b.xray && a.pcbView == b.pcbView &&
+           a.lastWidth == b.lastWidth && a.lastHeight == b.lastHeight;
+}
+
 // ---- Quick scenes (UX-02 table). Versioned creative factory scenes, 100 % wet, Auto-Gain on. -------
 struct SceneDef { const char* name; double age, sag, drift, warmth; bool noise; const char* note; };
 constexpr SceneDef kScenes[] = {
@@ -598,6 +606,9 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
     }
 
     void hostResized() {
+        // A resize can arrive before the next timer tick after a host-state load.
+        // Apply its other preferences first, but keep this newer explicit host size.
+        if (!applyingSettings) syncSettings(false);
         eff = effectiveScale();
         const int lw = juce::roundToInt(host.getWidth() / eff), lh = juce::roundToInt(host.getHeight() / eff);
         logical = {0, 0, std::max(lw, 1), std::max(lh, 1)};
@@ -605,6 +616,7 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
         root->setBounds(logical);
         root->rebuildBackground(static_cast<float>(eff) * 1.0f);
         layout();
+        if (applyingSettings) return;  // restoring preferences must not write them back
         // Remember the logical window size (user scale) for the next session.
         const int uw = juce::roundToInt(host.getWidth() / static_cast<double>(ctx.ui.scale));
         const int uh = juce::roundToInt(host.getHeight() / static_cast<double>(ctx.ui.scale));
@@ -667,6 +679,24 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
     }
 
     // ---- settings persistence ----
+    void syncSettings(bool resizeToSaved = true) {
+        if (applyingSettings) return;
+        const auto current = bridge.uiSettings();
+        if (sameSettings(current, persisted)) return;
+        const juce::ScopedValueSetter<bool> guard(applyingSettings, true);
+        ctx.ui = current;
+        persisted = current;
+        laf.apply(ctx.theme());
+        constrainer.setMinimumSize(juce::roundToInt(kMinWidth * ctx.ui.scale),
+                                   juce::roundToInt(kMinHeight * ctx.ui.scale));
+        applyView();
+        if (resizeToSaved)
+            host.setSize(juce::roundToInt(ctx.ui.lastWidth * ctx.ui.scale),
+                         juce::roundToInt(ctx.ui.lastHeight * ctx.ui.scale));
+        hostResized();
+        broadcastSettings();
+    }
+
     void persist() {
         auto cur = bridge.uiSettings();  // workbench-owned fields (overlay, xray) must not be clobbered
         cur.scale = ctx.ui.scale;
@@ -679,6 +709,7 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
         cur.lastHeight = ctx.ui.lastHeight;
         ctx.ui.overlay = cur.overlay;
         ctx.ui.xray = cur.xray;
+        ctx.ui.pcbView = cur.pcbView;
         bridge.setUiSettings(cur);
         persisted = cur;
     }
@@ -697,6 +728,7 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
         if (active) { hz = ctx.ui.lowFrameRate ? 30 : 60; startTimerHz(hz); }
     }
     void setActive(bool a) {
+        if (a) syncSettings();
         active = a;
         idle = false;
         if (active) {
@@ -729,6 +761,7 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
     }
 
     void pumpFrame(double dt, juce::uint32 nowMs) {
+        syncSettings();
         engine::TelemetryFrame frame;  // read exactly once per UI frame
         const bool valid = bridge.readTelemetry(frame);
         if (valid && frame.generation != lastGeneration) {
@@ -823,6 +856,7 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
     ShellContext ctx;
     UiSettings persisted;
     bool lite = false, narrow = false, drawerOpen = false, active = false, stale = false, idle = false;
+    bool applyingSettings = false;
     PanelId currentPanelId = PanelId::Presets;
     double eff = 1.0, lastTickMs = 0;
     int hz = 60;
@@ -889,6 +923,7 @@ juce::StringArray EditorCore::statusBadgeTexts() const { return p_->badgeTexts; 
 juce::String EditorCore::presetLabelText() const { return p_->presetText; }
 
 void EditorCore::setView(EditorView v) {
+    p_->syncSettings();
     if (p_->lite) return;
     p_->ctx.ui.view = v;
     p_->applyView();
@@ -897,6 +932,7 @@ void EditorCore::setView(EditorView v) {
 }
 
 void EditorCore::setDarkTheme(bool dark) {
+    p_->syncSettings();
     p_->ctx.ui.darkTheme = dark;
     p_->laf.apply(p_->ctx.theme());
     p_->root->rebuildBackground(static_cast<float>(p_->eff));
@@ -905,6 +941,7 @@ void EditorCore::setDarkTheme(bool dark) {
 }
 
 void EditorCore::setUserScale(float s) {
+    p_->syncSettings();
     s = std::clamp(s, kMinScale, kMaxScale);
     auto& ui = p_->ctx.ui;
     // Keep the logical size; the host window follows (and may refuse, in which case the content
@@ -918,9 +955,9 @@ void EditorCore::setUserScale(float s) {
     p_->broadcastSettings();
 }
 
-void EditorCore::setEducational(bool on) { p_->ctx.ui.educational = on; p_->persist(); p_->broadcastSettings(); }
-void EditorCore::setReduceMotion(bool on) { p_->ctx.ui.reduceMotion = on; p_->persist(); p_->broadcastSettings(); }
-void EditorCore::setLowFrameRate(bool on) { p_->ctx.ui.lowFrameRate = on; p_->persist(); p_->broadcastSettings(); }
+void EditorCore::setEducational(bool on) { p_->syncSettings(); p_->ctx.ui.educational = on; p_->persist(); p_->broadcastSettings(); }
+void EditorCore::setReduceMotion(bool on) { p_->syncSettings(); p_->ctx.ui.reduceMotion = on; p_->persist(); p_->broadcastSettings(); }
+void EditorCore::setLowFrameRate(bool on) { p_->syncSettings(); p_->ctx.ui.lowFrameRate = on; p_->persist(); p_->broadcastSettings(); }
 
 void EditorCore::setDrawerOpen(bool open) {
     if (p_->lite) return;
@@ -969,6 +1006,7 @@ bool EditorCore::sceneMatches(int index) const {
 }
 
 void EditorCore::showSettingsMenu() {
+    p_->syncSettings();
     juce::PopupMenu m, scale;
     const auto& ui = p_->ctx.ui;
     m.addSectionHeader("Theme");
@@ -988,6 +1026,7 @@ void EditorCore::showSettingsMenu() {
                         // The menu callback can arrive after the editor has closed. The target is
                         // owned by this core, so its weak pointer must be checked before using this.
                         if (target == nullptr) return;
+                        if (r != 0) p_->syncSettings();
                         if (r == 10) setDarkTheme(true);
                         else if (r == 11) setDarkTheme(false);
                         else if (r >= 175 && r <= 300) setUserScale(static_cast<float>(r - 100) / 100.0f);

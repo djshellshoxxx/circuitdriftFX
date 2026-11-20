@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <set>
 #include "FakeBridge.h"
+#include "ui/ProcessorEditorBridge.h"
 #include "ui/analysis/AnalysisDisplays.h"
 #include "ui/analysis/AnalysisMath.h"
 #include "ui/workbench/GestureMath.h"
@@ -277,6 +278,77 @@ static void snap(WorkbenchView& wb, const juce::File& dir, const juce::String& n
 
 static bool inside(const juce::Component& c, const juce::Rectangle<int>& r) { return r.contains(c.getBounds()); }
 
+static void testViewPreferences() {
+    using cd::plugin::CircuitDriftProcessor;
+    using cd::plugin::Edition;
+    using cd::plugin::ProcessorEditorBridge;
+    auto processor = std::make_unique<CircuitDriftProcessor>(Edition::Full, "CircuitDrift");
+    ProcessorEditorBridge bridge(*processor);
+    WorkbenchView workbench(bridge);
+    workbench.setBounds(0, 0, 1000, 560);
+    auto* canvas = dynamic_cast<PcbCanvas*>(workbench.findChildWithID("pcb"));
+    check(canvas != nullptr, "live Workbench exposes its PCB canvas");
+    if (!canvas) return;
+
+    const auto viewButton = [](WorkbenchView& view, int mode) -> juce::TextButton* {
+        const char* const labels[] = {"2D", "3D", "Sch"};
+        for (auto* child : view.getChildren())
+            if (auto* button = dynamic_cast<juce::TextButton*>(child);
+                button && button->getButtonText() == labels[mode]) return button;
+        return nullptr;
+    };
+    for (const int mode : {1, 2, 0}) {
+        auto* button = viewButton(workbench, mode);
+        check(button != nullptr, "view toolbar button exists");
+        if (!button) continue;
+        button->onClick();
+        check(bridge.uiSettings().pcbView == mode && static_cast<int>(canvas->viewMode()) == mode,
+              "view selection updates both persistent settings and live canvas");
+        for (int candidate = 0; candidate < 3; ++candidate) {
+            const auto* toggle = viewButton(workbench, candidate);
+            check(toggle && toggle->getToggleState() == (candidate == mode),
+                  "view toolbar selects only the active view");
+        }
+
+        juce::MemoryBlock state;
+        processor->getStateInformation(state);
+        auto restored = std::make_unique<CircuitDriftProcessor>(Edition::Full, "Restored");
+        restored->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        ProcessorEditorBridge restoredBridge(*restored);
+        WorkbenchView restoredView(restoredBridge);
+        auto* restoredCanvas = dynamic_cast<PcbCanvas*>(restoredView.findChildWithID("pcb"));
+        auto* restoredButton = viewButton(restoredView, mode);
+        check(restoredCanvas && static_cast<int>(restoredCanvas->viewMode()) == mode &&
+                  restoredButton && restoredButton->getToggleState(),
+              "host session restores the selected PCB view and toolbar selection");
+    }
+
+    auto* threeD = viewButton(workbench, 1);
+    if (!threeD) return;
+    threeD->onClick();
+    const auto originalCentre = canvas->centreOf(2);
+    const juce::Point<float> start{-1000.0f, -1000.0f};
+    const auto end = start + juce::Point<float>{36.0f, -18.0f};
+    check(canvas->hitTest(start) < 0, "orbit gesture begins off all components");
+    const juce::ModifierKeys left(juce::ModifierKeys::leftButtonModifier);
+    canvas->pointerDown(start, left);
+    canvas->pointerDrag(end, left);
+    canvas->pointerUp(end);
+    const auto orbitedCentre = canvas->centreOf(2);
+    check(orbitedCentre.getDistanceFrom(originalCentre) > 0.1f, "orbit changes the projection");
+    auto settings = bridge.uiSettings();
+    settings.darkTheme = !settings.darkTheme;
+    settings.reduceMotion = !settings.reduceMotion;
+    bridge.setUiSettings(settings);
+    workbench.settingsChanged(settings);
+    check(canvas->viewMode() == PcbCanvas::ViewMode::Board3D &&
+              canvas->centreOf(2).getDistanceFrom(orbitedCentre) < 0.0001f,
+          "unrelated settings preserve the active view and orbit");
+    threeD->onClick();
+    check(canvas->centreOf(2).getDistanceFrom(orbitedCentre) < 0.0001f,
+          "reselecting the active view does not reset the orbit");
+}
+
 int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI gui;
     const juce::File outDir(argc > 1 ? juce::String(argv[1]) : juce::File::getCurrentWorkingDirectory().getFullPathName());
@@ -285,6 +357,7 @@ int main(int argc, char** argv) {
 
     testAnalysisMath();
     testGestureMath();
+    testViewPreferences();
 
     FakeBridge bridge;
     WorkbenchView wb(bridge);
@@ -491,7 +564,7 @@ int main(int argc, char** argv) {
         snap(wb, dir, "wb_dark_thermal_xray", 1000, 560, 1.0f);
         s.xray = false; s.overlay = 2; bridge.setUiSettings(s); wb.settingsChanged(s);
 
-        canvas->setViewMode(PcbCanvas::ViewMode::Board3D);
+        s.pcbView = 1; bridge.setUiSettings(s); wb.settingsChanged(s);
         for (int ov = 1; ov <= 3; ++ov) {
             s.overlay = ov; bridge.setUiSettings(s); wb.settingsChanged(s);
             snap(wb, dir, juce::String("wb_dark_3d_") + overlayNames[ov], 1000, 560, 1.0f);
@@ -506,12 +579,12 @@ int main(int argc, char** argv) {
         check(bad == 0, "3D projected centres hit their components");
         s.xray = false; bridge.setUiSettings(s); wb.settingsChanged(s);
 
-        canvas->setViewMode(PcbCanvas::ViewMode::Schematic);
+        s.pcbView = 2; bridge.setUiSettings(s); wb.settingsChanged(s);
         for (int dark = 1; dark >= 0; --dark) {
             s.darkTheme = dark == 1; s.overlay = 1; bridge.setUiSettings(s); wb.settingsChanged(s);
             snap(wb, dir, juce::String("wb_") + (dark ? "dark" : "light") + "_schematic", 1000, 560, 1.0f);
         }
-        canvas->setViewMode(PcbCanvas::ViewMode::Board2D);
+        s.pcbView = 0; bridge.setUiSettings(s); wb.settingsChanged(s);
     }
 
     // ---- scales 100/150/200 and layout invariants at the minimum viewport ----

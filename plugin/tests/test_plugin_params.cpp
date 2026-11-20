@@ -2,6 +2,7 @@
 // the host-visible parameter ids must stay stable (golden table, see ADR-0001).
 #include "ParameterLayout.h"
 #include "PluginProcessor.h"
+#include "ProcessorRegressions.h"
 #include "core/ParameterRegistry.h"
 #include "ui/GestureRegressions.h"
 
@@ -430,6 +431,7 @@ int main() {
     testSidechainBufferPreserved();
     testStateRoundTrip();
     testZeroFrameMidi();
+    g_failures += cd::plugin::test::processor_regressions::run();
     g_failures += cd::plugin::test::gesture_regressions::run();
     if (g_failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", g_failures);

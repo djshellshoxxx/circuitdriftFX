@@ -15,6 +15,7 @@
 #include "core/ParameterRegistry.h"
 #include "ui/Education.h"
 #include "ui/PluginEditor.h"
+#include "ui/ProcessorEditorBridge.h"
 #include "ui/shell/EditorCore.h"
 #include "ui/shell/ShellWidgets.h"
 
@@ -336,6 +337,83 @@ void testBehaviour(test::FakeBridge& bridge, const juce::File& outDir) {
     editor.setBounds(0, 0, 1000, 720);
 }
 
+void testOpenEditorStateRestore() {
+    CircuitDriftProcessor source(Edition::Full, "Source"), target(Edition::Full, "Target");
+    ProcessorEditorBridge bridge(target);
+    CircuitDriftEditor editor(target, bridge);
+    auto* core = sh::EditorCore::find(&editor);
+    if (!core) { check(false, "live restore: editor core exists"); return; }
+    struct Listener final : juce::AudioProcessorListener {
+        int dirty = 0;
+        void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override {}
+        void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails& details) override {
+            if (details.nonParameterStateChanged) ++dirty;
+        }
+    } listener;
+    target.addListener(&listener);
+    const auto restore = [&](const UiSettings& settings) {
+        source.setEditorSettings(settings);
+        juce::MemoryBlock state;
+        source.getStateInformation(state);
+        target.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    };
+
+    UiSettings restored;
+    restored.scale = 1.25f;
+    restored.darkTheme = false;
+    restored.view = EditorView::Workbench;
+    restored.educational = restored.reduceMotion = restored.lowFrameRate = true;
+    restored.overlay = 2;
+    restored.xray = true;
+    restored.pcbView = 1;
+    restored.lastWidth = 1200;
+    restored.lastHeight = 800;
+    restore(restored);
+    core->pumpFrame(0.0, ++g_now);
+    const auto& applied = core->context().ui;
+    check(!applied.darkTheme && applied.view == EditorView::Workbench && applied.scale == 1.25f &&
+              applied.educational && applied.reduceMotion && applied.lowFrameRate &&
+              applied.overlay == 2 && applied.xray && applied.pcbView == 1,
+          "open editor applies restored theme, view, accessibility and Workbench settings");
+    check(editor.getWidth() == 1500 && editor.getHeight() == 1000 &&
+              std::abs(core->effectiveScale() - 1.25) < 1e-9,
+          "open editor applies saved logical dimensions and scale");
+    check(listener.dirty == 0, "applying a restored editor state does not mark it dirty again");
+
+    // A local edit may arrive before any timer callback can observe the host load.
+    restored.scale = 1.5f;
+    restored.lastWidth = 900;
+    restored.lastHeight = 600;
+    restore(restored);
+    core->setEducational(false);
+    const auto afterEdit = target.editorSettings();
+    check(!afterEdit.educational && afterEdit.scale == 1.5f && !afterEdit.darkTheme &&
+              afterEdit.view == EditorView::Workbench && afterEdit.reduceMotion && afterEdit.lowFrameRate &&
+              afterEdit.lastWidth == 900 && afterEdit.lastHeight == 600 && afterEdit.pcbView == 1,
+          "immediate local preference edit preserves unrelated restored fields");
+    check(editor.getWidth() == 1350 && editor.getHeight() == 900 && listener.dirty == 1,
+          "immediate local edit applies restored size and emits only its own dirty notification");
+
+    // A newer explicit host resize takes precedence over saved dimensions, while
+    // its logical size must be computed using the newly restored scale.
+    restored.scale = 1.25f;
+    restored.view = EditorView::Easy;
+    restored.lastWidth = 1000;
+    restored.lastHeight = 720;
+    restore(restored);
+    editor.setSize(1600, 1000);
+    const auto afterResize = target.editorSettings();
+    check(editor.getWidth() == 1600 && editor.getHeight() == 1000 &&
+              afterResize.lastWidth == 1280 && afterResize.lastHeight == 800 &&
+              afterResize.scale == 1.25f && afterResize.view == EditorView::Easy && !afterResize.darkTheme &&
+              afterResize.educational && afterResize.reduceMotion && afterResize.lowFrameRate,
+          "resize before refresh preserves restored preferences and records the newer host dimensions");
+    core->pumpFrame(0.0, ++g_now);
+    check(core->view() == EditorView::Easy && target.editorSettings().lastWidth == 1280 && listener.dirty == 2,
+          "subsequent refresh neither reverts resize nor repeats dirty notification");
+    target.removeListener(&listener);
+}
+
 void testStatusBadges(const juce::File& outDir) {
     // Status flags are rendered from StatusInfo; FakeBridge reports none, so use a small subclass.
     struct Flagged : test::FakeBridge {
@@ -371,6 +449,7 @@ int main(int argc, char** argv) {
     testContrast();
     testEducation();
     testSphereMapping();
+    testOpenEditorStateRestore();
 
     {
         test::FakeBridge bridge;

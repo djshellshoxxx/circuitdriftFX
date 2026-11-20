@@ -1681,7 +1681,12 @@ void CircuitEngine::process(const ProcessContext& ctx, const double* const* in, 
                             const core::ModulationBlock& mod) noexcept {
     (void)sidechain; (void)scChannels;
     if (frames <= 0) {
-        if (impl_ && impl_->prepared) impl_->beginBlock(plain, mod, ctx);
+        if (frames == 0 && impl_ && impl_->prepared) {
+            impl_->beginBlock(plain, mod, ctx);
+            // Parameter-only host flushes can stage modes or complete a reset.
+            // Publish their diagnostics without advancing any sample clock.
+            impl_->publish(std::clamp(channels, 0, impl_->nCh));
+        }
         return;
     }
     if (!impl_ || !impl_->prepared || !in || !out) {

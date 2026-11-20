@@ -52,7 +52,12 @@ struct WorkbenchView::Impl {
             auto s = bridge.uiSettings(); s.overlay = i; bridge.setUiSettings(s); apply(s);
         };
         xrayBtn.onClick = [this] { auto s = bridge.uiSettings(); s.xray = xrayBtn.getToggleState(); bridge.setUiSettings(s); apply(s); };
-        for (int i = 0; i < 3; ++i) viewBtn[i].onClick = [this, i] { canvas.setViewMode(static_cast<PcbCanvas::ViewMode>(i)); };
+        for (int i = 0; i < 3; ++i) viewBtn[i].onClick = [this, i] {
+            auto s = bridge.uiSettings();
+            s.pcbView = i;
+            bridge.setUiSettings(s);
+            apply(s);
+        };
         for (int i = 0; i < 5; ++i) toolBtn[i].onClick = [this, i] { canvas.setTool(static_cast<PcbCanvas::Tool>(i)); };
         for (int i = 0; i < 2; ++i) chBtn[i].onClick = [this, i] { canvas.setChannel(i); refreshAll(); };
         inspBtn.onClick = [this] { drawerOpen = inspBtn.getToggleState(); owner.resized(); };

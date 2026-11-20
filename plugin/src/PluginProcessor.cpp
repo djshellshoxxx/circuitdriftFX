@@ -1,13 +1,13 @@
 #include "PluginProcessor.h"
 
 #include "ParameterLayout.h"
+#include "EditorState.h"
 #include "ui/PluginEditor.h"
 #include "ui/ProcessorEditorBridge.h"
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <limits>
-#include <thread>
 
 namespace cd::plugin {
 namespace {
@@ -37,6 +37,7 @@ CircuitDriftProcessor::CircuitDriftProcessor(Edition edition, const juce::String
       displayName_(displayName),
       apvts_(*this, nullptr, kStateType, buildParameterLayout(edition)) {
     static_assert(std::atomic<float>::is_always_lock_free, "Audio parameters must be lock-free");
+    static_assert(std::atomic<std::uint64_t>::is_always_lock_free, "Audio commands must be lock-free");
     for (std::size_t i = 0; i < core::kParamCount; ++i)
         if (isExposed(core::kParams[i], edition_)) rawParameters_[i] = apvts_.getRawParameterValue(core::kParams[i].id);
     if (edition_ == Edition::Lite) rawBypass_ = apvts_.getRawParameterValue(kBypassParamId);
@@ -58,18 +59,59 @@ void CircuitDriftProcessor::run() {
     }
 }
 
-bool CircuitDriftProcessor::readEditorTelemetry(engine::TelemetryFrame& out) noexcept {
-    if (!editorReadsEnabled_.load(std::memory_order_acquire)) return false;
-    editorReaders_.fetch_add(1, std::memory_order_acq_rel);
-    const bool ok = editorReadsEnabled_.load(std::memory_order_acquire) && runtime_.readTelemetry(out);
-    editorReaders_.fetch_sub(1, std::memory_order_release);
-    return ok;
+const CircuitDriftProcessor::EditorSnapshot* CircuitDriftProcessor::latestEditorSnapshot() noexcept {
+    if (!editorReadsEnabled_.load(std::memory_order_acquire)) return nullptr;
+    editorSnapshots_.acquire();
+    const auto& snapshot = editorSnapshots_.front();
+    if (snapshot.generation != editorGeneration_.load(std::memory_order_acquire) ||
+        !editorReadsEnabled_.load(std::memory_order_acquire)) return nullptr;
+    return &snapshot;
 }
 
-void CircuitDriftProcessor::suspendEditorReaders() noexcept {
-    editorReadsEnabled_.store(false, std::memory_order_release);
-    // Host preparation/release is non-audio; wait for the bounded UI snapshot copy.
-    while (editorReaders_.load(std::memory_order_acquire) != 0) std::this_thread::yield();
+bool CircuitDriftProcessor::readEditorSnapshot(EditorSnapshot& out) noexcept {
+    if (const auto* snapshot = latestEditorSnapshot()) { out = *snapshot; return true; }
+    return false;
+}
+
+bool CircuitDriftProcessor::readEditorTelemetry(engine::TelemetryFrame& out) noexcept {
+    if (const auto* snapshot = latestEditorSnapshot()) { out = snapshot->telemetry; return true; }
+    return false;
+}
+
+void CircuitDriftProcessor::publishEditorSnapshot(double bpm) noexcept {
+    auto& snapshot = editorSnapshots_.back();
+    if (!runtime_.readTelemetry(snapshot.telemetry)) return;
+    snapshot.generation = editorGeneration_.load(std::memory_order_relaxed);
+    snapshot.controls = runtime_.controlStatus();
+    for (int slot = 0; slot < engine::kSlots; ++slot) snapshot.targets[slot] = runtime_.effectiveTargets(slot);
+    snapshot.bpm = bpm;
+    editorSnapshots_.publish();
+}
+
+bool CircuitDriftProcessor::requestEngineReset(bool cold) noexcept {
+    const auto generation = editorGeneration_.load(std::memory_order_acquire);
+    if (!editorReadsEnabled_.load(std::memory_order_acquire)) return false;
+    // A generation stamp prevents a request racing release/reprepare from
+    // resetting a different prepared instance. Repeated clicks coalesce.
+    pendingReset_.store((generation << 2) | (cold ? 2u : 1u), std::memory_order_release);
+    return true;
+}
+
+UiSettings CircuitDriftProcessor::editorSettings() const {
+    const std::lock_guard lock(editorSettingsMutex_);
+    return editorSettings_;
+}
+
+void CircuitDriftProcessor::setEditorSettings(const UiSettings& settings) {
+    const auto next = boundedEditorSettings(settings);
+    {
+        const std::lock_guard lock(editorSettingsMutex_);
+        if (sameEditorSettings(editorSettings_, next)) return;
+        editorSettings_ = next;
+    }
+    // Hosts need an explicit dirty-state notification for persisted preferences
+    // that are deliberately not automatable sound parameters. Notify unlocked.
+    updateHostDisplay(ChangeDetails{}.withNonParameterStateChanged(true));
 }
 
 void CircuitDriftProcessor::stopPitchWorker() {
@@ -123,7 +165,9 @@ void CircuitDriftProcessor::prepareToPlay(double sampleRate, int maximumExpected
 }
 
 void CircuitDriftProcessor::releaseResources() {
-    suspendEditorReaders();
+    editorReadsEnabled_.store(false, std::memory_order_release);
+    editorGeneration_.fetch_add(1, std::memory_order_acq_rel);
+    pendingReset_.store(0, std::memory_order_release);
     stopPitchWorker();
     runtime_.release();
     sampleRate_ = 0.0;
@@ -144,6 +188,10 @@ void CircuitDriftProcessor::processAudio(juce::AudioBuffer<Sample>& buffer, juce
         midi.clear();
         return;
     }
+    const auto reset = pendingReset_.exchange(0, std::memory_order_acq_rel);
+    const auto generation = editorGeneration_.load(std::memory_order_relaxed);
+    if (reset != 0 && (reset & ~std::uint64_t{3}) == (generation << 2))
+        runtime_.resetRealtime((reset & 3u) == 2u ? engine::ResetKind::Cold : engine::ResetKind::Warm);
     // A parameter-only callback may have no audio channel pointers. Do not form
     // JUCE bus views until positive frame count and the complete bus layout exist.
     auto output = frames > 0 ? getBusBuffer(buffer, false, 0) : juce::AudioBuffer<Sample>{};
@@ -243,6 +291,7 @@ void CircuitDriftProcessor::processAudio(juce::AudioBuffer<Sample>& buffer, juce
     } while (offset < frames);
     for (int ch = channels; ch < output.getNumChannels(); ++ch) output.clear(ch, 0, frames);
     sampleCursor_ = advanceSamples(blockStart, frames);
+    publishEditorSnapshot(controls.bpm.value_or(120.0));
 }
 
 void CircuitDriftProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) {
@@ -279,7 +328,10 @@ void CircuitDriftProcessor::getStateInformation(juce::MemoryBlock& destData) {
     state.setProperty("schemaVersion", kAdapterStateVersion, nullptr);
     state.setProperty("edition", editionName(edition_), nullptr);
     if (edition_ == Edition::Lite) state.setProperty("liteMappingVersion", kLiteMappingVersion, nullptr);
-    if (const auto xml = state.createXml()) copyXmlToBinary(*xml, destData);
+    if (const auto xml = state.createXml()) {
+        writeEditorSettings(*xml, editorSettings());
+        copyXmlToBinary(*xml, destData);
+    }
 }
 
 void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInBytes) {
@@ -290,6 +342,8 @@ void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInByte
     if (xml->hasAttribute("edition") && xml->getStringAttribute("edition") != editionName(edition_)) return;
     if (edition_ == Edition::Lite && xml->hasAttribute("liteMappingVersion") &&
         xml->getStringAttribute("liteMappingVersion") != kLiteMappingVersion) return;
+    UiSettings settings;
+    if (!readEditorSettings(*xml, settings)) return;
 
     // Legacy APVTS states have no edition marker. Accept only an unambiguous
     // subset of this edition's known parameters; reject mixed/unknown payloads.
@@ -312,6 +366,10 @@ void CircuitDriftProcessor::setStateInformation(const void* data, int sizeInByte
     }
     if (count == 0) return;
     apvts_.replaceState(juce::ValueTree::fromXml(*xml));
+    {
+        const std::lock_guard lock(editorSettingsMutex_);
+        editorSettings_ = settings;  // Loading host state is not a new user edit.
+    }
     editorStateEpoch_.fetch_add(1, std::memory_order_release);
 }
 

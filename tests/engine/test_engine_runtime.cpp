@@ -351,6 +351,10 @@ void containment() {
         CHECK(worst <= 1e-12, "after fallback fade output is delayed dry (%g)", worst);
         r.e.reset(engine::ResetKind::Warm);
         CHECK(!r.e.solverFallbackActive(), "reset clears fallback");
+        const auto resetSample = t.sampleIndex;
+        r.e.process(r.ctx, nullptr, nullptr, 1, nullptr, 0, 0, r.p, r.mod);
+        CHECK(r.e.readTelemetry(t) && !t.solverFallback && !t.needsReset && t.sampleIndex == resetSample,
+              "zero-frame reset flush publishes recovered status without advancing samples");
         const Buf again = r.run(second, {128});
         CHECK(allFinite(again, 4.0), "processing after reset finite");
     }
@@ -559,6 +563,16 @@ void telemetryAndThermal() {
     if (!r.prepare()) return;
     engine::TelemetryFrame t{};
     CHECK(!r.e.readTelemetry(t), "no telemetry before processing");
+    engine::ProcessContext flush{};
+    set(r.p, "quality.zeroLatency", 1);
+    r.e.process(flush, nullptr, nullptr, 2, nullptr, 0, 0, r.p, r.mod);
+    CHECK(r.e.readTelemetry(t) && t.sampleIndex == 0 && t.reprepareRequired &&
+          !t.activeZeroLatency && t.pendingZeroLatency,
+          "zero-frame parameter flush publishes pending diagnostics without advancing samples");
+    set(r.p, "quality.zeroLatency", 0);
+    r.e.process(flush, nullptr, nullptr, 2, nullptr, 0, 0, r.p, r.mod);
+    CHECK(r.e.readTelemetry(t) && t.sampleIndex == 0 && !t.reprepareRequired,
+          "zero-frame parameter reversal clears the pending diagnostic");
     r.run(sine(2, 9600, 48000, 80, 0.7), {256});
     CHECK(r.e.readTelemetry(t) && t.generation > 0 && t.activeFactor == 4 && t.latencySamples == r.e.latencySamples(), "telemetry basics");
     const auto& s = t.slot[0];

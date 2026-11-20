@@ -59,6 +59,9 @@ void PcbCanvas::applySettings(const UiSettings& s) {
     overlay_ = std::clamp(s.overlay, 0, 3);
     xray_ = s.xray;
     reduceMotion_ = s.reduceMotion;
+    const auto requestedView = static_cast<ViewMode>(std::clamp(s.pcbView, 0, 2));
+    // Theme/accessibility updates must preserve a user's current orbit, pan and zoom.
+    if (mode_ != requestedView) setViewMode(requestedView);
     repaint();
 }
 
