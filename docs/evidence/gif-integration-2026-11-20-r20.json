@@ -1,0 +1,142 @@
+{
+  "date": "2026-11-20",
+  "review_source_sha": "c0126227f3822268e725bb7f6daf7392153f0d0b",
+  "review_source_tree": "2b25c748440c9fd7e8bd323944d662a9373a9fee",
+  "portable_resource_tests": {
+    "source_sha": "eb97e54ec15ac95eec268e4b516ada1713caa70c",
+    "source_tree": "84afb9ab41cd2566d1b1befa78e05a314cc7aac1",
+    "result": "passed",
+    "passed": 3,
+    "total": 3,
+    "elapsed_seconds": 6.03,
+    "compiler": "GCC 14.2",
+    "optimization": "O1 production and most tests; state_safety test translation unit O0 after previously recorded resource limit",
+    "sanitizers": [
+      "AddressSanitizer",
+      "UndefinedBehaviorSanitizer",
+      "float-cast-overflow"
+    ],
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=0",
+      "UBSAN_OPTIONS": "halt_on_error=1"
+    },
+    "cases": [
+      {
+        "name": "state_safety",
+        "seconds": 2.95899,
+        "result": "passed"
+      },
+      {
+        "name": "state_preset",
+        "seconds": 2.51705,
+        "result": "passed"
+      },
+      {
+        "name": "cd_media_tests",
+        "seconds": 0.540289,
+        "result": "passed"
+      }
+    ],
+    "source_equivalence": "All portable production inputs remain byte-identical from eb97e54 through b84d2ba. The later aedef7b change strengthens only the shared test decoder and media regression suite; it has its own passing run below. Native tests consume the stronger decoder.",
+    "log": "docs/evidence/gif-resources-2026-11-20-r20.log",
+    "junit": "docs/evidence/gif-resources-2026-11-20-r20.xml"
+  },
+  "native": {
+    "state": "passed",
+    "source_sha": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+    "remote_source_sha": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
+    "source_tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+    "passed": 6,
+    "total": 6,
+    "elapsed_seconds": 61.44,
+    "compiler": "Clang 19.1.7",
+    "build_type": "Custom -O0 -g0 -DNDEBUG",
+    "sanitizers": false,
+    "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+    "cases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 4.60103,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_contract",
+        "seconds": 0.928752,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 5.84193,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 10.9412,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_shell",
+        "seconds": 27.3626,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_workbench",
+        "seconds": 11.7411,
+        "result": "passed"
+      }
+    ],
+    "scope": "Six native processor/editor console applications; backend session and real-editor GIF regressions execute inside live_bridge and shell respectively.",
+    "log": "docs/evidence/gif-native-2026-11-20-r24.log",
+    "junit": "docs/evidence/gif-native-2026-11-20-r24.xml",
+    "build_note": "All six targets built and linked; final incremental check had no work. An intermediate ambiguous empty JUCE File assignment was repaired with explicit juce::File{}. No test threshold was changed."
+  },
+  "memory_admission": {
+    "max_canvas_pixels": 518400,
+    "encoded_output_limit_bytes": 33554432,
+    "encoder_bound_bytes": 43016704,
+    "external_eight_rgba_allowances_bytes": 16588800,
+    "additional_margin_bytes": 1048576,
+    "total_payload_budget_bytes": 60654080,
+    "budget_limit_bytes": 67108864,
+    "scope": "Admitted capture buffer/encoder workspace payload, not measured whole-process RSS, allocator bookkeeping, host/platform or GPU memory."
+  },
+  "review": "R21 and R22 findings repaired; all three R23 source reviewers completed without a new actionable finding. Root repaired first-local-error geometry in b84d2ba; fresh R24 layout review confirmed it. Independent GIF decoding passed; dependency/CI follow-up is recorded separately.",
+  "qualification_boundary": "No real-DAW, optimized performance, TSan, leak, physical-model, MP4 or complete G11 qualification.",
+  "strict_eoi_regression": {
+    "worker_sha": "3fd810ced8fd33ea68262e2aec66a15955c91a8a",
+    "integrated_source_sha": "aedef7b69029132716ef5ae11e588263e1fb9f44",
+    "source_tree": "1144ea0ba2990ac00a9c231f3fdae57d248dfab9",
+    "result": "passed",
+    "passed": 1,
+    "total": 1,
+    "elapsed_seconds": 0.57,
+    "compiler": "GCC 14.2",
+    "optimization": "O1",
+    "sanitizers": [
+      "AddressSanitizer",
+      "UndefinedBehaviorSanitizer",
+      "float-cast-overflow"
+    ],
+    "leak_detection": "disabled under tracer",
+    "cases": [
+      {
+        "name": "cd_media_tests",
+        "seconds": 0.565034,
+        "result": "passed"
+      }
+    ],
+    "scope": "Eleven hand-packed valid and eleven invalid LZW fixtures, full-envelope propagation, and real encoder final-code/EOI width boundaries, plus all existing media tests. No production encoder change.",
+    "log": "docs/evidence/gif-decoder-2026-11-20-r22.log",
+    "junit": "docs/evidence/gif-decoder-2026-11-20-r22.xml"
+  },
+  "independent_decode": {
+    "source_sha": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+    "decoder": "Pillow 13.0.0",
+    "python": "3.12.14",
+    "result": "passed",
+    "files": 4,
+    "fully_decoded_frames": 63,
+    "evidence": "docs/evidence/gif-independent-2026-11-20-r24.json",
+    "scope": "Freshly generated real-editor GIF outputs; independent decoder compatibility, timing, dimensions, loop metadata, full decoded pixels and provenance. Not a formal GIF conformance proof."
+  }
+}

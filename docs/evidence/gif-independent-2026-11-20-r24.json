@@ -1,0 +1,2407 @@
+{
+  "schema_version": 1,
+  "round": 24,
+  "verification_started_utc": "2026-11-20T17:52:27.621792+00:00",
+  "verification_type": "Independent Pillow full-frame decoding of production GIF fixtures",
+  "source": {
+    "repository": "/workspace/scratch/7a10b82b2964/circuitdriftFX",
+    "head": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+    "tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+    "tracked_worktree_clean": true
+  },
+  "parent_confirmation": {
+    "received_before_any_fixture_read": true,
+    "message": "Final outputs are ready. Native CTest at local b84d2ba119c03f079cd74886cbd066a2da6013f6/tree0c2e17c0ec416991c8a69b130015b1e0aa727780 passed all 6 suites in61.44s. Run JUnit timestamp is2026-11-20T09:47:52 (process local timezone); log completed around17:49UTC."
+  },
+  "native_run": {
+    "junit": {
+      "path": "/workspace/scratch/7a10b82b2964/gif-native-r24-results.xml",
+      "size_bytes": 1352,
+      "mtime_ns": 1795196934012820858,
+      "mtime_utc": "2026-11-20T17:48:54.012821+00:00",
+      "sha256": "7dc67446e22dd7923177664fddb0097b46c92be359e5ff5f5c9c8a0c2efc8832"
+    },
+    "log": {
+      "path": "/workspace/scratch/7a10b82b2964/gif-native-r24-ctest.log",
+      "size_bytes": 751,
+      "mtime_ns": 1795196934012820858,
+      "mtime_utc": "2026-11-20T17:48:54.012821+00:00",
+      "sha256": "dfc2248689f63de04ebb84c910bbac3a616811da5cdecfc19fc42671920846eb"
+    },
+    "junit_attributes": {
+      "name": "(empty)",
+      "tests": "6",
+      "failures": "0",
+      "disabled": "0",
+      "skipped": "0",
+      "hostname": "",
+      "time": "61",
+      "timestamp": "2026-11-20T09:47:52"
+    },
+    "testcases": [
+      {
+        "name": "plugin_param_consistency",
+        "seconds": 4.60103,
+        "status": "run",
+        "output": "UI host-gesture regressions passed\nplugin parameter consistency: all checks passed (116 registry params)"
+      },
+      {
+        "name": "ui_snap_contract",
+        "seconds": 0.928752,
+        "status": "run",
+        "output": "UI contract snapshot passed"
+      },
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 5.84193,
+        "status": "run",
+        "output": "live EditorBridge: PASS (0 failures)"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 10.9412,
+        "status": "run",
+        "output": "UI panels snapshot passed"
+      },
+      {
+        "name": "ui_snap_shell",
+        "seconds": 27.3626,
+        "status": "run",
+        "output": "UI shell snapshot passed"
+      },
+      {
+        "name": "ui_snap_workbench",
+        "seconds": 11.7411,
+        "status": "run",
+        "output": "Workbench snapshot passed"
+      }
+    ],
+    "process_timezone_names": [
+      "PST",
+      "PDT"
+    ],
+    "environment_TZ": null,
+    "start_local_interpreted": "2026-11-20T09:47:52-08:00",
+    "start_utc": "2026-11-20T17:47:52+00:00",
+    "completion_log_mtime_utc": "2026-11-20T17:48:54.012821+00:00",
+    "freshness_rule": "Each GIF mtime must fall from JUnit start interpreted in this process local timezone through completed native log mtime."
+  },
+  "decoder": {
+    "library": "Pillow",
+    "version": "13.0.0",
+    "python_version": "3.12.14",
+    "python_executable": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+    "registered_gif_decoder": "GIF",
+    "load_truncated_images": false,
+    "warnings_as_errors": true,
+    "full_pixel_read_method": "Every reported frame is sought, load() is called, converted to RGB in memory, and all pixel bytes are materialized using tobytes(). RGB hashes and color counts are calculated from fully decoded pixels."
+  },
+  "expectation_sources": [
+    {
+      "path": "plugin/tests/ui/snap_shell.cpp",
+      "lines": "447,454",
+      "fact": "argv[1] is passed as output directory to capture_ui_regressions::run"
+    },
+    {
+      "path": "plugin/CMakeLists.txt",
+      "lines": "114",
+      "fact": "UI CTest outputs use plugin/ui-snapshots"
+    },
+    {
+      "path": "plugin/tests/ui/CaptureUiRegressions.h",
+      "lines": "241,550-598",
+      "fact": "editor_30hz.gif and editor_jitter.gif are square GIF fixtures with twenty frames and one second of playback"
+    },
+    {
+      "path": "plugin/tests/ui/CaptureUiRegressions.h",
+      "lines": "601-636",
+      "fact": "editor_hidden.gif is portrait; one admitted frame and nineteen repeats finish twenty frames and one second"
+    },
+    {
+      "path": "plugin/tests/ui/CaptureUiRegressions.h",
+      "lines": "638-659",
+      "fact": "editor_destroyed.gif is landscape; starts at clock 2000 ms, has one admitted frame, and is stopped by destruction at 2125 ms"
+    },
+    {
+      "path": "plugin/src/ui/EditorBridge.h",
+      "lines": "87-95",
+      "fact": "GIF dimensions are 540x960 portrait, 540x540 square, and 960x540 landscape"
+    },
+    {
+      "path": "plugin/src/ui/GifCaptureSession.cpp",
+      "lines": "110-116,199-207,265-267",
+      "fact": "50 ms ticks; stop rounds elapsed partial slot up. A 125 ms manual interval produces three 50 ms frames (150 ms)."
+    },
+    {
+      "path": "plugin/src/ui/panels/ServicesPanels.cpp",
+      "lines": "56,197",
+      "fact": "Loop GIF defaults to enabled and is passed into the capture request"
+    },
+    {
+      "path": "src/media/GifEncoder.cpp",
+      "lines": "314-324",
+      "fact": "Production writer emits GIF89a and loop-forever extension when loop is enabled; Pillow represents infinite looping as zero"
+    }
+  ],
+  "files": [
+    {
+      "name": "editor_30hz.gif",
+      "path": "/workspace/scratch/7a10b82b2964/cdfx-integration-native-r14/plugin/ui-snapshots/capture_ui/editor_30hz.gif",
+      "size_bytes": 909461,
+      "sha256": "bde48105e49b1e511f82e8cae437d5aea529f93a6665f5900c5f9226f82d7f0f",
+      "mtime_ns": 1795196902251894352,
+      "mtime_utc": "2026-11-20T17:48:22.251894+00:00",
+      "expected": {
+        "dimensions": [
+          540,
+          540
+        ],
+        "frame_count": 20,
+        "frame_delay_ms": 50,
+        "total_duration_ms": 1000,
+        "loop": 0,
+        "signature": "GIF89a"
+      },
+      "frames": [
+        {
+          "index": 0,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "af135a7f4e444155f27c9ff61a856f63f67bcc38ed5de1d321cef9353ba9d20a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 1,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "8775005203c48d10707468a226ed25b37de67e777b4b2730ab74296590876292",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 2,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "6648aee3957cdd2ceff82d851e7000c611f33fa04cbe4c2e501f7584c381cbd3",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 3,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "6648aee3957cdd2ceff82d851e7000c611f33fa04cbe4c2e501f7584c381cbd3",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 4,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "6648aee3957cdd2ceff82d851e7000c611f33fa04cbe4c2e501f7584c381cbd3",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 5,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "51f25580deb62303e84550ce308f65775f3e1bde81c1a9e04b9f62f910a78596",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 553
+        },
+        {
+          "index": 6,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "51f25580deb62303e84550ce308f65775f3e1bde81c1a9e04b9f62f910a78596",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 553
+        },
+        {
+          "index": 7,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "5e3c0593dfcf56a67645b7e92afd63e14e21e9536e16cab84aadfe5c155a3a8a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 558
+        },
+        {
+          "index": 8,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "5e3c0593dfcf56a67645b7e92afd63e14e21e9536e16cab84aadfe5c155a3a8a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 558
+        },
+        {
+          "index": 9,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "5e3c0593dfcf56a67645b7e92afd63e14e21e9536e16cab84aadfe5c155a3a8a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 558
+        },
+        {
+          "index": 10,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "a087ceea2cbbc2f0ebae11e08a8ce9563c1ab9653cd6dde62ad11c8631c7e638",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 525
+        },
+        {
+          "index": 11,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "a087ceea2cbbc2f0ebae11e08a8ce9563c1ab9653cd6dde62ad11c8631c7e638",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 525
+        },
+        {
+          "index": 12,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "bf3e78121ac5b875abe4a77624f38d610c38060fc8256643866d3884ff7199fb",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 526
+        },
+        {
+          "index": 13,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "bf3e78121ac5b875abe4a77624f38d610c38060fc8256643866d3884ff7199fb",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 526
+        },
+        {
+          "index": 14,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "9730a527251ed1512a0bc3b4ff41a24f9ff485e2aa608fc9af812661bfc3cc69",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 529
+        },
+        {
+          "index": 15,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "9730a527251ed1512a0bc3b4ff41a24f9ff485e2aa608fc9af812661bfc3cc69",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 529
+        },
+        {
+          "index": 16,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "9730a527251ed1512a0bc3b4ff41a24f9ff485e2aa608fc9af812661bfc3cc69",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 529
+        },
+        {
+          "index": 17,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "dd2a39fbfb7d627b6e2275e3938aab04ef11fc7e3b50dd7e428ed8f591ce87f6",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 526
+        },
+        {
+          "index": 18,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "a74b2f4a32b75b7199862289fb47ee0791268f07f232fe01b3898efc810d0404",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 528
+        },
+        {
+          "index": 19,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "88a5630dde1fa1da4d627a871e977479b9b5df5174134f1101ab69d18e90f3e9",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 537
+        }
+      ],
+      "failures": [],
+      "decoded_format": "GIF",
+      "logical_dimensions": [
+        540,
+        540
+      ],
+      "reported_frame_count": 20,
+      "is_animated": true,
+      "loop": 0,
+      "version": "GIF89a",
+      "seek_after_last_frame_raises_eof": true,
+      "fully_decoded_frames": 20,
+      "total_duration_ms": 1000,
+      "unique_decoded_rgb_frames": 11,
+      "unique_frame_durations_ms": [
+        50
+      ],
+      "nontrivial_content_all_frames": true,
+      "file_unchanged_during_verification": true,
+      "freshness_passed": true,
+      "passed": true
+    },
+    {
+      "name": "editor_jitter.gif",
+      "path": "/workspace/scratch/7a10b82b2964/cdfx-integration-native-r14/plugin/ui-snapshots/capture_ui/editor_jitter.gif",
+      "size_bytes": 915133,
+      "sha256": "123b8474b4e10f9f672b2339dff4bc7b30223a52932671a02cb7877a9d50f212",
+      "mtime_ns": 1795196903987944993,
+      "mtime_utc": "2026-11-20T17:48:23.987945+00:00",
+      "expected": {
+        "dimensions": [
+          540,
+          540
+        ],
+        "frame_count": 20,
+        "frame_delay_ms": 50,
+        "total_duration_ms": 1000,
+        "loop": 0,
+        "signature": "GIF89a"
+      },
+      "frames": [
+        {
+          "index": 0,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "af135a7f4e444155f27c9ff61a856f63f67bcc38ed5de1d321cef9353ba9d20a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 1,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "69f8358e4fbef88f230f5ee1f50fb2c43ebb0dd82905146ae3b382985114d919",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 2,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "69f8358e4fbef88f230f5ee1f50fb2c43ebb0dd82905146ae3b382985114d919",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 3,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 4,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 5,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 6,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 7,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 8,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 9,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "79775bc769ee7b4266cccebf963cf61f2126aa7ecb6534f9ae1980efd727754a",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 841
+        },
+        {
+          "index": 10,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "e8f040718faf127ceed86f50e77e0c3e11e643c70786bc8c7b454ec763be7248",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 555
+        },
+        {
+          "index": 11,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "e8f040718faf127ceed86f50e77e0c3e11e643c70786bc8c7b454ec763be7248",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 555
+        },
+        {
+          "index": 12,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "e8f040718faf127ceed86f50e77e0c3e11e643c70786bc8c7b454ec763be7248",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 555
+        },
+        {
+          "index": 13,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "e8f040718faf127ceed86f50e77e0c3e11e643c70786bc8c7b454ec763be7248",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 555
+        },
+        {
+          "index": 14,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "e8f040718faf127ceed86f50e77e0c3e11e643c70786bc8c7b454ec763be7248",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 555
+        },
+        {
+          "index": 15,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "e8f040718faf127ceed86f50e77e0c3e11e643c70786bc8c7b454ec763be7248",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 555
+        },
+        {
+          "index": 16,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "7746fb0a7c5db18e02eaf6407d85ea60906518067e11374476c3e6972366ba4f",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 529
+        },
+        {
+          "index": 17,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "7746fb0a7c5db18e02eaf6407d85ea60906518067e11374476c3e6972366ba4f",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 529
+        },
+        {
+          "index": 18,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "7746fb0a7c5db18e02eaf6407d85ea60906518067e11374476c3e6972366ba4f",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 529
+        },
+        {
+          "index": 19,
+          "dimensions": [
+            540,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 874800,
+          "decoded_rgb_sha256": "fbca5bf3c2013926b8b1ced88076110128d484057f241860e8944883bc5401c4",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              20,
+              255
+            ],
+            [
+              22,
+              241
+            ],
+            [
+              25,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            20,
+            22,
+            25
+          ],
+          "detail_sample_count": 841,
+          "detail_samples_different_from_first_pixel": 541
+        }
+      ],
+      "failures": [],
+      "decoded_format": "GIF",
+      "logical_dimensions": [
+        540,
+        540
+      ],
+      "reported_frame_count": 20,
+      "is_animated": true,
+      "loop": 0,
+      "version": "GIF89a",
+      "seek_after_last_frame_raises_eof": true,
+      "fully_decoded_frames": 20,
+      "total_duration_ms": 1000,
+      "unique_decoded_rgb_frames": 6,
+      "unique_frame_durations_ms": [
+        50
+      ],
+      "nontrivial_content_all_frames": true,
+      "file_unchanged_during_verification": true,
+      "freshness_passed": true,
+      "passed": true
+    },
+    {
+      "name": "editor_hidden.gif",
+      "path": "/workspace/scratch/7a10b82b2964/cdfx-integration-native-r14/plugin/ui-snapshots/capture_ui/editor_hidden.gif",
+      "size_bytes": 1432121,
+      "sha256": "2bb5b1f2552e6207ce60f1e078ba288b66a95a6cce4b62c38dc5619e63be1df9",
+      "mtime_ns": 1795196904643964130,
+      "mtime_utc": "2026-11-20T17:48:24.643964+00:00",
+      "expected": {
+        "dimensions": [
+          540,
+          960
+        ],
+        "frame_count": 20,
+        "frame_delay_ms": 50,
+        "total_duration_ms": 1000,
+        "loop": 0,
+        "signature": "GIF89a"
+      },
+      "frames": [
+        {
+          "index": 0,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 1,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 2,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 3,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 4,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 5,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 6,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 7,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 8,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 9,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 10,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 11,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 12,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 13,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 14,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 15,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 16,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 17,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 18,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        },
+        {
+          "index": 19,
+          "dimensions": [
+            540,
+            960
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "7510caecd4201c1d4728599272b15bd06d7912711d8acb5b2ddf27a14e14be5b",
+          "distinct_rgb_colors": 255,
+          "rgb_channel_extrema": [
+            [
+              10,
+              238
+            ],
+            [
+              10,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1477
+        }
+      ],
+      "failures": [],
+      "decoded_format": "GIF",
+      "logical_dimensions": [
+        540,
+        960
+      ],
+      "reported_frame_count": 20,
+      "is_animated": true,
+      "loop": 0,
+      "version": "GIF89a",
+      "seek_after_last_frame_raises_eof": true,
+      "fully_decoded_frames": 20,
+      "total_duration_ms": 1000,
+      "unique_decoded_rgb_frames": 1,
+      "unique_frame_durations_ms": [
+        50
+      ],
+      "nontrivial_content_all_frames": true,
+      "file_unchanged_during_verification": true,
+      "freshness_passed": true,
+      "passed": true
+    },
+    {
+      "name": "editor_destroyed.gif",
+      "path": "/workspace/scratch/7a10b82b2964/cdfx-integration-native-r14/plugin/ui-snapshots/capture_ui/editor_destroyed.gif",
+      "size_bytes": 163581,
+      "sha256": "0bc1a0d0a13a500572fec3eece6199a96d380aea7b0f20b4c50dd3d6e318dd7d",
+      "mtime_ns": 1795196905123978132,
+      "mtime_utc": "2026-11-20T17:48:25.123978+00:00",
+      "expected": {
+        "dimensions": [
+          960,
+          540
+        ],
+        "frame_count": 3,
+        "frame_delay_ms": 50,
+        "total_duration_ms": 150,
+        "loop": 0,
+        "signature": "GIF89a"
+      },
+      "frames": [
+        {
+          "index": 0,
+          "dimensions": [
+            960,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "b38f4d164a4603daab46c51e2eb6df1d6759e9efdba1d9702dc7f875b95b7040",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              240
+            ],
+            [
+              11,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1473
+        },
+        {
+          "index": 1,
+          "dimensions": [
+            960,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "b38f4d164a4603daab46c51e2eb6df1d6759e9efdba1d9702dc7f875b95b7040",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              240
+            ],
+            [
+              11,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1473
+        },
+        {
+          "index": 2,
+          "dimensions": [
+            960,
+            540
+          ],
+          "duration_ms": 50,
+          "disposal_method": 1,
+          "decoded_rgb_bytes": 1555200,
+          "decoded_rgb_sha256": "b38f4d164a4603daab46c51e2eb6df1d6759e9efdba1d9702dc7f875b95b7040",
+          "distinct_rgb_colors": 256,
+          "rgb_channel_extrema": [
+            [
+              10,
+              240
+            ],
+            [
+              11,
+              241
+            ],
+            [
+              12,
+              244
+            ]
+          ],
+          "first_pixel_rgb": [
+            12,
+            13,
+            15
+          ],
+          "detail_sample_count": 1479,
+          "detail_samples_different_from_first_pixel": 1473
+        }
+      ],
+      "failures": [],
+      "decoded_format": "GIF",
+      "logical_dimensions": [
+        960,
+        540
+      ],
+      "reported_frame_count": 3,
+      "is_animated": true,
+      "loop": 0,
+      "version": "GIF89a",
+      "seek_after_last_frame_raises_eof": true,
+      "fully_decoded_frames": 3,
+      "total_duration_ms": 150,
+      "unique_decoded_rgb_frames": 1,
+      "unique_frame_durations_ms": [
+        50
+      ],
+      "nontrivial_content_all_frames": true,
+      "file_unchanged_during_verification": true,
+      "freshness_passed": true,
+      "passed": true
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "This is a compatibility and content decode check of the four freshly generated native fixtures, not a claim about every possible GIF input, every platform, or production host behavior.",
+    "Pillow successfully loading all frames is an independent oracle from the project minimal GIF parser. It is not a formal GIF grammar or LZW EOI-conformance proof; no claim is made about what malformed files Pillow might tolerate.",
+    "Image content is checked for nontrivial decoded colors and sampled detail. Frame hashes describe this run; no golden-pixel identity or physically correct animation is asserted.",
+    "Hidden and destroyed fixtures are expected to repeat their sole admitted frame. Multiple distinct frames are recorded for the other fixtures without enforcing an exact unique-frame count.",
+    "Freshness is based on parent readiness confirmation, pinned source/tree, test provenance, and file mtimes inside the observed native test interval; mtimes alone are not cryptographic provenance.",
+    "No builds, app tests, fuzzing, network/service operations, or fixture image edits were performed by this verification task. Only this JSON evidence artifact was written."
+  ],
+  "total_fully_decoded_frames": 63,
+  "all_passed": true,
+  "verification_finished_utc": "2026-11-20T17:52:28.051513+00:00"
+}

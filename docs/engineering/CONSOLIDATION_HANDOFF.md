@@ -1,27 +1,34 @@
 # CircuitDriftFX consolidation handoff — 2026-11-20
 
-## Current checkpoint — rounds 14–18
+## Current checkpoint — GIF integration through round 24
 
 Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
 `codex/cdfx-consolidation-20261119`, is the integration and CI authority.
 Read its live head before a guarded forward update. Original source branches
 and `main` at `44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6` are preserved.
 
-Current production/review source is local
-`4dcd584f995c261b189774ea8f416fda40ad97a0`. The latest test-strengthening
-source is local `8ff0adfea571e977adec128622209f63bf997d1d`, remote Git object
-`65b3a259c5dc657e59adea3a2df8a2efbb82e155`, tree
-`476353329e03b5b9657af170cf735ac9ddc00163`. The containing publication adds
-evidence and handoff documentation. Local verification passed **31/31 sanitized
-core tests and 6/6 native applications**; new exact-publication CI is required.
+Current tested production/native source is local
+`b84d2ba119c03f079cd74886cbd066a2da6013f6`, corresponding remote source
+`7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20`, tree
+`0c2e17c0ec416991c8a69b130015b1e0aa727780`. The containing publication adds
+review, execution and handoff evidence. Silent GIF is now integrated with the
+consolidated runtime/editor/validation/preset work. Final local verification
+passed **6/6 native applications**, scoped **3/3 sanitized media/state tests**,
+a later **1/1 strict-decoder suite**, and independent decoding of **63 frames**.
+Exact-publication Linux/Windows/pluginval remains required.
 
-[The continuation commit map](../evidence/commit-map-continuation-r14-2026-11-20.json)
-records full-tree equality for every new source commit. The parent histories
-include both the reviewed local continuation and the concurrent published
-`02a7331cc687e710f3a3c7c0ab023e651601685e`, joined in local merge
-`9630ae03b4be4bc74b1d01d6bbf42b5259d8faec`. The intermediate merge retained
-a coherent local source baseline; subsequent commits reconciled the unique
-contracts and tests from the parallel implementation.
+[The GIF source map](../evidence/commit-map-gif-2026-11-20.json) records complete
+local/remote tree equality, retaining the
+[earlier continuation map](../evidence/commit-map-continuation-r14-2026-11-20.json).
+The lineage retains both concurrent continuation histories through merge 9630ae0
+and the original GIF branch ecae510 through merge 5e7057e. Reviewed implementation
+and regression fixes follow those merge points. The original GIF branch was
+reread at ecae510 and remains intact.
+
+The preceding publication 338e952 has separate 31/31 sanitized core and 6/6 native
+baseline evidence. Those results are not relabeled as a new full-core GIF run.
+Fresh R25 workers now own dependency/release-gate repairs and a G12 feature bug
+hunt; avoid parallel competing implementations of those changes.
 
 ## Consolidated sources and ownership
 
@@ -111,6 +118,28 @@ telemetry, audio-boundary reset, host-persisted UI preferences, pitch epochs and
 parameter-only A/B remain implemented; their original evidence is preserved in
 the historical handoff. A/B is not yet a coordinated dynamic-state transaction.
 
+### Silent GIF capture
+
+The session owns a bounded 1–15 s, 20 Hz monotonic timeline and immutable
+request. It expires independently of panel refresh. Missed frame opportunities
+repeat encoded images, preserving 50 ms delays; manual stop rounds only its final
+partial slot and drains already-admitted frames. Restart rejects old frame tokens.
+The editor renders only its selected Easy/Workbench subtree into declared-size
+software images, including while the drawer covers it. Hidden editors stop
+painting; destruction safely finalizes the admitted sequence.
+
+GIF canvases are 540×960, 540×540 and 960×540. PNG canvases are 1080×1920,
+1080×1080 and 1920×1080. Changing format requires destination reselection; the
+chosen path is never rewritten after confirmation. PNG/start errors remain
+visible, and a separate warning reports repeated frames above 2% without hiding
+the result. Encoder output is capped at 32 MiB. Declared capture buffers/workspaces
+total at most 60,654,080 bytes below a 64 MiB admission limit; this is not whole-process
+RSS. Atomic installation publishes Completed before best-effort diagnostic allocation.
+
+See the [GIF repair/review record](../audits/GIF_INTEGRATION_2026-11-20.md) for
+ordering, lifetime, memory and destination contracts, worker handoffs and exact
+execution. MP4, audio-synchronized output and full G11 qualification remain open.
+
 ## Verification and audit handoff
 
 | Exact source and scope | Recorded result |
@@ -120,25 +149,33 @@ the historical handoff. A/B is not yet a coordinated dynamic-state transaction.
 | Earlier local `1bfc6f8` | 31/31 sanitized core, 333.79 s, plus 2/2 native, 20.11 s. |
 | Earlier combined `2bad426` | 2/2 native, 12.97 s; includes asynchronous catalog and delivered-report freshness. |
 | Theme regression, unchanged production `2bad426` | New test source from `125b217` failed nine assertions in 11.03 s before repair. |
-| Final merged core `4dcd584` | **31/31 passed, 211.91 s**, GCC 14.2 ASan/UBSan/float-cast-overflow. Production and most tests O1; the large state_safety test translation unit O0 after the recorded resource limit. |
-| Final merged native `8ff0adf` | **6/6 passed, 54.20 s**, Clang 19.1.7 Custom O0, no sanitizers: processor parameters, contract, live bridge, panels, shell and workbench. |
+| Pre-GIF merged core `4dcd584` | **31/31 passed, 211.91 s**, GCC 14.2 ASan/UBSan/float-cast-overflow. Production and most tests O1; the large state_safety test translation unit O0 after the recorded resource limit. |
+| Pre-GIF merged native `8ff0adf` | **6/6 passed, 54.20 s**, Clang 19.1.7 Custom O0, no sanitizers: processor parameters, contract, live bridge, panels, shell and workbench. |
+| GIF resources `eb97e54` | **3/3 passed, 6.03 s**, GCC 14.2 ASan/UBSan/float-cast-overflow: media, state_safety, state_preset. |
+| Strict decoder `aedef7b` | **1/1 passed, 0.57 s**, same sanitized media suite with independent EOI fixtures. |
+| Final GIF/native `b84d2ba` | **6/6 passed, 61.44 s**, Clang 19.1.7 Custom O0, including production editor/session regression hooks. |
+| Independent GIF outputs from `b84d2ba` | Pillow 13.0.0 fully decoded **63 frames across 4 fresh files**; dimensions, 50 ms delays, duration, loop metadata and detailed pixels matched expectations. |
 | Containing publication | Requires its own exact-head Linux/Windows/pluginval. Earlier results qualify only their source. |
 
-The only later source change after the merged core run is the native preset
-regression header. Portable source/build inputs are unchanged. Documents are
-validated separately after the final update.
+The scoped GIF runs qualify their recorded source. Portable production inputs
+remain unchanged from eb97e54 through b84d2ba; aedef7b strengthens the shared
+native/media decoder and has its own passing sanitizer run. The final native
+suite consumes that stricter decoder. Documents are validated separately.
 
-Five successive code-audit, bug-hunt and defensive-review sets completed.
-The [rounds 14–18 audit](../audits/CONTINUATION_ROUNDS_14_18_2026-11-20.md)
-records findings, fixes, exact pins and each worker's executed versus source-only
-scope. The final three reviewers found no new actionable production defect.
-Their test-proof gap was addressed by publishing a new snapshot inside the test
-bridge's listPresets call; the delayed Apply requirement remains an explicit gate.
+Fresh workers completed each round before its successors began. The
+[rounds 14–18 audit](../audits/CONTINUATION_ROUNDS_14_18_2026-11-20.md) retains
+prior consolidation findings. [Rounds 19–24](../audits/GIF_INTEGRATION_2026-11-20.md)
+record the original GIF review, backend/UI/resource repairs, strict decoder,
+registry/destination/warning fixes, three clean R23 source reviews, first-error
+layout repair and independent R24 decoding. R24 also found two build-gate defects;
+fresh R25 owners are repairing them before any release qualification.
 
 Evidence:
 [round 14](../evidence/continuation-round14-2026-11-20.json),
 [rounds 15–16](../evidence/continuation-round15-16-2026-11-20.json), and
-[merged rounds 17–18](../evidence/continuation-round17-18-2026-11-20.json).
+[merged rounds 17–18](../evidence/continuation-round17-18-2026-11-20.json),
+[GIF execution](../evidence/gif-integration-2026-11-20-r20.json), and
+[independent GIF output](../evidence/gif-independent-2026-11-20-r24.json).
 Offscreen native/source review evidence does not establish real-DAW, optimized
 performance, TSan, leak, OS-I/O deadline or physical-model qualification. Local
 leak detection was disabled under the tracer. Models remain synthetic and
@@ -149,17 +186,13 @@ filesystem operations retain the documented trusted-directory assumption.
 1. Read the live PR #16 head and exact-head CI; repair concrete failures without
    relaxing assertions or acceptance gates. Use an expected old SHA and forward
    ref update, preserving concurrent work and original branches.
-2. Resume the existing GIF work branch
-   `codex/cdfx-gif-capture-20261120-r14` before creating another implementation.
-   Its observed head was `ecae510b72c0ef4327bacfb6e4aa35d08eea2748`; reread the
-   live head and owner evidence. Three R19 reviewers completed the
-   [GIF preintegration audit](../audits/GIF_PREINTEGRATION_REVIEW_2026-11-20_R19.md).
-   Fresh R20 backend, UI and resource workers are repairing final-frame drain,
-   independent deadline/20 Hz timing, owned visual surfaces and declared sizes,
-   cumulative allocation bounds, zero-copy output and allocation-safe failure
-   handling in isolated worktrees from 8ff0adf. Resume their work and regression
-   handoff before creating another implementation. GIF is not yet integrated
-   or qualified by this checkpoint; its original branch remains preserved.
+2. Resume the active R25 repair owners: release_gate_r25 owns one synchronous
+   pluginval script/workflow calls and source-only CI caching/fresh release
+   acquisition; dependency_gate_r25 owns verified source acquisition before any
+   dependency configuration; session_bug_hunt_r25 audits the next G12 feature.
+   Root integrates and qualifies. Wait for all three, then hand their evidence
+   to fresh reviewers. R24 findings are verification order/working-tree integrity
+   and the release's obsolete validator wrapper, not evidence of compromise.
 3. Complete runtime/control/engine/seed checkpoint capture, host-thread handoff,
    stopped-audio restore, compatibility/migration and coordinated dynamic A/B.
    Sound-preset Load/Save and complete scene transactions depend on that contract.

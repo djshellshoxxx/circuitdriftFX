@@ -8,87 +8,146 @@
     "date": "2026-11-20",
     "branch": "codex/cdfx-consolidation-20261119",
     "local_branch": "codex/cdfx-integration-20261120-round14",
-    "source_head": "65b3a259c5dc657e59adea3a2df8a2efbb82e155",
-    "local_source_head": "8ff0adfea571e977adec128622209f63bf997d1d",
-    "source_tree": "476353329e03b5b9657af170cf735ac9ddc00163",
-    "production_review_pin": "4dcd584f995c261b189774ea8f416fda40ad97a0",
-    "source_head_difference": "The containing publication adds evidence and handoff documentation. Read the live PR16 head for its exact publication SHA.",
-    "stage": "local_core_and_native_passed_new_exact_head_ci_required",
-    "lineage_merge": {
-      "local_sha": "9630ae03b4be4bc74b1d01d6bbf42b5259d8faec",
-      "local_parent": "c73d6b9b9ebe6b22d03e2b72fd6b9d1b40bc97bb",
-      "parallel_parent": "02a7331cc687e710f3a3c7c0ab023e651601685e",
-      "contract": "Both full histories/evidence retained; unique source contracts reconciled in subsequent commits."
-    },
+    "source_head": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
+    "local_source_head": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+    "source_tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+    "source_head_difference": "Containing publication adds execution/review/handoff evidence. Read live PR16 for publication SHA.",
+    "stage": "gif_locally_qualified_exact_publication_ci_required_build_gate_repairs_active",
     "validation": {
-      "core": {
-        "source_sha": "4dcd584f995c261b189774ea8f416fda40ad97a0",
-        "passed": 31,
-        "total": 31,
-        "elapsed_seconds": 211.91,
+      "native": {
+        "state": "passed",
+        "source_sha": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+        "remote_source_sha": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
+        "source_tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+        "passed": 6,
+        "total": 6,
+        "elapsed_seconds": 61.44,
+        "compiler": "Clang 19.1.7",
+        "build_type": "Custom -O0 -g0 -DNDEBUG",
+        "sanitizers": false,
+        "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+        "cases": [
+          {
+            "name": "plugin_param_consistency",
+            "seconds": 4.60103,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_contract",
+            "seconds": 0.928752,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_live_bridge",
+            "seconds": 5.84193,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_panels",
+            "seconds": 10.9412,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_shell",
+            "seconds": 27.3626,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_workbench",
+            "seconds": 11.7411,
+            "result": "passed"
+          }
+        ],
+        "scope": "Six native processor/editor console applications; backend session and real-editor GIF regressions execute inside live_bridge and shell respectively.",
+        "log": "docs/evidence/gif-native-2026-11-20-r24.log",
+        "junit": "docs/evidence/gif-native-2026-11-20-r24.xml",
+        "build_note": "All six targets built and linked; final incremental check had no work. An intermediate ambiguous empty JUCE File assignment was repaired with explicit juce::File{}. No test threshold was changed."
+      },
+      "portable_resource_tests": {
+        "source_sha": "eb97e54ec15ac95eec268e4b516ada1713caa70c",
+        "source_tree": "84afb9ab41cd2566d1b1befa78e05a314cc7aac1",
+        "result": "passed",
+        "passed": 3,
+        "total": 3,
+        "elapsed_seconds": 6.03,
         "compiler": "GCC 14.2",
-        "optimization": "O1 production/most tests; O0 state_safety test TU",
+        "optimization": "O1 production and most tests; state_safety test translation unit O0 after previously recorded resource limit",
         "sanitizers": [
           "AddressSanitizer",
           "UndefinedBehaviorSanitizer",
           "float-cast-overflow"
         ],
-        "leak_detection": "disabled under tracer"
-      },
-      "native": {
-        "source_sha": "8ff0adfea571e977adec128622209f63bf997d1d",
-        "status": "passed",
-        "target_count": 6,
-        "compiler": "Clang 19.1.7",
-        "build_type": "Custom O0",
-        "sanitizers": false,
-        "passed": 6,
-        "total": 6,
-        "elapsed_seconds": 54.2,
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "UBSAN_OPTIONS": "halt_on_error=1"
+        },
         "cases": [
           {
-            "name": "plugin_param_consistency",
-            "seconds": 5.35132,
+            "name": "state_safety",
+            "seconds": 2.95899,
             "result": "passed"
           },
           {
-            "name": "ui_snap_contract",
-            "seconds": 1.30995,
+            "name": "state_preset",
+            "seconds": 2.51705,
             "result": "passed"
           },
           {
-            "name": "ui_snap_live_bridge",
-            "seconds": 2.22203,
-            "result": "passed"
-          },
-          {
-            "name": "ui_snap_panels",
-            "seconds": 12.2913,
-            "result": "passed"
-          },
-          {
-            "name": "ui_snap_shell",
-            "seconds": 20.7302,
-            "result": "passed"
-          },
-          {
-            "name": "ui_snap_workbench",
-            "seconds": 12.2761,
+            "name": "cd_media_tests",
+            "seconds": 0.540289,
             "result": "passed"
           }
-        ]
+        ],
+        "source_equivalence": "All portable production inputs remain byte-identical from eb97e54 through b84d2ba. The later aedef7b change strengthens only the shared test decoder and media regression suite; it has its own passing run below. Native tests consume the stronger decoder.",
+        "log": "docs/evidence/gif-resources-2026-11-20-r20.log",
+        "junit": "docs/evidence/gif-resources-2026-11-20-r20.xml"
       },
-      "source_equivalence": "Later change from 4dcd584 to 8ff0adf is confined to the native preset regression header; all portable source/build inputs are unchanged.",
-      "evidence": "docs/evidence/continuation-round17-18-2026-11-20.json",
-      "new_exact_head_ci": "Required on containing publication; read live run."
+      "strict_eoi_regression": {
+        "worker_sha": "3fd810ced8fd33ea68262e2aec66a15955c91a8a",
+        "integrated_source_sha": "aedef7b69029132716ef5ae11e588263e1fb9f44",
+        "source_tree": "1144ea0ba2990ac00a9c231f3fdae57d248dfab9",
+        "result": "passed",
+        "passed": 1,
+        "total": 1,
+        "elapsed_seconds": 0.57,
+        "compiler": "GCC 14.2",
+        "optimization": "O1",
+        "sanitizers": [
+          "AddressSanitizer",
+          "UndefinedBehaviorSanitizer",
+          "float-cast-overflow"
+        ],
+        "leak_detection": "disabled under tracer",
+        "cases": [
+          {
+            "name": "cd_media_tests",
+            "seconds": 0.565034,
+            "result": "passed"
+          }
+        ],
+        "scope": "Eleven hand-packed valid and eleven invalid LZW fixtures, full-envelope propagation, and real encoder final-code/EOI width boundaries, plus all existing media tests. No production encoder change.",
+        "log": "docs/evidence/gif-decoder-2026-11-20-r22.log",
+        "junit": "docs/evidence/gif-decoder-2026-11-20-r22.xml"
+      },
+      "independent_decode": {
+        "source_sha": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+        "decoder": "Pillow 13.0.0",
+        "python": "3.12.14",
+        "result": "passed",
+        "files": 4,
+        "fully_decoded_frames": 63,
+        "evidence": "docs/evidence/gif-independent-2026-11-20-r24.json",
+        "scope": "Freshly generated real-editor GIF outputs; independent decoder compatibility, timing, dimensions, loop metadata, full decoded pixels and provenance. Not a formal GIF conformance proof."
+      },
+      "evidence": "docs/evidence/gif-integration-2026-11-20-r20.json",
+      "prior_full_core": "Previous checkpoint retains 31/31 baseline; not a new GIF full-core run."
     },
     "publication": {
       "pr": 16,
       "branch": "codex/cdfx-consolidation-20261119",
-      "observed_parallel_head": "02a7331cc687e710f3a3c7c0ab023e651601685e",
       "guard": "Fresh live head; expected_sha; force=false; preserve concurrent advancement.",
-      "commit_map": "docs/evidence/commit-map-continuation-r14-2026-11-20.json",
-      "source_objects": "Complete local/remote tree equality verified for every mapped source commit."
+      "commit_map": "docs/evidence/commit-map-gif-2026-11-20.json",
+      "source_objects": "Full local/remote tree equality verified for mapped source commits."
     },
     "record": "docs/engineering/CONSOLIDATION_HANDOFF.md"
   },
@@ -361,15 +420,19 @@
     {
       "path": "docs/audits/BLUEPRINT_VALIDATION_FRESHNESS_2026-11-20.md",
       "scope": "Five-failure baseline and passing native regression for post-delivery validation input changes."
+    },
+    {
+      "path": "docs/audits/GIF_INTEGRATION_2026-11-20.md",
+      "scope": "Fresh rounds 19\u201324; source-only reviews distinguished from scoped sanitizer/native execution and independent 63-frame decoding."
     }
   ],
   "remaining_work": [
     "Exact-head Linux/Windows/pluginval CI for the new containing publication",
-    "Resume and reconcile existing GIF branch ecae510b observed; do not start duplicate capture implementation",
+    "R25: dependency integrity before configuration, build-local FetchContent subbuild state, source-only CI cache/fresh release acquisition, shared synchronous pluginval gate",
     "Full dynamic runtime/control/engine/seed checkpoint capture, compatibility, migration and stopped-audio restore handoff",
     "Coordinated dynamic A/B state transfer and host-automation boundaries",
     "Sound-preset Load/Save and blueprint graph Apply with runtime installation/crossfade/retirement/undo ownership",
-    "Fault insertion/restoration, real silent GIF and MP4 capture, and community/provider services",
+    "Fault insertion/restoration, full G11 qualification, MP4/audio-sync capture, and community/provider services",
     "Older PR 9/10/14 analysis, edition, snapshot, RT-trap and runtime semantic reconciliation",
     "Real-host, detector-corpus, reset/CPU and sustained performance budgets, physical calibration",
     "Before enabling Apply, include captured Fs/OS/session identity in delayed confirmation/dispatch checks"
@@ -888,6 +951,137 @@
       "observed_head": "ecae510b72c0ef4327bacfb6e4aa35d08eea2748",
       "qualification": "Three source-only R19 reviewers completed; concrete timing, surface, resource and failure-path defects handed to fresh R20 backend/UI/resources workers in isolated worktrees from8ff0adf. GIF is not yet integrated or qualified by this checkpoint.",
       "audit": "docs/audits/GIF_PREINTEGRATION_REVIEW_2026-11-20_R19.md"
+    }
+  },
+  "previous_checkpoint_before_gif_r19": {
+    "date": "2026-11-20",
+    "branch": "codex/cdfx-consolidation-20261119",
+    "local_branch": "codex/cdfx-integration-20261120-round14",
+    "source_head": "65b3a259c5dc657e59adea3a2df8a2efbb82e155",
+    "local_source_head": "8ff0adfea571e977adec128622209f63bf997d1d",
+    "source_tree": "476353329e03b5b9657af170cf735ac9ddc00163",
+    "production_review_pin": "4dcd584f995c261b189774ea8f416fda40ad97a0",
+    "source_head_difference": "The containing publication adds evidence and handoff documentation. Read the live PR16 head for its exact publication SHA.",
+    "stage": "local_core_and_native_passed_new_exact_head_ci_required",
+    "lineage_merge": {
+      "local_sha": "9630ae03b4be4bc74b1d01d6bbf42b5259d8faec",
+      "local_parent": "c73d6b9b9ebe6b22d03e2b72fd6b9d1b40bc97bb",
+      "parallel_parent": "02a7331cc687e710f3a3c7c0ab023e651601685e",
+      "contract": "Both full histories/evidence retained; unique source contracts reconciled in subsequent commits."
+    },
+    "validation": {
+      "core": {
+        "source_sha": "4dcd584f995c261b189774ea8f416fda40ad97a0",
+        "passed": 31,
+        "total": 31,
+        "elapsed_seconds": 211.91,
+        "compiler": "GCC 14.2",
+        "optimization": "O1 production/most tests; O0 state_safety test TU",
+        "sanitizers": [
+          "AddressSanitizer",
+          "UndefinedBehaviorSanitizer",
+          "float-cast-overflow"
+        ],
+        "leak_detection": "disabled under tracer"
+      },
+      "native": {
+        "source_sha": "8ff0adfea571e977adec128622209f63bf997d1d",
+        "status": "passed",
+        "target_count": 6,
+        "compiler": "Clang 19.1.7",
+        "build_type": "Custom O0",
+        "sanitizers": false,
+        "passed": 6,
+        "total": 6,
+        "elapsed_seconds": 54.2,
+        "cases": [
+          {
+            "name": "plugin_param_consistency",
+            "seconds": 5.35132,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_contract",
+            "seconds": 1.30995,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_live_bridge",
+            "seconds": 2.22203,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_panels",
+            "seconds": 12.2913,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_shell",
+            "seconds": 20.7302,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_workbench",
+            "seconds": 12.2761,
+            "result": "passed"
+          }
+        ]
+      },
+      "source_equivalence": "Later change from 4dcd584 to 8ff0adf is confined to the native preset regression header; all portable source/build inputs are unchanged.",
+      "evidence": "docs/evidence/continuation-round17-18-2026-11-20.json",
+      "new_exact_head_ci": "Required on containing publication; read live run."
+    },
+    "publication": {
+      "pr": 16,
+      "branch": "codex/cdfx-consolidation-20261119",
+      "observed_parallel_head": "02a7331cc687e710f3a3c7c0ab023e651601685e",
+      "guard": "Fresh live head; expected_sha; force=false; preserve concurrent advancement.",
+      "commit_map": "docs/evidence/commit-map-continuation-r14-2026-11-20.json",
+      "source_objects": "Complete local/remote tree equality verified for every mapped source commit."
+    },
+    "record": "docs/engineering/CONSOLIDATION_HANDOFF.md"
+  },
+  "gif_integration_rounds_19_24": {
+    "original_branch": "codex/cdfx-gif-capture-20261120-r14",
+    "original_head": "ecae510b72c0ef4327bacfb6e4aa35d08eea2748",
+    "preserved_by_merge": "5e7057e8be7d554a25cf254a73ddabaf82a57f2c",
+    "latest_tested_source": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+    "audit": "docs/audits/GIF_INTEGRATION_2026-11-20.md",
+    "evidence": "docs/evidence/gif-integration-2026-11-20-r20.json",
+    "rounds": [
+      {
+        "round": 19,
+        "status": "All 3 original-branch source reviews completed; backend/UI/resource defects assigned."
+      },
+      {
+        "round": 20,
+        "status": "All 3 repair workers completed; root integrated and built."
+      },
+      {
+        "round": 21,
+        "status": "All 3 fresh source reviews completed; registry, decoder and repetition warning defects assigned."
+      },
+      {
+        "round": 22,
+        "status": "All 3 workers completed; additional destination rewrite finding fixed and independently reviewed."
+      },
+      {
+        "round": 23,
+        "status": "All 3 fresh source reviews completed without new actionable findings in assigned scopes."
+      },
+      {
+        "round": 24,
+        "status": "All 3 completed: layout review, independent actual GIF decoding, dependency/release audit."
+      }
+    ],
+    "next_set": {
+      "round": 25,
+      "workers": [
+        "release_gate_r25",
+        "dependency_gate_r25",
+        "session_bug_hunt_r25"
+      ],
+      "scope": "Build-gate repairs and read-only G12 bug/feature handoff; no concurrent competing implementations."
     }
   }
 }
