@@ -1,23 +1,30 @@
 # Current traceability — 2026-11-20 UTC
 
-The active consolidation candidate is `codex/cdfx-consolidation-20261119`, based on
-PR #15 with selected unique work from PR #10. Read the current
+The active consolidation candidate is draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16),
+branch `codex/cdfx-consolidation-20261119`. Read the current
 [consolidation handoff](engineering/CONSOLIDATION_HANDOFF.md),
-[source inventory](engineering/consolidation-state.json), and audit records in
-`docs/audits/` before choosing or reporting work.
+[source inventory](engineering/consolidation-state.json), and
+[rounds 14–18 review](audits/CONTINUATION_ROUNDS_14_18_2026-11-20.md).
+Included child PR #17–#25 are closed; their original branches and main are preserved.
 
-The current source has an integrated circuit/control runtime, JUCE adapter,
-configuration/history/queue primitives, media/network/community modules and
-recovered blueprint/lifecycle/fault primitives. The production editor supports
-real APVTS transactions, scoped history, telemetry, prepared-runtime reset and
-host-persisted UI preferences. R14 integrates local preset catalog/import/export/
-delete services and real cancellable Blueprint validation with explicit synthetic
-model/configuration scope. Complete sound-preset transactions, Blueprint Apply,
-dynamic session/seed continuity, remaining services, physical calibration and
-new-source native host qualification remain open. Fake bridges remain test fixtures.
-Read the [R14 validation record](engineering/VALIDATION_2026-11-20_R14.md) for exact
-source and execution evidence. The historical claims below describe older
-integrations and must not be used as current source or test status.
+Current source includes the circuit/control runtime, JUCE adapter, history/queue
+primitives and custom editor with APVTS transactions, telemetry, prepared-runtime
+reset and host-persisted UI preferences. The latest continuation adds bounded
+background preset discovery, stable query identity, import/export/delete,
+cancellable Blueprint validation preview with Example RC and structured
+configuration/diagnostics, complete-envelope state admission, strict checkpoint
+identities, and theme/undo/redo correctness. One portable validation worker and
+one asynchronous catalog service own their respective work.
+
+The [merged execution record](evidence/continuation-round17-18-2026-11-20.json)
+reports 31/31 sanitized core and 6/6 offscreen native applications. It pins the
+source and limitations; the containing publication needs its own exact-head CI.
+The separate [GIF preintegration review](audits/GIF_PREINTEGRATION_REVIEW_2026-11-20_R19.md)
+has handed concrete defects to fresh backend/UI/resource workers. GIF is not yet
+integrated or qualified by this checkpoint. Complete sound-preset transactions,
+Blueprint Apply, dynamic session/seed continuity, remaining services, physical
+calibration and real-host/performance qualification remain open. Historical
+claims below retain older provenance and do not describe current test status.
 
 ## Historical traceability retained for provenance
 

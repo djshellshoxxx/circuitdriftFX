@@ -1,0 +1,67 @@
+Test project /workspace/scratch/7a10b82b2964/cdfx-integration-core-r14
+      Start  1: acceptance_core
+ 1/31 Test  #1: acceptance_core ..................   Passed    2.41 sec
+      Start  2: state_safety
+ 2/31 Test  #2: state_safety .....................   Passed    2.31 sec
+      Start  3: oversampling_safety
+ 3/31 Test  #3: oversampling_safety ..............   Passed    0.08 sec
+      Start  4: solver_safety
+ 4/31 Test  #4: solver_safety ....................   Passed    0.01 sec
+      Start  5: primitive_safety
+ 5/31 Test  #5: primitive_safety .................   Passed    0.03 sec
+      Start  6: ui_numeric_input
+ 6/31 Test  #6: ui_numeric_input .................   Passed    0.01 sec
+      Start  7: registry_codegen_fresh
+ 7/31 Test  #7: registry_codegen_fresh ...........   Passed    0.03 sec
+      Start  8: docs_validation_only
+ 8/31 Test  #8: docs_validation_only .............   Passed    0.10 sec
+      Start  9: engine_devices
+ 9/31 Test  #9: engine_devices ...................   Passed    0.05 sec
+      Start 10: engine_runtime
+10/31 Test #10: engine_runtime ...................   Passed   54.28 sec
+      Start 11: engine_checkpoint
+11/31 Test #11: engine_checkpoint ................   Passed    0.83 sec
+      Start 12: engine_t21
+12/31 Test #12: engine_t21 .......................   Passed   56.09 sec
+      Start 13: engine_stress
+13/31 Test #13: engine_stress ....................   Passed   66.82 sec
+      Start 14: control_macros
+14/31 Test #14: control_macros ...................   Passed    0.17 sec
+      Start 15: control_key
+15/31 Test #15: control_key ......................   Passed    0.05 sec
+      Start 16: control_pitch
+16/31 Test #16: control_pitch ....................   Passed    4.45 sec
+      Start 17: control_tempo
+17/31 Test #17: control_tempo ....................   Passed    0.02 sec
+      Start 18: control_harmonic
+18/31 Test #18: control_harmonic .................   Passed    0.76 sec
+      Start 19: control_dynamics
+19/31 Test #19: control_dynamics .................   Passed    0.11 sec
+      Start 20: control_safety
+20/31 Test #20: control_safety ...................   Passed    0.18 sec
+      Start 21: state_queue
+21/31 Test #21: state_queue ......................   Passed    0.23 sec
+      Start 22: state_history
+22/31 Test #22: state_history ....................   Passed    0.17 sec
+      Start 23: state_preset
+23/31 Test #23: state_preset .....................   Passed    1.54 sec
+      Start 24: blueprint_compile
+24/31 Test #24: blueprint_compile ................   Passed    1.91 sec
+      Start 25: blueprint_timeline
+25/31 Test #25: blueprint_timeline ...............   Passed    0.01 sec
+      Start 26: blueprint_faults
+26/31 Test #26: blueprint_faults .................   Passed   10.26 sec
+      Start 27: blueprint_validation_worker
+27/31 Test #27: blueprint_validation_worker ......   Passed    0.30 sec
+      Start 28: cd_media_tests
+28/31 Test #28: cd_media_tests ...................   Passed    0.46 sec
+      Start 29: cd_network_tests
+29/31 Test #29: cd_network_tests .................   Passed    1.76 sec
+      Start 30: cd_community_tests
+30/31 Test #30: cd_community_tests ...............   Passed    0.06 sec
+      Start 31: runtime_processor
+31/31 Test #31: runtime_processor ................   Passed    6.40 sec
+
+100% tests passed out of 31
+
+Total Test time (real) = 211.91 sec

@@ -1,0 +1,194 @@
+{
+  "source_sha": "1bfc6f89c8849cf3d998ca01fa31016eb8f7de14",
+  "core": {
+    "compiler": "GCC14.2",
+    "optimization": "O1 production; O0 test_state_safety translation unit after resource kill",
+    "sanitizers": [
+      "address",
+      "undefined",
+      "float-cast-overflow"
+    ],
+    "leak_detection": "disabled under tracer",
+    "elapsed_seconds": 333.79,
+    "tests": 31,
+    "failures": 0,
+    "cases": [
+      {
+        "name": "acceptance_core",
+        "seconds": 2.524,
+        "result": "passed"
+      },
+      {
+        "name": "state_safety",
+        "seconds": 1.72755,
+        "result": "passed"
+      },
+      {
+        "name": "oversampling_safety",
+        "seconds": 0.0795979,
+        "result": "passed"
+      },
+      {
+        "name": "solver_safety",
+        "seconds": 0.0143954,
+        "result": "passed"
+      },
+      {
+        "name": "primitive_safety",
+        "seconds": 0.0271416,
+        "result": "passed"
+      },
+      {
+        "name": "ui_numeric_input",
+        "seconds": 0.00812313,
+        "result": "passed"
+      },
+      {
+        "name": "registry_codegen_fresh",
+        "seconds": 0.02656,
+        "result": "passed"
+      },
+      {
+        "name": "docs_validation_only",
+        "seconds": 0.0660937,
+        "result": "passed"
+      },
+      {
+        "name": "engine_devices",
+        "seconds": 0.0316796,
+        "result": "passed"
+      },
+      {
+        "name": "engine_runtime",
+        "seconds": 68.2208,
+        "result": "passed"
+      },
+      {
+        "name": "engine_checkpoint",
+        "seconds": 0.897772,
+        "result": "passed"
+      },
+      {
+        "name": "engine_t21",
+        "seconds": 104.46,
+        "result": "passed"
+      },
+      {
+        "name": "engine_stress",
+        "seconds": 99.0635,
+        "result": "passed"
+      },
+      {
+        "name": "control_macros",
+        "seconds": 0.24948,
+        "result": "passed"
+      },
+      {
+        "name": "control_key",
+        "seconds": 0.0741413,
+        "result": "passed"
+      },
+      {
+        "name": "control_pitch",
+        "seconds": 6.29387,
+        "result": "passed"
+      },
+      {
+        "name": "control_tempo",
+        "seconds": 0.0370385,
+        "result": "passed"
+      },
+      {
+        "name": "control_harmonic",
+        "seconds": 1.21254,
+        "result": "passed"
+      },
+      {
+        "name": "control_dynamics",
+        "seconds": 0.20876,
+        "result": "passed"
+      },
+      {
+        "name": "control_safety",
+        "seconds": 0.289247,
+        "result": "passed"
+      },
+      {
+        "name": "state_queue",
+        "seconds": 0.347254,
+        "result": "passed"
+      },
+      {
+        "name": "state_history",
+        "seconds": 0.0107054,
+        "result": "passed"
+      },
+      {
+        "name": "state_preset",
+        "seconds": 3.9714,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_compile",
+        "seconds": 3.50291,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_timeline",
+        "seconds": 0.0333982,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_faults",
+        "seconds": 20.9221,
+        "result": "passed"
+      },
+      {
+        "name": "blueprint_validation_worker",
+        "seconds": 0.166882,
+        "result": "passed"
+      },
+      {
+        "name": "cd_media_tests",
+        "seconds": 1.1239,
+        "result": "passed"
+      },
+      {
+        "name": "cd_network_tests",
+        "seconds": 3.88429,
+        "result": "passed"
+      },
+      {
+        "name": "cd_community_tests",
+        "seconds": 0.0597609,
+        "result": "passed"
+      },
+      {
+        "name": "runtime_processor",
+        "seconds": 14.206,
+        "result": "passed"
+      }
+    ]
+  },
+  "native": {
+    "compiler": "Clang19.1.7",
+    "optimization": "O0",
+    "configuration": "Custom",
+    "elapsed_seconds": 20.11,
+    "qualification": "Native offscreen console tests; not a DAW or performance qualification",
+    "tests": 2,
+    "failures": 0,
+    "cases": [
+      {
+        "name": "ui_snap_live_bridge",
+        "seconds": 1.95523,
+        "result": "passed"
+      },
+      {
+        "name": "ui_snap_panels",
+        "seconds": 18.1264,
+        "result": "passed"
+      }
+    ]
+  }
+}
