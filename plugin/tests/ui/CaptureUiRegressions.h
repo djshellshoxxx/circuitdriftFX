@@ -257,7 +257,8 @@ inline int run(const juce::File& outputDirectory) {
         const bool registryClear = sh::EditorCore::find(&host) == nullptr;
         check(registryClear, "failed editor construction leaves its persistent host unregistered");
         // Do not resolve or dereference a registry entry if failed construction left one behind.
-        if (registryClear) {
+        if (!registryClear) return failures;
+        {
             sh::EditorCore healthyCore(host, *bridge, constrainer);
             const bool registered = sh::EditorCore::find(&host) == &healthyCore;
             check(registered, "healthy construction on the same host registers the new editor core");
