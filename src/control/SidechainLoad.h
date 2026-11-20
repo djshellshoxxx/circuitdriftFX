@@ -25,6 +25,11 @@ enum class SidechainSource : int { Main = 0, External = 1, Blend = 2 };
 class SidechainLoad {
 public:
     static constexpr double kRefRms = 0.12589254117941673;  // 10^(-18/20)
+    struct State {
+        double sampleRate = 0, hpfHz = 40.0;
+        double z1[2] = {0, 0}, z2[2] = {0, 0};
+        double meanSquare = 0, envelope = 0, budgetAmps = 0, lastRatio = 0;
+    };
     // Match the control API: unsupported/nonfinite rates use 48000 Hz (8000..768000 supported).
     // Preparation establishes the default 40 Hz coefficients immediately and clears signal history.
     void prepare(double sampleRate) noexcept;
@@ -42,6 +47,9 @@ public:
     bool process(SidechainSource source, double depth, double hpfHz, const double* extL, const double* extR,
                  bool connected, int frames, double* out) noexcept;
     double lastEnergyRatio() const noexcept { return lastRatio_; }  // E_ext/E_ref (unclamped)
+    State save() const noexcept;
+    bool canRestore(const State& state) const noexcept;
+    bool restore(const State& state) noexcept;  // rederive HPF coefficients at the matched rate
 
 private:
     void design(double hz) noexcept;
@@ -50,6 +58,7 @@ private:
         double run(double x, const double* c) noexcept;
     };
     double fs_ = 48000.0, hpfHz_ = -1, c_[5] = {1, 0, 0, 0, 0};
+    bool prepared_ = false;
     Biquad hp_[2];
     double ms_ = 0, env_ = 0, aMs_ = 0, aAtk_ = 0, aRel_ = 0, budget_ = 0, lastRatio_ = 0;
 };

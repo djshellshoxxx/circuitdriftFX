@@ -14,12 +14,21 @@ namespace cd::control {
 
 class TransientDetector {
 public:
+    struct State {
+        double sampleRate = 0;
+        double fast = 0, slow = 0, held = 0;
+        int holdCount = 0;
+    };
     void prepare(double sampleRate) noexcept;
     void reset() noexcept;
+    State save() const noexcept { return {fs_, fast_, slow_, held_, holdCount_}; }
+    bool canRestore(const State& state) const noexcept;
+    bool restore(const State& state) noexcept;  // rejection changes nothing
     // R may be null (mono). Writes `frames` samples of P into out.
     void process(const double* L, const double* R, int frames, double amount, double* out) noexcept;
 
 private:
+    double fs_ = 0;  // zero identifies an unprepared coefficient set
     double aFastA_ = 0, aFastR_ = 0, aSlowA_ = 0, aSlowR_ = 0, aHoldRel_ = 0;
     int holdSamples_ = 0;
     double fast_ = 0, slow_ = 0, held_ = 0;

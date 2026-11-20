@@ -1,6 +1,7 @@
 #include "control/TempoBreathing.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace cd::control {
@@ -42,6 +43,40 @@ void TempoBreathing::reset() noexcept {
     phi_ = phaseErr_ = tauSm_ = lastPpqEnd_ = lastQ_ = 0;
     wasEnabled_ = havePpq_ = false;
     out_ = TempoOutput{};
+}
+
+TempoBreathing::State TempoBreathing::save() const noexcept {
+    return {fs_, phi_, phaseErr_, tauSm_, wasEnabled_, havePpq_, lastPpqEnd_, lastQ_, out_};
+}
+
+bool TempoBreathing::canRestore(const State& s) const noexcept {
+    // Positive int time signatures span these cycle limits, including modifiers.
+    // Historical PPQ and cached output differ after disabled/zero-frame calls.
+    const double minQ = (4.0 / std::numeric_limits<int>::max()) * (2.0 / 3.0);
+    const double maxQ = 6.0 * std::numeric_limits<int>::max();
+    const double maxTau = recoveryTau(maxQ, 20.0) * (1.0 + 32 * std::numeric_limits<double>::epsilon());
+    const auto in = [](double v, double lo, double hi) noexcept {
+        return std::isfinite(v) && v >= lo && v <= hi;
+    };
+    // frac() can round a tiny negative phase to exactly 1; preserve that valid
+    // representation instead of rejecting the controller's own captured state.
+    return std::isfinite(fs_) && fs_ > 0 && s.sampleRate == fs_ &&
+        in(s.phase, 0, 1) && in(s.phaseError, -0.5, 0.5) &&
+        in(s.recoveryTau, 0, maxTau) && std::isfinite(s.lastPpqEnd) &&
+        (s.lastBeatsPerCycle == 0 || in(s.lastBeatsPerCycle, minQ, maxQ)) &&
+        in(s.output.recoveryTauS, 0, maxTau) &&
+        in(s.output.cutoffOct, -kMaxCutoffOct, kMaxCutoffOct) &&
+        in(s.output.bpmUsed, 20, 300) && in(s.output.phase, 0, 1) &&
+        in(s.output.beatsPerCycle, minQ, maxQ) &&
+        (!s.wasEnabled || s.lastBeatsPerCycle > 0);
+}
+
+bool TempoBreathing::restore(const State& s) noexcept {
+    if (!canRestore(s)) return false;
+    phi_ = s.phase; phaseErr_ = s.phaseError; tauSm_ = s.recoveryTau;
+    wasEnabled_ = s.wasEnabled; havePpq_ = s.havePpq;
+    lastPpqEnd_ = s.lastPpqEnd; lastQ_ = s.lastBeatsPerCycle; out_ = s.output;
+    return true;
 }
 
 TempoOutput TempoBreathing::process(const TempoInput& in, int frames) noexcept {

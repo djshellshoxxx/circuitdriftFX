@@ -46,10 +46,12 @@ public:
         for (int j = 0; j < 3; ++j) s.rng[j] = rng_[j].state();
         return s;
     }
+    bool canRestore(const State& s) const noexcept;  // pure fixed-work admission
     void restore(const State& s) noexcept;  // incompatible/invalid snapshots leave the current state intact
     uint64_t ticks() const noexcept { return st_.ticks; }
 
 private:
+    bool validateState(const State& s, uint64_t& phase) const noexcept;
     void tick() noexcept;
     uint64_t clockPosition(uint64_t samples, uint64_t& phase) const noexcept;
     // Reduced exact ratio 100/fs = clockStep_/clockPeriod_. Each term is below 2^53.

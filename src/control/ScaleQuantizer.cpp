@@ -96,4 +96,39 @@ double ResonanceQuantizer::update(double p, double dt) noexcept {
     return current_;
 }
 
+ResonanceQuantizer::State ResonanceQuantizer::save() const noexcept {
+    return {mask_, root_, haveNote_, haveOutput_, note_, glideNote_, current_, start_, glideRemaining_};
+}
+
+bool ResonanceQuantizer::canRestore(const State& s) const noexcept {
+    constexpr int low = std::numeric_limits<int>::min() + 2;
+    constexpr int high = std::numeric_limits<int>::max() - 2;
+    const auto pitch = [](double v) noexcept {
+        return std::isfinite(v) && v >= low && v <= high;
+    };
+    if (!s.mask || (s.mask & ~scale::kChromatic) != 0 || s.root < 0 || s.root > 11 ||
+        s.note < low || s.note > high || s.glideNote < low || s.glideNote > high ||
+        !pitch(s.current) || !pitch(s.start) || !std::isfinite(s.glideRemaining) ||
+        s.glideRemaining < 0 || s.glideRemaining > kGlideS ||
+        (!s.haveOutput && s.glideRemaining != 0) ||
+        (s.haveNote && !scale::isAllowed(s.mask, s.root, s.note))) return false;
+    if (s.haveOutput) {
+        const double expected = s.glideRemaining > 0
+            ? s.start + (double(s.glideNote) - s.start) * (1.0 - s.glideRemaining / kGlideS)
+            : double(s.glideNote);
+        const double tolerance = 16 * std::numeric_limits<double>::epsilon() *
+                                 std::max({1.0, std::fabs(s.current), std::fabs(expected)});
+        if (std::fabs(s.current - expected) > tolerance) return false;
+    }
+    return true;
+}
+
+bool ResonanceQuantizer::restore(const State& s) noexcept {
+    if (!canRestore(s)) return false;
+    mask_ = s.mask; root_ = s.root; haveNote_ = s.haveNote; haveOutput_ = s.haveOutput;
+    note_ = s.note; glideNote_ = s.glideNote;
+    current_ = s.current; start_ = s.start; glideRemaining_ = s.glideRemaining;
+    return true;
+}
+
 }  // namespace cd::control

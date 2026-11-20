@@ -9,6 +9,7 @@ double coeff(double fs, double tauS) noexcept { return std::exp(-1.0 / (fs * tau
 
 void TransientDetector::prepare(double fs) noexcept {
     if (!(fs > 0)) fs = 48000.0;
+    fs_ = fs;
     aFastA_ = coeff(fs, 0.0002);
     aFastR_ = coeff(fs, 0.010);
     aSlowA_ = coeff(fs, 0.020);
@@ -21,6 +22,19 @@ void TransientDetector::prepare(double fs) noexcept {
 void TransientDetector::reset() noexcept {
     fast_ = slow_ = held_ = 0;
     holdCount_ = 0;
+}
+
+bool TransientDetector::canRestore(const State& s) const noexcept {
+    return std::isfinite(fs_) && fs_ > 0 && s.sampleRate == fs_ &&
+        std::isfinite(s.fast) && s.fast >= 0 && std::isfinite(s.slow) && s.slow >= 0 &&
+        std::isfinite(s.held) && s.held >= 0 && s.held <= 1 &&
+        s.holdCount >= 0 && s.holdCount <= holdSamples_;
+}
+
+bool TransientDetector::restore(const State& s) noexcept {
+    if (!canRestore(s)) return false;
+    fast_ = s.fast; slow_ = s.slow; held_ = s.held; holdCount_ = s.holdCount;
+    return true;
 }
 
 void TransientDetector::process(const double* L, const double* R, int frames, double amount, double* out) noexcept {

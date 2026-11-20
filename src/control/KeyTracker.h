@@ -8,6 +8,7 @@
 //
 // Threading: noexcept, no allocation (fixed note table), single owner thread (audio).
 #pragma once
+#include <array>
 #include <cstdint>
 #include <span>
 #include "control/ControlTypes.h"
@@ -18,6 +19,17 @@ class KeyTracker {
 public:
     static constexpr double kHoldS = 0.5;
     static constexpr double kReturnS = 0.1;
+
+    static constexpr int kMaxNotes = 32;
+    struct NoteState { uint8_t note = 0; bool held = false, sustained = false; };
+    struct State {
+        double sampleRate = 48000.0;
+        std::array<NoteState, kMaxNotes> notes{};
+        int count = 0;
+        bool pedal = false;
+        KeyState state = KeyState::ManualReference;
+        double notePitch = 69.0, weight = 0.0, holdLeft = 0.0, returnLeft = 0.0;
+    };
 
     void prepare(double sampleRate) noexcept;
     void reset() noexcept;
@@ -35,10 +47,13 @@ public:
     KeyState state() const noexcept { return state_; }
     bool pedalDown() const noexcept { return pedal_; }
     int heldCount() const noexcept { return count_; }
+    State save() const noexcept;
+    bool canRestore(const State& state) const noexcept;
+    bool restore(const State& state) noexcept;  // rejection changes nothing
 
 private:
-    struct Slot { uint8_t note; bool held; bool sustained; };
-    static constexpr int kMax = 32;
+    using Slot = NoteState;
+    static constexpr int kMax = kMaxNotes;
     void handle(const MidiEvent& e) noexcept;
     void removeAt(int i) noexcept;
     void touch(uint8_t note) noexcept;     // note-on: move/add to the end (most recent)
