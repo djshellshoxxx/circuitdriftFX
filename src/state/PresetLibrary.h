@@ -17,6 +17,7 @@ namespace cd::state {
 
 inline constexpr std::size_t kMaxStemBytes = 80;
 inline constexpr std::size_t kMaxListedPresets = 5000;
+inline constexpr std::size_t kMaxCatalogReadBytes = 32 * 1024 * 1024;
 inline constexpr std::string_view kPresetExtension = ".circuitdrift.json";
 
 // Accepts ASCII letters, digits, space, '-', '_', '.', '(' and ')'; 1..kMaxStemBytes bytes; no leading
@@ -34,6 +35,19 @@ struct PresetInfo {
     std::string error;
 };
 
+struct PresetScanLimits {
+    std::size_t entries = kMaxListedPresets;
+    std::size_t bytes = kMaxCatalogReadBytes;
+};
+struct PresetCatalog {
+    std::vector<PresetInfo> entries;
+    std::size_t visited = 0, bytesRead = 0;
+    bool truncated = false;
+};
+// Filtering a catalog does no filesystem I/O. Factory order and user id order
+// are preserved. Reuse a snapshot while typing rather than rescanning the disk.
+std::vector<PresetInfo> filterPresets(const PresetCatalog&, std::string_view query);
+
 class PresetLibrary {
 public:
     explicit PresetLibrary(std::filesystem::path userDirectory) : dir_(std::move(userDirectory)) {}
@@ -42,6 +56,9 @@ public:
     // Factory first (compiled order) then user presets sorted by id. `query` filters by
     // case-insensitive substring over id, title, author and tags (empty = all).
     std::vector<PresetInfo> list(std::string_view query = {}) const;
+    // Work is bounded independently of search matches. Limits can be reduced
+    // by callers, never raised above the library's hard entry/byte budgets.
+    PresetCatalog scan(PresetScanLimits limits = {}) const;
     bool load(const std::string& id, ScenePreset& out, std::string& error) const;
     // Saves under `name` (must pass sanitizeStem). Fails if it exists and !overwrite. Atomic.
     bool save(std::string_view name, const ScenePreset& preset, bool overwrite, std::string& savedId, std::string& error) const;

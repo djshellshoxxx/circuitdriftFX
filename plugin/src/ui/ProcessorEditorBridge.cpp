@@ -253,9 +253,10 @@ void ProcessorEditorBridge::swapSlots() {
 }
 
 std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& query) {
-    // Local, bounded directory scan on the message thread; no audio ownership.
+    // Reuse one bounded snapshot while typing; refresh/import/delete invalidate it.
     std::vector<PresetEntry> entries;
-    for (const auto& preset : presetLibrary_.list(query.toStdString())) {
+    if (!presetCatalog_) presetCatalog_ = presetLibrary_.scan();
+    for (const auto& preset : state::filterPresets(*presetCatalog_, query.toStdString())) {
         PresetEntry entry;
         entry.id = displayUtf8(preset.id);
         entry.name = displayUtf8(preset.title);
@@ -267,6 +268,11 @@ std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& 
     }
     return entries;
 }
+juce::String ProcessorEditorBridge::presetCatalogNotice() const {
+    return presetCatalog_ && presetCatalog_->truncated
+        ? "Catalog limit reached. Some files were not scanned; reduce this folder and refresh."
+        : juce::String();
+}
 // Applying or capturing a sound requires atomic slot seed/blueprint transactions.
 // Do not pretend that APVTS-only changes have loaded or saved a complete scene.
 bool ProcessorEditorBridge::loadPreset(const juce::String&, int, juce::String& error) { return unavailable(error); }
@@ -274,6 +280,7 @@ bool ProcessorEditorBridge::savePreset(const juce::String&, juce::String& error)
 bool ProcessorEditorBridge::deletePreset(const juce::String& id, juce::String& error) {
     std::string why;
     if (!presetLibrary_.remove(id.toStdString(), why)) { error = displayUtf8(why); return false; }
+    presetCatalog_.reset();
     error.clear();
     return true;
 }
@@ -284,6 +291,7 @@ bool ProcessorEditorBridge::importPreset(const juce::File& file, juce::String& e
         error = displayUtf8(why);
         return false;
     }
+    presetCatalog_.reset();
     error.clear();
     return true;
 }
@@ -302,12 +310,43 @@ std::vector<FaultInfo> ProcessorEditorBridge::faults(int) { return {}; }
 bool ProcessorEditorBridge::applyFault(int, const FaultInfo&, juce::String& error) { return unavailable(error); }
 void ProcessorEditorBridge::clearFaults(int) {} // No fault state installed.
 juce::String ProcessorEditorBridge::blueprintJson(int) { return {}; }
-void ProcessorEditorBridge::requestBlueprintValidation(const juce::String&) { blueprintReportPending_ = true; }
+void ProcessorEditorBridge::requestBlueprintValidation(const juce::String& json) {
+    const auto current = status();
+    blueprintStateEpoch_ = processor_.editorStateEpoch();
+    // Check UTF-8 length before copying the editor document into the worker.
+    const auto bytes = json.getNumBytesAsUTF8();
+    const auto size = std::min(bytes, blueprint::kMaxBytes + 1);
+    blueprintValidator_.request(std::string_view(json.toRawUTF8(), size),
+                                {current.sampleRate, current.activeOversampling, 1.0});
+}
 bool ProcessorEditorBridge::blueprintReport(BlueprintReport& out) {
-    if (!blueprintReportPending_) return false;
-    blueprintReportPending_ = false;
+    blueprint::ValidationReport report;
+    if (!blueprintValidator_.poll(report)) return false;
     out = {};
-    out.diagnostics.add("Live blueprint compiler service is not connected (G11)");
+    out.ok = report.ok;
+    out.components = report.cost.components;
+    out.nodes = report.cost.nodes;
+    out.nonlinear = report.cost.nonlinear;
+    out.unknowns = report.cost.unknowns;
+    out.estimatedFlopsPerSample = report.cost.estimatedFlopsPerSample;
+    out.configuration = juce::String(report.config.sampleRate, 0) + " Hz / " +
+        juce::String(report.config.oversampling) + "x; synthetic fixture-v1 models only";
+    for (const auto& diagnostic : report.diagnostics.items) {
+        juce::String where = displayUtf8(diagnostic.component);
+        if (!diagnostic.pin.empty()) where += (where.isEmpty() ? "" : ".") + displayUtf8(diagnostic.pin);
+        if (where.isNotEmpty()) where += ": ";
+        out.diagnostics.add(where + displayUtf8(diagnostic.message));
+    }
+    if (report.diagnostics.truncated) out.diagnostics.add("Further diagnostics were omitted.");
+    const auto current = status();
+    if (report.ok && (report.config.sampleRate != current.sampleRate ||
+                      report.config.oversampling != current.activeOversampling ||
+                      blueprintStateEpoch_ != processor_.editorStateEpoch())) {
+        out.ok = false;
+        out.diagnostics.add("The audio configuration or session changed. Validate again.");
+    }
+    if (report.diagnostics.has(blueprint::DiagCode::BadConfig))
+        out.diagnostics.add("Start audio processing before validating for the active configuration.");
     return true;
 }
 bool ProcessorEditorBridge::applyBlueprint(int, const juce::String&, juce::String& error) { return unavailable(error); }

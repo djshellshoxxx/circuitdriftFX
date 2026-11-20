@@ -242,7 +242,8 @@ bool checkConnectivity(const Blueprint& bp, const std::map<std::string, int>& no
 
 struct ProbeResult { bool ok = false; double peak = 0; int maxNewton = 0; std::string why; };
 
-ProbeResult runProbe(const dsp::MnaSolver& proto, int inputElement, int outputNode, double rate, double fullScale, int kind) {
+ProbeResult runProbe(const dsp::MnaSolver& proto, int inputElement, int outputNode, double rate, double fullScale, int kind,
+                     std::stop_token cancellation) {
     dsp::MnaSolver s = proto;
     ProbeResult pr;
     const long n = long(std::llround(kProbeSeconds * rate));
@@ -251,6 +252,7 @@ ProbeResult runProbe(const dsp::MnaSolver& proto, int inputElement, int outputNo
     double phase = 0;
     const double dphi = 2.0 * kPi * 1000.0 / rate;
     for (long i = 0; i < n; ++i) {
+        if (cancellation.stop_requested()) { pr.why = "validation cancelled"; return pr; }
         double x = 0;
         if (kind == 1) { x = amp * std::sin(phase); phase += dphi; if (phase > 2 * kPi) phase -= 2 * kPi; }
         else if (kind == 2 && i < pulse) x = amp * std::sin(kPi * double(i) / double(pulse));
@@ -290,10 +292,15 @@ bool PreparedGraph::makeSolver(dsp::MnaSolver& out, std::string& error) const {
     return out.prepare(netlist, 1.0 / (config.sampleRate * config.oversampling), {}, error);
 }
 
-CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const RuntimeConfig& cfg, Generation generation) {
+CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const RuntimeConfig& cfg, Generation generation,
+                      std::stop_token cancellation) {
     CompileResult res;
     CostReport& cost = res.cost;
     Diagnostics& d = res.diagnostics;
+    if (cancellation.stop_requested()) {
+        d.add(DiagCode::Cancelled, 1, "", "", "validation cancelled");
+        return fail(std::move(res), 1);
+    }
     if (!validConfig(cfg)) {
         d.add(DiagCode::BadConfig, 4, "", "", "sample rate, oversampling or full-scale voltage outside supported range");
         return fail(std::move(res), 4);
@@ -398,11 +405,12 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     // Check 5: 250 ms synthetic probe (silence, -18 dBFS sine, -6 dBFS transient).
     static const char* const kNames[3] = {"silence", "-18 dBFS sine", "-6 dBFS transient"};
     for (int kind = 0; kind < 3; ++kind) {
-        const ProbeResult pr = runProbe(proto, g.inputElement, g.outputNode, rate, cfg.fullScaleVolts, kind);
+        const ProbeResult pr = runProbe(proto, g.inputElement, g.outputNode, rate, cfg.fullScaleVolts, kind, cancellation);
         cost.probePeakVolts[kind] = pr.peak;
         cost.probeMaxNewton = std::max(cost.probeMaxNewton, pr.maxNewton);
         if (!pr.ok) {
-            d.add(DiagCode::ProbeFailed, 5, "", "", std::string(kNames[kind]) + ": " + pr.why);
+            d.add(cancellation.stop_requested() ? DiagCode::Cancelled : DiagCode::ProbeFailed,
+                  5, "", "", std::string(kNames[kind]) + ": " + pr.why);
             return fail(std::move(res), 5);
         }
     }
@@ -429,11 +437,12 @@ CompileResult compile(const Blueprint& bp, const ModelRegistry& reg, const Runti
     return res;
 }
 
-CompileResult compileText(std::string_view json, const ModelRegistry& reg, const RuntimeConfig& cfg, Generation generation) {
+CompileResult compileText(std::string_view json, const ModelRegistry& reg, const RuntimeConfig& cfg, Generation generation,
+                          std::stop_token cancellation) {
     CompileResult res;
     Blueprint bp;
     if (!parseBlueprint(json, bp, res.diagnostics)) return fail(std::move(res), 1);
-    return compile(bp, reg, cfg, generation);
+    return compile(bp, reg, cfg, generation, cancellation);
 }
 
 std::vector<std::pair<int, int>> stableStateMap(const PreparedGraph& from, const PreparedGraph& to) {

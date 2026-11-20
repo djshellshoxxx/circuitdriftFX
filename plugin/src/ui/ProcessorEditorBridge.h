@@ -1,9 +1,10 @@
 // Live message-thread adapter for the CircuitDrift editor.
-// Only parameter transactions and read-only telemetry are wired in this milestone.
+// Parameter transactions, telemetry, local catalog and background validation.
 // Unimplemented services fail explicitly; never substitute synthetic FakeBridge data.
 #pragma once
 #include "ui/EditorBridge.h"
 #include "state/PresetLibrary.h"
+#include "blueprint/ValidationWorker.h"
 #include <cstddef>
 #include <filesystem>
 #include <utility>
@@ -36,6 +37,8 @@ public:
     void swapSlots() override;
 
     std::vector<PresetEntry> listPresets(const juce::String& query) override;
+    void refreshPresets() override { presetCatalog_.reset(); }
+    juce::String presetCatalogNotice() const override;
     bool loadPreset(const juce::String& id, int slot, juce::String& error) override;
     bool savePreset(const juce::String& name, juce::String& error) override;
     bool deletePreset(const juce::String& id, juce::String& error) override;
@@ -50,6 +53,7 @@ public:
     void requestBlueprintValidation(const juce::String& json) override;
     bool blueprintReport(BlueprintReport& out) override;
     bool applyBlueprint(int slot, const juce::String& json, juce::String& error) override;
+    bool supportsBlueprintApply() const override { return false; }
     void resetEngine(bool cold) override;
     bool supportsEngineReset() const override;
     bool startCapture(const CaptureRequest& request, juce::String& error) override;
@@ -74,13 +78,15 @@ private:
 
     CircuitDriftProcessor& processor_;
     state::PresetLibrary presetLibrary_;
+    std::optional<state::PresetCatalog> presetCatalog_;
     int editSlot_ = 0;
     bool gestureOpen_ = false;
     Snapshot gestureBefore_;
     juce::String gestureLabel_;
     std::vector<Step> steps_;
     std::size_t position_ = 0;
-    bool blueprintReportPending_ = false;
+    blueprint::ValidationWorker blueprintValidator_;
+    std::uint64_t blueprintStateEpoch_ = 0;
     std::uint64_t lastStateEpoch_ = 0;
 };
 }  // namespace cd::plugin

@@ -403,6 +403,8 @@ public:
         counts_ = note("", Tone::Normal);
         diag_ = note("", Tone::Normal);
         note("Validation never changes the audio. Apply swaps the circuit only after it compiled; containment and dry fallback stay on. Applying is one undo step.");
+        if (!bridge.supportsBlueprintApply())
+            note("Validation preview is available. Applying a custom circuit to live audio is not available yet.", Tone::Dim);
         load();
     }
 
@@ -463,9 +465,14 @@ private:
             ch |= counts_->set("No validation report yet.", Tone::Dim);
             ch |= diag_->set("");
         } else {
+            const auto cost = report_.estimatedFlopsPerSample > 0
+                ? juce::String(report_.estimatedFlopsPerSample, 0) + " operations/electrical sample (estimate)"
+                : report_.estimatedCostNsPerSample > 0
+                    ? juce::String(report_.estimatedCostNsPerSample, 0) + " ns/sample (estimate)"
+                    : juce::String("not available");
             ch |= counts_->set((report_.ok ? "Valid. " : "Invalid. ") + juce::String("Components ") + juce::String(report_.components) + ", nodes " + juce::String(report_.nodes) +
                                    ", nonlinear " + juce::String(report_.nonlinear) + ", unknowns " + juce::String(report_.unknowns) + ", estimated cost " +
-                                   juce::String(report_.estimatedCostNsPerSample, 0) + " ns/sample (estimate).",
+                                   cost + "." + (report_.configuration.isEmpty() ? juce::String() : "\n" + report_.configuration),
                                report_.ok ? Tone::Ok : Tone::Danger);
             ch |= diag_->set(report_.diagnostics.isEmpty() ? juce::String(report_.ok ? "No diagnostics." : "No details reported.") : report_.diagnostics.joinIntoString("\n"),
                              report_.ok ? Tone::Dim : Tone::Danger);
@@ -479,7 +486,7 @@ private:
         const int i = static_cast<int>(s);
         state_->set(juce::String("State: ") + names[i] + (extra.isEmpty() ? juce::String() : "  -  " + extra), tones[i]);
         validate_->setEnabled(s != BpState::Validating && s != BpState::Applying);
-        apply_->setEnabled(s == BpState::Ready);
+        apply_->setEnabled(s == BpState::Ready && bridge.supportsBlueprintApply());
         editor_.setReadOnly(s == BpState::Applying);
         relayout();
     }

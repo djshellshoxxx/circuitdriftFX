@@ -41,7 +41,7 @@ enum class DiagCode : unsigned char {
     // check 3 (connectivity)
     NoGround, BadTerminal, SelfShort, FloatingNode, FloatingIsland, NoDcPath, VoltageSourceLoop, SupplyShort,
     // checks 4-6
-    BadConfig, UnknownCount, DcFailed, ProbeFailed, Internal
+    BadConfig, UnknownCount, DcFailed, ProbeFailed, Internal, Cancelled
 };
 const char* diagCodeName(DiagCode c) noexcept;
 

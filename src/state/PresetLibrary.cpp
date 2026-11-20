@@ -22,14 +22,16 @@ bool endsWith(std::string_view s, std::string_view suf) { return s.size() >= suf
 
 // Reads a regular file of at most `maxBytes` bytes. The initial size is also the
 // read limit: a growing file cannot turn the size check into an unbounded read.
-bool readBounded(const fs::path& p, std::size_t maxBytes, std::string& out, std::string& error) {
+bool readBounded(const fs::path& p, std::size_t maxBytes, std::string& out, std::string& error,
+                 std::size_t* admittedBytes = nullptr) {
     std::error_code ec;
     if (!fs::is_regular_file(p, ec) || ec) { error = "not a regular file"; return false; }
     const auto size = fs::file_size(p, ec);
     if (ec) { error = "cannot stat file"; return false; }
-    if (size > maxBytes) { error = "file exceeds the 1.25 MiB scene bound"; return false; }
+    if (size > maxBytes) { error = "file exceeds the read size bound"; return false; }
     std::ifstream f(p, std::ios::binary);
     if (!f) { error = "cannot open file"; return false; }
+    if (admittedBytes) *admittedBytes = std::size_t(size);
     std::string candidate(std::size_t(size), '\0');
     if (size != 0 && !f.read(candidate.data(), std::streamsize(candidate.size()))) {
         error = "read failed or file changed"; return false;
@@ -82,15 +84,28 @@ fs::path PresetLibrary::pathFor(const std::string& stem) const {
 }
 
 std::vector<PresetInfo> PresetLibrary::list(std::string_view query) const {
+    return filterPresets(scan(), query);
+}
+
+std::vector<PresetInfo> filterPresets(const PresetCatalog& catalog, std::string_view query) {
     const std::string q = lower(query);
     std::vector<PresetInfo> out;
+    for (const auto& entry : catalog.entries) if (matches(entry, q)) out.push_back(entry);
+    return out;
+}
+
+PresetCatalog PresetLibrary::scan(PresetScanLimits limits) const {
+    limits.entries = std::min(limits.entries, kMaxListedPresets);
+    limits.bytes = std::min(limits.bytes, kMaxCatalogReadBytes);
+    PresetCatalog catalog;
     for (const auto& f : factoryPresets()) {
-        PresetInfo i = infoFrom("factory:" + f.id, f.scene, true);
-        if (matches(i, q)) out.push_back(std::move(i));
+        catalog.entries.push_back(infoFrom("factory:" + f.id, f.scene, true));
     }
     std::vector<PresetInfo> user;
     std::error_code ec;
-    for (fs::directory_iterator it(dir_, ec), end; !ec && it != end && user.size() < kMaxListedPresets; it.increment(ec)) {
+    for (fs::directory_iterator it(dir_, ec), end; !ec && it != end; it.increment(ec)) {
+        if (catalog.visited == limits.entries) { catalog.truncated = true; break; }
+        ++catalog.visited;  // includes irrelevant and nonmatching entries
         const std::string name = utf8(it->path().filename());
         if (!endsWith(name, kPresetExtension)) continue;
         std::error_code sec;
@@ -101,15 +116,26 @@ std::vector<PresetInfo> PresetLibrary::list(std::string_view query) const {
         PresetInfo i;
         i.id = "user:" + stem;
         i.title = stem;
+        const auto size = it->file_size(sec);
+        if (!sec && size <= kSceneMaxBytes && size > limits.bytes - catalog.bytesRead) {
+            catalog.truncated = true;
+            break;
+        }
         std::string text;
         ScenePreset p;
-        if (readBounded(it->path(), kSceneMaxBytes, text, why) && sceneFromJson(text, p, why)) i = infoFrom(i.id, p, false);
+        // Recheck the remaining aggregate budget in readBounded as well: a
+        // file may grow between the directory-entry size and the actual read.
+        const auto remaining = std::min(kSceneMaxBytes, limits.bytes - catalog.bytesRead);
+        std::size_t admittedBytes = 0;
+        const bool read = readBounded(it->path(), remaining, text, why, &admittedBytes);
+        catalog.bytesRead += admittedBytes;  // failed/partial reads consume budget too
+        if (read && sceneFromJson(text, p, why)) i = infoFrom(i.id, p, false);
         else { i.valid = false; i.error = why; }
-        if (matches(i, q)) user.push_back(std::move(i));
+        user.push_back(std::move(i));
     }
     std::sort(user.begin(), user.end(), [](const PresetInfo& a, const PresetInfo& b) { return a.id < b.id; });
-    out.insert(out.end(), std::make_move_iterator(user.begin()), std::make_move_iterator(user.end()));
-    return out;
+    catalog.entries.insert(catalog.entries.end(), std::make_move_iterator(user.begin()), std::make_move_iterator(user.end()));
+    return catalog;
 }
 
 bool PresetLibrary::load(const std::string& id, ScenePreset& out, std::string& error) const {

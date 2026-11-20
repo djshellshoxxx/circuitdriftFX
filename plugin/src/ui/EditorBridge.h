@@ -59,6 +59,8 @@ struct BlueprintReport {
     juce::StringArray diagnostics;   // "<componentId>.<pin>: message" or general text
     int components = 0, nodes = 0, nonlinear = 0, unknowns = 0;
     double estimatedCostNsPerSample = 0;
+    double estimatedFlopsPerSample = 0;  // analytical cost, not measured CPU time
+    juce::String configuration;         // sample rate, quality and model provenance
 };
 
 enum class CaptureFormat : int { Png = 0, Gif = 1, Mp4 = 2 };
@@ -139,6 +141,8 @@ public:
 
     // Presets (local only; CD-F24).
     virtual std::vector<PresetEntry> listPresets(const juce::String& query) = 0;
+    virtual void refreshPresets() {}
+    virtual juce::String presetCatalogNotice() const { return {}; }
     virtual bool loadPreset(const juce::String& id, int slot, juce::String& error) = 0;
     virtual bool savePreset(const juce::String& name, juce::String& error) = 0;
     virtual bool deletePreset(const juce::String& id, juce::String& error) = 0;
@@ -161,6 +165,7 @@ public:
     virtual void requestBlueprintValidation(const juce::String& json) = 0;
     virtual bool blueprintReport(BlueprintReport& out) = 0;  // true when a new report is ready
     virtual bool applyBlueprint(int slot, const juce::String& json, juce::String& error) = 0;
+    virtual bool supportsBlueprintApply() const { return true; }
 
     // Engine reset (Warm/Cold) and re-prepare request after a staged quality change.
     virtual void resetEngine(bool cold) = 0;

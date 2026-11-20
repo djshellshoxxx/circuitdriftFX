@@ -410,9 +410,38 @@ void testLibrary() {
     CHECK(!lib.remove(id, err));
     CHECK(!lib.load(id, back, err));
 }
+
+void testCatalogBudgets() {
+    TempDir td;
+    const auto notes = td.path / "notes";
+    fs::create_directories(notes);
+    for (int i = 0; i < 4; ++i) std::ofstream(notes / (std::to_string(i) + ".txt")) << "ordinary note";
+    const auto noMatches = PresetLibrary(notes).scan({2, kMaxCatalogReadBytes});
+    CHECK(noMatches.visited == 2 && noMatches.truncated && noMatches.bytesRead == 0);
+    CHECK(filterPresets(noMatches, "absent search term").empty());
+    CHECK(noMatches.entries.size() == factoryPresets().size());
+
+    const auto scenes = td.path / "scenes";
+    fs::create_directories(scenes);
+    const std::string text = cleanText();
+    for (int i = 0; i < 3; ++i)
+        std::ofstream(scenes / (std::to_string(i) + std::string(kPresetExtension)), std::ios::binary) << text;
+    PresetLibrary library(scenes);
+    const auto byBytes = library.scan({kMaxListedPresets, text.size()});
+    CHECK(byBytes.truncated && byBytes.bytesRead == text.size());
+    CHECK(byBytes.entries.size() == factoryPresets().size() + 1 && byBytes.entries.back().valid);
+    const auto byEntries = library.scan({1, kMaxCatalogReadBytes});
+    CHECK(byEntries.truncated && byEntries.visited == 1 && byEntries.bytesRead == text.size());
+    const auto all = library.scan({3, text.size() * 3});
+    CHECK(!all.truncated && all.visited == 3 && all.bytesRead == text.size() * 3);
+    CHECK(filterPresets(all, "user:").size() == 3);
+    fs::remove_all(scenes);
+    CHECK(filterPresets(all, "user:").size() == 3); // search remains a pure snapshot operation
+}
 }  // namespace
 
 int main() {
+    testCatalogBudgets();
     testFactory();
     testRoundtrip();
     testModified();

@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <memory>
 #include <filesystem>
+#include <chrono>
+#include <thread>
 
 using namespace cd::plugin;
 namespace {
@@ -21,6 +23,14 @@ void write(juce::RangedAudioParameter& p, float normalized) {
     p.beginChangeGesture();
     p.setValueNotifyingHost(normalized);
     p.endChangeGesture();
+}
+bool waitForReport(ProcessorEditorBridge& bridge, BlueprintReport& report) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (bridge.blueprintReport(report)) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
 }
 }
 
@@ -180,6 +190,11 @@ int main() {
         const auto users = catalog.listPresets("user:preview");
         check(users.size() == 1 && !users[0].factory && users[0].category == "User",
               "imported scene is discoverable as user preset");
+        const auto external = tempRoot.getChildFile("External.circuitdrift.json");
+        check(exported.copyFileTo(external), "add externally saved preset after catalog snapshot");
+        check(catalog.listPresets("user:External").empty(), "typing filters the existing snapshot without disk reads");
+        catalog.refreshPresets();
+        check(catalog.listPresets("user:External").size() == 1, "explicit refresh discovers external changes");
         error.clear();
         check(!catalog.importPreset(exported, error) && error.isNotEmpty(),
               "duplicate import never overwrites existing preset");
@@ -208,8 +223,34 @@ int main() {
           "unwired runtime blueprint installation fails explicitly");
     bridge.requestBlueprintValidation("{}");
     BlueprintReport report;
-    check(bridge.blueprintReport(report) && !report.ok && !report.diagnostics.isEmpty(),
-          "unwired validation reports a failure, not a fabricated success");
+    check(waitForReport(bridge, report) && !report.ok && !report.diagnostics.isEmpty(),
+          "background validator returns real malformed-document diagnostics");
+    check(!bridge.supportsBlueprintApply(), "validation preview does not claim live graph installation");
+    const juce::String fixture = R"({"schemaVersion":1,"id":"live.rc","name":"Live RC fixture","modelRegistryVersion":"fixture-v1",
+      "nodes":["0","in","out"],"components":[
+        {"id":"R1","modelId":"fixture.resistor","pins":{"p":"in","n":"out"},"parameters":{"resistanceOhm":10000}},
+        {"id":"C1","modelId":"fixture.capacitor","pins":{"p":"out","n":"0"},"parameters":{"capacitanceF":1e-8}}],
+      "ports":{"input":"in","output":"out","ground":"0"},"macroBindings":[]})";
+    processor.prepareToPlay(8000, 32);
+    juce::AudioBuffer<float> silent(2, 32);
+    silent.clear();
+    juce::MidiBuffer noMidi;
+    processor.processBlock(silent, noMidi);
+    juce::MemoryBlock beforeValidation, afterValidation;
+    processor.getStateInformation(beforeValidation);
+    bridge.requestBlueprintValidation(fixture);
+    check(waitForReport(bridge, report) && report.ok, "live validator compiles a supported synthetic circuit");
+    check(report.components == 2 && report.nodes == 3 && report.unknowns == 3 &&
+          report.estimatedFlopsPerSample > 0 && report.estimatedCostNsPerSample == 0 &&
+          report.configuration.contains("synthetic fixture-v1"), "report exposes real cost units and model provenance");
+    check(!bridge.blueprintReport(report), "live report is consumed once");
+    processor.getStateInformation(afterValidation);
+    check(beforeValidation == afterValidation, "validation leaves saved sound and host parameters unchanged");
+    bridge.requestBlueprintValidation(fixture);
+    processor.setStateInformation(beforeValidation.getData(), static_cast<int>(beforeValidation.getSize()));
+    check(waitForReport(bridge, report) && !report.ok &&
+          report.diagnostics.joinIntoString(" ").contains("changed"), "session replacement invalidates pending validation");
+    processor.releaseResources();
 
     UiSettings prefs;
     prefs.scale = 500.0f;

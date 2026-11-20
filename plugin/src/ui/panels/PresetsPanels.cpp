@@ -61,6 +61,10 @@ public:
         search_.setTextToShowWhenEmpty("Search presets", content_.theme().textDim);
         search_.onTextChange = [this] { rebuild(); };
         content_.addItem(search_, 240, 28, true);
+        refresh_ = makeButton("Refresh", "Rescan the local preset folder for external changes");
+        refresh_->onClick = [this] { bridge.refreshPresets(); rebuild(); };
+        content_.addItem(*refresh_, buttonBasis("Refresh"), 30);
+        catalogNotice_ = note("", Tone::Warn);
 
         for (auto* l : {&factory_, &user_}) {
             l->model.box = &l->box;
@@ -137,6 +141,7 @@ private:
         factory_.box.updateContent();
         user_.box.updateContent();
         updateButtons();
+        if (catalogNotice_->set(bridge.presetCatalogNotice(), Tone::Warn)) relayout();
         repaint();
     }
     void setSelected(const PresetEntry& p) {
@@ -216,8 +221,8 @@ private:
 
     juce::TextEditor search_, name_;
     Pane factory_, user_;
-    std::unique_ptr<juce::TextButton> load_, remove_, import_, export_, save_;
-    NoteLabel *current_ = nullptr, *error_ = nullptr, *info_ = nullptr;
+    std::unique_ptr<juce::TextButton> load_, remove_, import_, export_, save_, refresh_;
+    NoteLabel *current_ = nullptr, *error_ = nullptr, *info_ = nullptr, *catalogNotice_ = nullptr;
     PresetEntry selected_;
     bool hasSel_ = false;
     juce::String slot_ = "A";

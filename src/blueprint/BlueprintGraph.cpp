@@ -252,7 +252,7 @@ const char* diagCodeName(DiagCode c) noexcept {
         "RegistryMismatch", "UnsupportedModel", "PinMissing", "PinUnknown", "PinNode", "ParamMissing", "ParamUnknown",
         "ParamRange", "ConductanceUnbounded", "BadBinding",
         "NoGround", "BadTerminal", "SelfShort", "FloatingNode", "FloatingIsland", "NoDcPath", "VoltageSourceLoop", "SupplyShort",
-        "BadConfig", "UnknownCount", "DcFailed", "ProbeFailed", "Internal"};
+        "BadConfig", "UnknownCount", "DcFailed", "ProbeFailed", "Internal", "Cancelled"};
     const auto k = std::size_t(c);
     return k < sizeof(names) / sizeof(names[0]) ? names[k] : "Unknown";
 }
