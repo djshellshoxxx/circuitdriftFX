@@ -8,6 +8,7 @@
 #pragma once
 #include <cstddef>
 #include <filesystem>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,6 +44,8 @@ struct PresetCatalog {
     std::vector<PresetInfo> entries;
     std::size_t visited = 0, bytesRead = 0;
     bool truncated = false;
+    bool cancelled = false;
+    std::string error;  // directory-wide failure; individual invalid files keep their own error
 };
 // Filtering a catalog does no filesystem I/O. Factory order and user id order
 // are preserved. Reuse a snapshot while typing rather than rescanning the disk.
@@ -58,7 +61,9 @@ public:
     std::vector<PresetInfo> list(std::string_view query = {}) const;
     // Work is bounded independently of search matches. Limits can be reduced
     // by callers, never raised above the library's hard entry/byte budgets.
-    PresetCatalog scan(PresetScanLimits limits = {}) const;
+    // Cancellation is checked between filesystem operations and bounded reads/parses;
+    // it cannot interrupt an operating-system call already in progress.
+    PresetCatalog scan(PresetScanLimits limits = {}, std::stop_token cancellation = {}) const;
     bool load(const std::string& id, ScenePreset& out, std::string& error) const;
     // Saves under `name` (must pass sanitizeStem). Fails if it exists and !overwrite. Atomic.
     bool save(std::string_view name, const ScenePreset& preset, bool overwrite, std::string& savedId, std::string& error) const;

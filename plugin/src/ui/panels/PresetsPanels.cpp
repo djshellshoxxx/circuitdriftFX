@@ -65,6 +65,7 @@ public:
         refresh_->onClick = [this] { bridge.refreshPresets(); rebuild(); };
         content_.addItem(*refresh_, buttonBasis("Refresh"), 30);
         catalogNotice_ = note("", Tone::Warn);
+        catalogNotice_->setTitle("Preset catalog status");
 
         for (auto* l : {&factory_, &user_}) {
             l->model.box = &l->box;
@@ -111,6 +112,10 @@ public:
     }
 
     void refresh(const StatusInfo& s) override {
+        bridge.pollPresets();
+        const auto catalog = bridge.presetCatalogStatus();
+        if (catalog.generation != catalogGeneration_) rebuild();
+        else updateCatalogNotice(catalog);
         bool changed = false;
         const juce::String slot = s.editSlot == 0 ? "A" : "B";
         if (slot != slot_) {
@@ -130,8 +135,8 @@ private:
     void rebuild() {
         const auto all = bridge.listPresets(search_.getText());
         // ListBox retains selections by row index when its content changes.
-        // A filter may put a different preset at that index, so require an
-        // explicit selection before acting on the rebuilt catalog.
+        // A filter or new async snapshot may put a different preset at that
+        // index, so require an explicit selection before acting on new rows.
         factory_.box.deselectAllRows();
         user_.box.deselectAllRows();
         clearSelection();
@@ -141,8 +146,25 @@ private:
         factory_.box.updateContent();
         user_.box.updateContent();
         updateButtons();
-        if (catalogNotice_->set(bridge.presetCatalogNotice(), Tone::Warn)) relayout();
+        const auto catalog = bridge.presetCatalogStatus();
+        catalogGeneration_ = catalog.generation;
+        updateCatalogNotice(catalog);
         repaint();
+    }
+    void updateCatalogNotice(const PresetCatalogStatus& catalog) {
+        juce::String message;
+        if (catalog.loading)
+            message = catalog.generation == 0 ? "Loading local presets..." : "Refreshing presets; showing the previous catalog...";
+        if (catalog.error.isNotEmpty()) {
+            if (message.isNotEmpty()) message += "\n";
+            message += catalog.error;
+        }
+        if (catalog.truncated) {
+            if (message.isNotEmpty()) message += "\n";
+            message += "Catalog limit reached. Some files were not scanned; reduce this folder and refresh.";
+        }
+        const auto tone = catalog.error.isNotEmpty() ? Tone::Danger : catalog.truncated ? Tone::Warn : Tone::Dim;
+        if (catalogNotice_->set(message, tone)) relayout();
     }
     void setSelected(const PresetEntry& p) {
         selected_ = p;
@@ -225,6 +247,7 @@ private:
     NoteLabel *current_ = nullptr, *error_ = nullptr, *info_ = nullptr, *catalogNotice_ = nullptr;
     PresetEntry selected_;
     bool hasSel_ = false;
+    std::uint64_t catalogGeneration_ = 0;
     juce::String slot_ = "A";
     std::unique_ptr<juce::FileChooser> chooser_;
 };

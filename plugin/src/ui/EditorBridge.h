@@ -42,6 +42,13 @@ struct PresetEntry {
     bool factory = false;
 };
 
+struct PresetCatalogStatus {
+    std::uint64_t generation = 0;  // changes only when a new snapshot is installed
+    bool loading = false;         // the previous snapshot remains usable during refresh
+    bool truncated = false;
+    juce::String error;            // directory-wide failure, distinct from an invalid row
+};
+
 // Fault overlay request/state for one component (CD-F19). Types follow 03-blueprints spec.
 enum class FaultType : int { None = 0, ElectrolyticOpen, ElectrolyticLeaky, CrackedResistor, MicrophonicTube };
 struct FaultInfo {
@@ -139,10 +146,12 @@ public:
     virtual void copySlot(int from, int to) = 0;
     virtual void swapSlots() = 0;
 
-    // Presets (local only; CD-F24).
+    // Presets (local only; CD-F24). Search filters an in-memory snapshot; initial
+    // discovery and explicit refresh run in the background. Poll at the UI rate.
     virtual std::vector<PresetEntry> listPresets(const juce::String& query) = 0;
     virtual void refreshPresets() {}
-    virtual juce::String presetCatalogNotice() const { return {}; }
+    virtual bool pollPresets() { return false; }
+    virtual PresetCatalogStatus presetCatalogStatus() const { return {}; }
     virtual bool loadPreset(const juce::String& id, int slot, juce::String& error) = 0;
     virtual bool savePreset(const juce::String& name, juce::String& error) = 0;
     virtual bool deletePreset(const juce::String& id, juce::String& error) = 0;

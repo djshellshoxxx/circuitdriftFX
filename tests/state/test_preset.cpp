@@ -2,11 +2,13 @@
 // (CD-F09/F24; T24 config roundtrip). Synthetic data only.
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <thread>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <random>
 #include <set>
 #include <string>
@@ -14,6 +16,7 @@
 #include <vector>
 #include "state/Preset.h"
 #include "state/PresetLibrary.h"
+#include "state/PresetCatalogWorker.h"
 #include "check.h"
 
 using namespace cd;
@@ -437,11 +440,127 @@ void testCatalogBudgets() {
     CHECK(filterPresets(all, "user:").size() == 3);
     fs::remove_all(scenes);
     CHECK(filterPresets(all, "user:").size() == 3); // search remains a pure snapshot operation
+
+    CHECK(PresetLibrary(scenes).scan().error.empty()); // first-use missing folder is normal
+    const auto ordinaryFile = td.path / "not-a-directory";
+    std::ofstream(ordinaryFile) << "ordinary file";
+    const auto failed = PresetLibrary(ordinaryFile).scan();
+    CHECK(!failed.error.empty() && !failed.truncated && failed.visited == 0);
+    CHECK(failed.entries.size() == factoryPresets().size());
+    std::stop_source cancel;
+    cancel.request_stop();
+    const auto stopped = PresetLibrary(ordinaryFile).scan({}, cancel.get_token());
+    CHECK(stopped.cancelled && stopped.error.empty() && stopped.entries.empty());
+    CHECK(stopped.visited == 0 && stopped.bytesRead == 0);
+}
+
+bool waitForCatalog(PresetCatalogWorker& worker, PresetCatalogResult& result) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (worker.poll(result)) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+}
+
+void testCatalogWorker() {
+    // Hold the first provider call in flight, then queue many refreshes. This
+    // deterministically exercises cancellation, coalescing and stale-result
+    // rejection without relying on directory traversal speed or sleep timing.
+    std::mutex gate;
+    std::condition_variable ready;
+    bool entered = false, release = false;
+    std::atomic<int> calls{0};
+    std::atomic<bool> scannedOnCaller{false}, cancelled{false};
+    const auto caller = std::this_thread::get_id();
+    PresetCatalogWorker worker([&](std::stop_token stop) {
+        if (std::this_thread::get_id() == caller) scannedOnCaller.store(true);
+        const int call = ++calls;
+        if (call == 1) {
+            std::unique_lock lock(gate);
+            entered = true;
+            ready.notify_one();
+            ready.wait_for(lock, std::chrono::seconds(10), [&] { return release; });
+            cancelled.store(stop.stop_requested());
+        }
+        PresetCatalog catalog;
+        PresetInfo row;
+        row.id = call == 1 ? "user:stale" : "user:latest";
+        catalog.entries.push_back(std::move(row));
+        return catalog; // intentionally returns data even if this request was cancelled
+    });
+    CHECK(calls.load() == 0); // lazy construction
+    const auto first = worker.request();
+    {
+        std::unique_lock lock(gate);
+        CHECK(ready.wait_for(lock, std::chrono::seconds(10), [&] { return entered; }));
+    }
+    auto latest = first;
+    for (int i = 0; i < 64; ++i) latest = worker.request();
+    CHECK(latest > first && calls.load() == 1);
+    PresetCatalogResult result;
+    result.generation = 999;
+    CHECK(!worker.poll(result) && result.generation == 999);
+    {
+        const std::lock_guard lock(gate);
+        release = true;
+    }
+    ready.notify_one();
+    CHECK(waitForCatalog(worker, result));
+    CHECK(result.generation == latest && result.catalog.entries.size() == 1);
+    if (result.catalog.entries.size() == 1) CHECK(result.catalog.entries[0].id == "user:latest");
+    CHECK(cancelled.load() && !scannedOnCaller.load() && calls.load() == 2);
+    CHECK(!worker.poll(result)); // each accepted result is delivered once
+
+    // Exceptions are visible results, and the same worker can service a retry.
+    int attempt = 0;
+    PresetCatalogWorker retry([&](std::stop_token) {
+        if (++attempt == 1) throw std::runtime_error("synthetic scan failure");
+        return PresetCatalog{};
+    });
+    const auto failed = retry.request();
+    CHECK(waitForCatalog(retry, result));
+    CHECK(result.generation == failed && !result.catalog.error.empty());
+    const auto retried = retry.request();
+    CHECK(waitForCatalog(retry, result));
+    CHECK(result.generation == retried && result.catalog.error.empty());
+
+    // The real provider retains the existing entry and byte budget.
+    TempDir td;
+    const std::string text = cleanText();
+    for (int i = 0; i < 3; ++i)
+        std::ofstream(td.path / (std::to_string(i) + std::string(kPresetExtension))) << text;
+    PresetCatalogWorker bounded(td.path, {1, kMaxCatalogReadBytes});
+    const auto boundedGeneration = bounded.request();
+    CHECK(waitForCatalog(bounded, result));
+    CHECK(result.generation == boundedGeneration && result.catalog.truncated);
+    CHECK(result.catalog.visited == 1 && result.catalog.bytesRead == text.size());
+    CHECK(result.catalog.entries.size() == factoryPresets().size() + 1);
+
+    // Shutdown cancels the active scan before joining and discards pending work.
+    entered = false;
+    std::atomic<bool> shutdownCancelled{false};
+    {
+        PresetCatalogWorker closing([&](std::stop_token stop) {
+            std::stop_callback wake(stop, [&] { ready.notify_one(); });
+            std::unique_lock lock(gate);
+            entered = true;
+            ready.notify_one();
+            ready.wait_for(lock, std::chrono::seconds(10), [&] { return stop.stop_requested(); });
+            shutdownCancelled.store(stop.stop_requested());
+            return PresetCatalog{};
+        });
+        closing.request();
+        std::unique_lock lock(gate);
+        CHECK(ready.wait_for(lock, std::chrono::seconds(10), [&] { return entered; }));
+    }
+    CHECK(shutdownCancelled.load());
 }
 }  // namespace
 
 int main() {
     testCatalogBudgets();
+    testCatalogWorker();
     testFactory();
     testRoundtrip();
     testModified();

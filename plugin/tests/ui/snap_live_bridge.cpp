@@ -24,6 +24,22 @@ void write(juce::RangedAudioParameter& p, float normalized) {
     p.setValueNotifyingHost(normalized);
     p.endChangeGesture();
 }
+bool waitForCatalog(ProcessorEditorBridge& bridge) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        bridge.pollPresets();
+        const auto state = bridge.presetCatalogStatus();
+        if (!state.loading && state.generation != 0) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
+}
+template <class T>
+T* catalogControl(juce::Component& root, const juce::String& title) {
+    if (auto* found = dynamic_cast<T*>(&root); found && root.getTitle() == title) return found;
+    for (auto* child : root.getChildren()) if (auto* found = catalogControl<T>(*child, title)) return found;
+    return nullptr;
+}
 bool waitForReport(ProcessorEditorBridge& bridge, BlueprintReport& report) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (std::chrono::steady_clock::now() < deadline) {
@@ -176,6 +192,10 @@ int main() {
     check(tempRoot.createDirectory(), "create isolated preset test directory");
     {
         ProcessorEditorBridge catalog(processor, std::filesystem::u8path(tempRoot.getFullPathName().toStdString()));
+        check(!catalog.presetCatalogStatus().loading && catalog.presetCatalogStatus().generation == 0,
+              "catalog construction is lazy");
+        (void)catalog.listPresets("factory:clean-console");
+        check(waitForCatalog(catalog), "initial catalog scan completes in the background");
         const auto factories = catalog.listPresets("factory:clean-console");
         check(factories.size() == 1 && factories[0].factory &&
               factories[0].id == "factory:clean-console", "real factory catalog and search");
@@ -187,14 +207,66 @@ int main() {
               "export real factory scene to canonical JSON");
         error.clear();
         check(catalog.importPreset(exported, error), "import validated local scene without overwrite");
+        check(catalog.presetCatalogStatus().loading, "successful import requests a new catalog snapshot");
+        check(waitForCatalog(catalog), "catalog refresh after import completes");
         const auto users = catalog.listPresets("user:preview");
         check(users.size() == 1 && !users[0].factory && users[0].category == "User",
               "imported scene is discoverable as user preset");
         const auto external = tempRoot.getChildFile("External.circuitdrift.json");
         check(exported.copyFileTo(external), "add externally saved preset after catalog snapshot");
+        const auto cachedGeneration = catalog.presetCatalogStatus().generation;
         check(catalog.listPresets("user:External").empty(), "typing filters the existing snapshot without disk reads");
+        check(catalog.presetCatalogStatus().generation == cachedGeneration && !catalog.presetCatalogStatus().loading,
+              "search does not queue a new scan");
         catalog.refreshPresets();
+        check(catalog.presetCatalogStatus().loading && catalog.presetCatalogStatus().generation == cachedGeneration,
+              "manual refresh exposes loading while retaining the previous snapshot");
+        check(waitForCatalog(catalog), "explicit background refresh completes");
         check(catalog.listPresets("user:External").size() == 1, "explicit refresh discovers external changes");
+        {
+            auto panel = ui::pc::makePresetsPanel(catalog);
+            panel->setBounds(0, 0, 420, 1400);
+            panel->refresh(catalog.status());
+            auto* search = catalogControl<juce::TextEditor>(*panel, "Search presets");
+            auto* user = catalogControl<juce::ListBox>(*panel, "User presets");
+            auto* load = catalogControl<juce::Button>(*panel, "Load into Slot A");
+            auto* remove = catalogControl<juce::Button>(*panel, "Delete");
+            auto* exportButton = catalogControl<juce::Button>(*panel, "Export...");
+            check(search && user && load && remove && exportButton, "live preset panel exposes catalog controls");
+            if (search && user && load && remove && exportButton) {
+                search->setText("user:", false);
+                if (search->onTextChange) search->onTextChange();
+                check(user->getListBoxModel()->getNumRows() == 2, "live user snapshot has two rows");
+                user->selectRow(0);
+                panel->refresh(catalog.status());
+                check(user->getSelectedRow() == 0 && remove->isEnabled(),
+                      "ordinary status polling preserves explicit selection");
+                check(external.moveFileTo(tempRoot.getChildFile("Changed.circuitdrift.json")),
+                      "external rename replaces a result without changing the row count");
+                catalog.refreshPresets();
+                check(waitForCatalog(catalog), "replacement catalog is available before the panel polls");
+                panel->refresh(catalog.status());
+                check(user->getListBoxModel()->getNumRows() == 2 && user->getSelectedRow() < 0 &&
+                      !load->isEnabled() && !remove->isEnabled() && !exportButton->isEnabled(),
+                      "new async snapshot clears stale selection even at the same row count");
+                check(search->getText() == "user:", "refresh preserves the current query");
+                user->selectRow(0);
+                panel->refresh(catalog.status());
+                check(remove->isEnabled() && user->getSelectedRow() == 0,
+                      "explicit reselection remains stable after snapshot installation");
+            }
+        }
+        {
+            ProcessorEditorBridge brokenCatalog(processor, std::filesystem::u8path(exported.getFullPathName().toStdString()));
+            auto panel = ui::pc::makePresetsPanel(brokenCatalog);
+            check(waitForCatalog(brokenCatalog), "directory-wide failure completes as a catalog result");
+            panel->refresh(brokenCatalog.status());
+            const auto state = brokenCatalog.presetCatalogStatus();
+            auto* notice = catalogControl<ui::pc::NoteLabel>(*panel, "Preset catalog status");
+            check(!state.loading && !state.truncated && state.error.isNotEmpty(),
+                  "catalog distinguishes an unreadable directory from empty results or truncation");
+            check(notice && notice->text().contains(state.error), "preset panel displays the catalog error");
+        }
         error.clear();
         check(!catalog.importPreset(exported, error) && error.isNotEmpty(),
               "duplicate import never overwrites existing preset");
@@ -202,8 +274,9 @@ int main() {
         check(!catalog.deletePreset("factory:clean-console", error) && error.isNotEmpty(),
               "factory scenes remain read-only");
         error.clear();
-        check(catalog.deletePreset("user:preview", error) && catalog.listPresets("user:preview").empty(),
-              "delete only the selected user preset");
+        check(catalog.deletePreset("user:preview", error), "delete only the selected user preset");
+        check(catalog.presetCatalogStatus().loading && waitForCatalog(catalog) &&
+              catalog.listPresets("user:preview").empty(), "deletion invalidates older scans and refreshes the catalog");
         juce::Image image(juce::Image::ARGB, 4, 4, true);
         const auto screenshot = tempRoot.getChildFile("capture.png");
         error.clear();

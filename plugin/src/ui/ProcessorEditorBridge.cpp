@@ -34,7 +34,8 @@ ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor)
     : ProcessorEditorBridge(processor, defaultPresetDirectory()) {}
 ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor,
                                              std::filesystem::path userPresetDirectory)
-    : processor_(processor), presetLibrary_(std::move(userPresetDirectory)) {}
+    : processor_(processor), presetLibrary_(std::move(userPresetDirectory)),
+      presetCatalogWorker_(presetLibrary_.userDirectory()) {}
 
 juce::AudioProcessorValueTreeState& ProcessorEditorBridge::parameters() { return processor_.parameters(); }
 juce::String ProcessorEditorBridge::slotParamId(const juce::String& name) const {
@@ -253,9 +254,12 @@ void ProcessorEditorBridge::swapSlots() {
 }
 
 std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& query) {
-    // Reuse one bounded snapshot while typing; refresh/import/delete invalidate it.
+    // Typing never starts another scan. A refresh keeps the last accepted
+    // snapshot visible until its replacement arrives on the message thread.
     std::vector<PresetEntry> entries;
-    if (!presetCatalog_) presetCatalog_ = presetLibrary_.scan();
+    if (presetCatalogRequest_ == 0) refreshPresets();
+    pollPresets();
+    if (!presetCatalog_) return entries;
     for (const auto& preset : state::filterPresets(*presetCatalog_, query.toStdString())) {
         PresetEntry entry;
         entry.id = displayUtf8(preset.id);
@@ -268,10 +272,25 @@ std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String& 
     }
     return entries;
 }
-juce::String ProcessorEditorBridge::presetCatalogNotice() const {
-    return presetCatalog_ && presetCatalog_->truncated
-        ? "Catalog limit reached. Some files were not scanned; reduce this folder and refresh."
-        : juce::String();
+void ProcessorEditorBridge::refreshPresets() {
+    presetCatalogRequest_ = presetCatalogWorker_.request();
+}
+bool ProcessorEditorBridge::pollPresets() {
+    state::PresetCatalogResult result;
+    if (!presetCatalogWorker_.poll(result) || result.generation != presetCatalogRequest_) return false;
+    presetCatalog_ = std::move(result.catalog);
+    presetCatalogGeneration_ = result.generation;
+    return true;
+}
+PresetCatalogStatus ProcessorEditorBridge::presetCatalogStatus() const {
+    PresetCatalogStatus status;
+    status.generation = presetCatalogGeneration_;
+    status.loading = presetCatalogRequest_ != presetCatalogGeneration_;
+    if (presetCatalog_) {
+        status.truncated = presetCatalog_->truncated;
+        status.error = displayUtf8(presetCatalog_->error);
+    }
+    return status;
 }
 // Applying or capturing a sound requires atomic slot seed/blueprint transactions.
 // Do not pretend that APVTS-only changes have loaded or saved a complete scene.
@@ -280,7 +299,7 @@ bool ProcessorEditorBridge::savePreset(const juce::String&, juce::String& error)
 bool ProcessorEditorBridge::deletePreset(const juce::String& id, juce::String& error) {
     std::string why;
     if (!presetLibrary_.remove(id.toStdString(), why)) { error = displayUtf8(why); return false; }
-    presetCatalog_.reset();
+    refreshPresets();
     error.clear();
     return true;
 }
@@ -291,7 +310,7 @@ bool ProcessorEditorBridge::importPreset(const juce::File& file, juce::String& e
         error = displayUtf8(why);
         return false;
     }
-    presetCatalog_.reset();
+    refreshPresets();
     error.clear();
     return true;
 }

@@ -94,16 +94,26 @@ std::vector<PresetInfo> filterPresets(const PresetCatalog& catalog, std::string_
     return out;
 }
 
-PresetCatalog PresetLibrary::scan(PresetScanLimits limits) const {
+PresetCatalog PresetLibrary::scan(PresetScanLimits limits, std::stop_token cancellation) const {
     limits.entries = std::min(limits.entries, kMaxListedPresets);
     limits.bytes = std::min(limits.bytes, kMaxCatalogReadBytes);
     PresetCatalog catalog;
+    const auto cancelled = [&] {
+        catalog.cancelled = cancellation.stop_requested();
+        return catalog.cancelled;
+    };
+    if (cancelled()) return catalog;
     for (const auto& f : factoryPresets()) {
         catalog.entries.push_back(infoFrom("factory:" + f.id, f.scene, true));
     }
+    if (cancelled()) return catalog;
     std::vector<PresetInfo> user;
     std::error_code ec;
-    for (fs::directory_iterator it(dir_, ec), end; !ec && it != end; it.increment(ec)) {
+    fs::directory_iterator it(dir_, ec), end;
+    // A first-use library need not exist yet. Other enumeration failures must
+    // not masquerade as a successful, empty user catalog.
+    if (ec == std::errc::no_such_file_or_directory) ec.clear();
+    for (; !ec && it != end && !cancelled(); it.increment(ec)) {
         if (catalog.visited == limits.entries) { catalog.truncated = true; break; }
         ++catalog.visited;  // includes irrelevant and nonmatching entries
         const std::string name = utf8(it->path().filename());
@@ -127,12 +137,17 @@ PresetCatalog PresetLibrary::scan(PresetScanLimits limits) const {
         // file may grow between the directory-entry size and the actual read.
         const auto remaining = std::min(kSceneMaxBytes, limits.bytes - catalog.bytesRead);
         std::size_t admittedBytes = 0;
+        if (cancelled()) break;
         const bool read = readBounded(it->path(), remaining, text, why, &admittedBytes);
         catalog.bytesRead += admittedBytes;  // failed/partial reads consume budget too
+        if (cancelled()) break;
         if (read && sceneFromJson(text, p, why)) i = infoFrom(i.id, p, false);
         else { i.valid = false; i.error = why; }
         user.push_back(std::move(i));
+        if (cancelled()) break;  // do not advance the directory iterator after cancellation
     }
+    if (ec) catalog.error = "Could not scan the preset folder: " + ec.message();
+    if (cancelled()) return catalog;
     std::sort(user.begin(), user.end(), [](const PresetInfo& a, const PresetInfo& b) { return a.id < b.id; });
     catalog.entries.insert(catalog.entries.end(), std::make_move_iterator(user.begin()), std::make_move_iterator(user.end()));
     return catalog;

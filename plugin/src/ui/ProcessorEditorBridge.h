@@ -3,7 +3,7 @@
 // Unimplemented services fail explicitly; never substitute synthetic FakeBridge data.
 #pragma once
 #include "ui/EditorBridge.h"
-#include "state/PresetLibrary.h"
+#include "state/PresetCatalogWorker.h"
 #include "blueprint/ValidationWorker.h"
 #include <cstddef>
 #include <filesystem>
@@ -37,8 +37,9 @@ public:
     void swapSlots() override;
 
     std::vector<PresetEntry> listPresets(const juce::String& query) override;
-    void refreshPresets() override { presetCatalog_.reset(); }
-    juce::String presetCatalogNotice() const override;
+    void refreshPresets() override;
+    bool pollPresets() override;
+    PresetCatalogStatus presetCatalogStatus() const override;
     bool loadPreset(const juce::String& id, int slot, juce::String& error) override;
     bool savePreset(const juce::String& name, juce::String& error) override;
     bool deletePreset(const juce::String& id, juce::String& error) override;
@@ -78,7 +79,9 @@ private:
 
     CircuitDriftProcessor& processor_;
     state::PresetLibrary presetLibrary_;
+    state::PresetCatalogWorker presetCatalogWorker_;
     std::optional<state::PresetCatalog> presetCatalog_;
+    std::uint64_t presetCatalogRequest_ = 0, presetCatalogGeneration_ = 0;
     int editSlot_ = 0;
     bool gestureOpen_ = false;
     Snapshot gestureBefore_;
