@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include "TestHarness.h"
+#include "SidechainRobustnessTests.h"
 #include "control/ControlProcessor.h"
 #include "control/CreativeDrift.h"
 #include "control/SidechainLoad.h"
@@ -281,6 +282,7 @@ static void driftProperties() {
 int main() {
     transientT15();
     sidechainT16();
+    sidechain_regression::run();
     processorSidechain();
     determinismAndZeroFrames();
     driftProperties();
