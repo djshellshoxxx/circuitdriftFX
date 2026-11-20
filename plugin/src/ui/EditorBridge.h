@@ -9,6 +9,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 #include "engine/EngineTypes.h"
 
@@ -79,6 +80,29 @@ struct BlueprintReport {
 enum class CaptureFormat : int { Png = 0, Gif = 1, Mp4 = 2 };
 enum class CaptureFraming : int { Portrait9x16 = 0, Square1x1 = 1, Landscape16x9 = 2 };
 enum class CaptureState : int { Idle = 0, Armed, Recording, Finalizing, Completed, Cancelled, Failed };
+
+struct CaptureDimensions { int width = 0, height = 0; };
+// One declared canvas size for both the producer and encoder. Unsupported formats
+// and framings have no dimensions; MP4 remains unavailable until G07 is resolved.
+constexpr CaptureDimensions captureDimensions(CaptureFormat format, CaptureFraming framing) noexcept {
+    if (format != CaptureFormat::Png && format != CaptureFormat::Gif) return {};
+    const int shortSide = format == CaptureFormat::Png ? 1080 : 540;
+    const int longSide = format == CaptureFormat::Png ? 1920 : 960;
+    switch (framing) {
+        case CaptureFraming::Portrait9x16: return {shortSide, longSide};
+        case CaptureFraming::Square1x1: return {shortSide, shortSide};
+        case CaptureFraming::Landscape16x9: return {longSide, shortSide};
+    }
+    return {};
+}
+
+struct CaptureFrameRequest {
+    std::uint64_t epoch = 0; // A token from an earlier session cannot enter a new one.
+    std::uint32_t index = 0; // Absolute 20 Hz timeline slot, independent of queue sequence.
+    int width = 0, height = 0;
+    CaptureFraming framing = CaptureFraming::Portrait9x16;
+};
+
 struct CaptureRequest {
     CaptureFormat format = CaptureFormat::Gif;
     CaptureFraming framing = CaptureFraming::Portrait9x16;
@@ -191,6 +215,12 @@ public:
     // Capture/export (CD-F03). The editor renders frames of its own canvas and submits them;
     // encoding and file writes happen on a worker.
     virtual bool startCapture(const CaptureRequest& request, juce::String& error) = 0;
+    // Poll from the editor's timer, independent of the visible services tab. Each
+    // opportunity renders at most one current frame; the worker repeats gaps.
+    virtual std::optional<CaptureFrameRequest> takeCaptureFrameRequest() { return std::nullopt; }
+    virtual void submitCaptureFrame(const CaptureFrameRequest&, const juce::Image& frame) {
+        submitCaptureFrame(frame);
+    }
     virtual void submitCaptureFrame(const juce::Image& frame) = 0;
     virtual void stopCapture() = 0;
     virtual CaptureStatus captureStatus() = 0;

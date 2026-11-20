@@ -1,4 +1,5 @@
 #include "ui/ProcessorEditorBridge.h"
+#include "ui/GifCaptureSession.h"
 #include "PluginProcessor.h"
 #include "ParameterLayout.h"
 #include "core/ParameterRegistry.h"
@@ -36,6 +37,7 @@ ProcessorEditorBridge::ProcessorEditorBridge(CircuitDriftProcessor& processor,
                                              std::filesystem::path userPresetDirectory)
     : processor_(processor), presetLibrary_(std::move(userPresetDirectory)),
       presetCatalogWorker_(presetLibrary_.userDirectory()) {}
+ProcessorEditorBridge::~ProcessorEditorBridge() = default;
 
 juce::AudioProcessorValueTreeState& ProcessorEditorBridge::parameters() { return processor_.parameters(); }
 juce::String ProcessorEditorBridge::slotParamId(const juce::String& name) const {
@@ -406,13 +408,54 @@ void ProcessorEditorBridge::resetEngine(bool cold) {
 bool ProcessorEditorBridge::supportsEngineReset() const {
     return processor_.edition() == Edition::Full && processor_.editorSampleRate() > 0.0;
 }
-bool ProcessorEditorBridge::startCapture(const CaptureRequest&, juce::String& error) { return unavailable(error); }
-void ProcessorEditorBridge::submitCaptureFrame(const juce::Image&) {}
-void ProcessorEditorBridge::stopCapture() {}
+bool ProcessorEditorBridge::startCapture(const CaptureRequest& request, juce::String& error) {
+    try {
+        if (request.format != CaptureFormat::Gif) {
+            error = request.format == CaptureFormat::Mp4
+                ? "Native MP4 encoder not available (G07)" : "PNG is a single-frame export; use Save PNG";
+            return false;
+        }
+        if (gifCapture_) {
+            const auto state = gifCapture_->captureState();
+            if (state == CaptureState::Recording || state == CaptureState::Finalizing || state == CaptureState::Armed) {
+                error = "Finish the existing capture before starting another";
+                return false;
+            }
+            // Release the old session's queue/scratch before admitting the next
+            // one; two buffer budgets must never overlap during replacement.
+            gifCapture_.reset();
+        }
+        if (++captureEpoch_ == 0) ++captureEpoch_;
+        auto next = std::make_unique<GifCaptureSession>(request, captureEpoch_);
+        if (!next->ready()) {
+            error = displayUtf8(next->startError());
+            return false;
+        }
+        gifCapture_ = std::move(next);
+        error.clear();
+        return true;
+    } catch (...) {
+        try { error = "Cannot initialize GIF capture"; } catch (...) {}
+        return false;
+    }
+}
+std::optional<CaptureFrameRequest> ProcessorEditorBridge::takeCaptureFrameRequest() {
+    return gifCapture_ ? gifCapture_->takeFrameRequest() : std::nullopt;
+}
+void ProcessorEditorBridge::submitCaptureFrame(const CaptureFrameRequest& request, const juce::Image& frame) {
+    if (gifCapture_) gifCapture_->submit(request, frame);
+}
+void ProcessorEditorBridge::submitCaptureFrame(const juce::Image& frame) {
+    if (gifCapture_) gifCapture_->submit(frame);
+}
+void ProcessorEditorBridge::stopCapture() {
+    if (gifCapture_) gifCapture_->stop();
+}
 CaptureStatus ProcessorEditorBridge::captureStatus() {
+    if (gifCapture_) return gifCapture_->status();
     CaptureStatus s;
     s.mp4Reason = "Native MP4 encoder not available (G07)";
-    s.message = "Capture service not connected (G11)";
+    s.message = "Silent GIF capture ready; MP4 requires a native encoder";
     return s;
 }
 bool ProcessorEditorBridge::savePng(const juce::Image& image, const juce::File& file, juce::String& error) {

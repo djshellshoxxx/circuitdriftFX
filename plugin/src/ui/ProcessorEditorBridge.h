@@ -7,11 +7,13 @@
 #include "blueprint/ValidationWorker.h"
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <utility>
 #include <vector>
 
 namespace cd::plugin {
 class CircuitDriftProcessor;
+class GifCaptureSession;
 
 class ProcessorEditorBridge final : public EditorBridge {
 public:
@@ -19,6 +21,7 @@ public:
     // Tests/embedders can inject a sandboxed directory; production selects the
     // current user's application data. No storage is touched by construction.
     ProcessorEditorBridge(CircuitDriftProcessor& processor, std::filesystem::path userPresetDirectory);
+    ~ProcessorEditorBridge() override;
 
     juce::AudioProcessorValueTreeState& parameters() override;
     juce::String slotParamId(const juce::String& baseName) const override;
@@ -59,6 +62,8 @@ public:
     void resetEngine(bool cold) override;
     bool supportsEngineReset() const override;
     bool startCapture(const CaptureRequest& request, juce::String& error) override;
+    std::optional<CaptureFrameRequest> takeCaptureFrameRequest() override;
+    void submitCaptureFrame(const CaptureFrameRequest& request, const juce::Image& frame) override;
     void submitCaptureFrame(const juce::Image& frame) override;
     void stopCapture() override;
     CaptureStatus captureStatus() override;
@@ -101,5 +106,7 @@ private:
     ValidationContext validationContext_{};
     std::optional<BlueprintReport> blueprintRejection_;
     std::uint64_t lastStateEpoch_ = 0;
+    std::unique_ptr<GifCaptureSession> gifCapture_;
+    std::uint64_t captureEpoch_ = 0;
 };
 }  // namespace cd::plugin
