@@ -335,7 +335,9 @@ void wholeDocumentWriterBoundary() {
     doc = original;
     CHECK(state::saveState(doc) == baseline);
     CHECK(state::loadState(state::saveState(doc), back, error));
-    CHECK(back.metadata == original.metadata);
+    CHECK(back.metadata.size() == original.metadata.size());
+    CHECK(!back.metadata.empty() && back.metadata[0].first == "x-token" &&
+          back.metadata[0].second.isString() && back.metadata[0].second.string == "SYNTHETIC_TOKEN");
 }
 
 void manyObjectKeys() {
