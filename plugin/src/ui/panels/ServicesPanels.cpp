@@ -148,9 +148,15 @@ private:
         int outW = 540;
         if (format_ == CaptureFormat::Mp4) outW = framing_.index() == 2 ? 1920 : 1080;
         else if (format_ == CaptureFormat::Png) outW = framing_.index() == 2 ? 1920 : 1080;
-        else outW = framing_.index() == 2 ? 960 : 540;
+        else outW = framing_.index() == 2 ? 640 : framing_.index() == 1 ? 480 : 360;
         const float scale = static_cast<float>(outW) / static_cast<float>(std::max(1, r.getWidth()));
-        return top->createComponentSnapshot(r, true, scale);
+        auto image = top->createComponentSnapshot(r, true, scale);
+        if (format_ != CaptureFormat::Gif || !image.isValid()) return image;
+        // The backend has preallocated a three-frame queue. Fix the dimensions
+        // after integer crop rounding so every frame matches that allocation.
+        const int height = framing_.index() == 2 ? 360 : framing_.index() == 1 ? 480 : 640;
+        return image.getWidth() == outW && image.getHeight() == height
+            ? image : image.rescaled(outW, height, juce::Graphics::highResamplingQuality);
     }
     void startRecording() {
         juce::String err;
