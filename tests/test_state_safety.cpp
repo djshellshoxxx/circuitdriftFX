@@ -383,6 +383,21 @@ void publicationBoundary() {
     CHECK(out.find("SYNTHETIC_PRIVATE_PATH") == std::string::npos && out.find("SYNTHETIC_TOKEN") == std::string::npos);
     state::StateDocument back;
     CHECK(state::loadState(out, back, error) && back.baseParameters == doc.baseParameters);
+    const auto original = doc;
+    const auto baseline = out;
+    for (double value : {original.baseParameters.front().second, 42.0}) {
+        doc = original;
+        doc.baseParameters.emplace_back(original.baseParameters.front().first, value);
+        const auto before = doc.baseParameters;
+        out = "unchanged";
+        CHECK(!state::publishScene(doc, out, error) && out == "unchanged" && !error.empty());
+        CHECK(doc.baseParameters == before);  // rejection never edits the source sound
+    }
+    doc = original;
+    doc.metadata.emplace_back("x-another-private-field", core::JsonValue::makeString("LOCAL_ONLY"));
+    doc.checkpoint = state::EngineCheckpoint{"0.0.1-dev", "fixture-v1", 48000, 4, 100, {0.25}, {}, {42}};
+    CHECK(state::publishScene(doc, out, error) && out == baseline && error.empty());
+    CHECK(doc.ui.has_value() && doc.checkpoint.has_value() && doc.metadata.size() == original.metadata.size() + 1);
     for (const char* location : {"macros", "timeline", "faults", "blueprint", "component"}) {
         auto tree = sceneTree();
         auto privateValue = core::JsonValue::makeString("SYNTHETIC_PRIVATE_DATA");

@@ -141,6 +141,13 @@ const std::set<std::string>& knownKeys() {
     return k;
 }
 
+bool hasUniqueParameterIdentities(const StateDocument& doc) {
+    std::set<std::string> identities;
+    for (const auto& parameter : doc.baseParameters)
+        if (!identities.insert(parameter.first).second) return false;
+    return true;
+}
+
 // Feature identity is independent of whether the feature exposes a host parameter.
 // Recognition is not a claim that a feature is implemented or runtime-qualified.
 constexpr std::array<std::string_view, 23> kKnownFeatures = {
@@ -386,11 +393,9 @@ std::string saveState(const StateDocument& doc) {
     } else {
         throw std::invalid_argument("invalid document kind");
     }
+    if (!hasUniqueParameterIdentities(doc))
+        throw std::invalid_argument("duplicate in-memory parameter identity");
     std::set<std::string> identities;
-    for (const auto& param : doc.baseParameters)
-        if (!identities.insert(param.first).second)
-            throw std::invalid_argument("duplicate in-memory parameter identity");
-    identities.clear();
     for (const auto& field : doc.metadata)
         if (knownKeys().count(field.first) || !identities.insert(field.first).second)
             throw std::invalid_argument("duplicate or reserved metadata identity");
@@ -408,6 +413,10 @@ std::string saveState(const StateDocument& doc) {
 
 bool publishScene(const StateDocument& doc, std::string& out, std::string& error) {
     if (doc.kind != DocKind::Scene) { error = "only scenes are published"; return false; }
+    if (!hasUniqueParameterIdentities(doc)) {
+        error = "duplicate in-memory parameter identity";
+        return false;
+    }
     if (!publishableContent(doc, error)) return false;
     std::string candidate;
     try { candidate = core::writeJson(toJson(doc, true)); }
