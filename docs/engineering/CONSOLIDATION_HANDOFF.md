@@ -1,25 +1,29 @@
 # CircuitDriftFX consolidation handoff — 2026-11-20
 
-## Current checkpoint — GIF and build-gate repairs
+## Current checkpoint — coherent host-state publication
 
 Draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16), branch
 `codex/cdfx-consolidation-20261119`, is the integration and CI authority.
 Read its live head before a guarded forward update. Original source branches
 and `main` at `44076b1f8beedeb7ec402ca1e9ca1f8ff08d56d6` are preserved.
 
-Current tested application/native source is local
-`b84d2ba119c03f079cd74886cbd066a2da6013f6`, corresponding remote source
-`7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20`, tree
-`0c2e17c0ec416991c8a69b130015b1e0aa727780`. Build/workflow repairs follow in
-local `51029e0cf8f1e62f42fab11999923ab076f57ab5`, remote
-`0c425f815320ebbc2568af8e6428d536fa6e76c4`, tree
-`57c2368dc5cb4e2bd8540c54a2ab3dbd7a0b5431`. Application C++ inputs are unchanged;
-real native reconfiguration and the 24-case dependency gate passed. The containing
-publication adds review, execution and handoff evidence. Silent GIF is now integrated with the
-consolidated runtime/editor/validation/preset work. Final local verification
-passed **6/6 native applications**, scoped **3/3 sanitized media/state tests**,
-a later **1/1 strict-decoder suite**, and independent decoding of **63 frames**.
-Exact-publication Linux/Windows/pluginval remains required.
+Current tested source is local `1a3f8f35efd5080f60caf18172ec4454c26dea19`,
+corresponding remote source `452bd97b36dd1bb0227a633ed2a42b558261a9e8`, tree
+`7af2c5b76ccf7badead4c314261b6eb7cf7d9f67`. It includes GIF capture, build-gate
+repairs and coherent host-parameter restoration, including the stopped-audio
+exception fallback. The complete native set passed **6/6 in 59.50 s**. Original
+partial-publication and later three-state failure baselines each reproduced four
+assertions before their respective repairs. All R28 code, bug and defensive
+reviewers completed without a new actionable finding in assigned scopes.
+
+The [host-restore source map](../evidence/commit-map-host-restore-2026-11-20.json)
+records verified local/remote tree equality through this source. The containing
+publication adds evidence and handoff documents; read the live PR for its SHA.
+Earlier GIF scope has separate 3/3 sanitized resource/state, 1/1 strict-decoder,
+6/6 native and 63-frame independent decoding evidence. Build source 51029e0 has
+passing actual native configuration and 24-case dependency fixtures. These
+results retain their original pins; exact-publication Linux/Windows/pluginval
+and execution of the Windows 16-case validator harness remain required.
 
 [The GIF source map](../evidence/commit-map-gif-2026-11-20.json) records complete
 local/remote tree equality, retaining the
@@ -31,9 +35,10 @@ reread at ecae510 and remains intact.
 
 The preceding publication 338e952 has separate 31/31 sanitized core and 6/6 native
 baseline evidence. Those results are not relabeled as a new full-core GIF run.
-All R25 workers completed. Fresh R26 code and defensive reviewers found no new
-actionable issue in the build-gate changes. The R26 host_restore_fix_r26 worker
-owns a separate coherent host-parameter restore repair; avoid competing edits.
+All R25–R28 workers completed. R26 build-gate review and R28 host-fallback
+review found no new actionable issue in their assigned scopes. The fresh R29
+code, bug and defensive set is inspecting fixed-size control snapshots for G12;
+root owns implementation, compilers and integration.
 
 ## Consolidated sources and ownership
 
@@ -160,6 +165,9 @@ execution. MP4, audio-synchronized output and full G11 qualification remain open
 | Strict decoder `aedef7b` | **1/1 passed, 0.57 s**, same sanitized media suite with independent EOI fixtures. |
 | Final GIF/native `b84d2ba` | **6/6 passed, 61.44 s**, Clang 19.1.7 Custom O0, including production editor/session regression hooks. |
 | Independent GIF outputs from `b84d2ba` | Pillow 13.0.0 fully decoded **63 frames across 4 fresh files**; dimensions, 50 ms delays, duration, loop metadata and detailed pixels matched expectations. |
+| First host repair `90d647d` | **6/6 passed, 58.89 s**; fresh review subsequently found the stopped-audio exception composition edge. |
+| Three-state test `9240074` | **Four expected failures, 4.36 s**, unchanged production; Full/LITE audio retained A while saves retained B after failing C. |
+| Final host fallback `1a3f8f3` | **6/6 passed, 59.50 s**; all R28 code/bug/defensive reviewers completed without new actionable findings in scope. |
 | Containing publication | Requires its own exact-head Linux/Windows/pluginval. Earlier results qualify only their source. |
 
 The scoped GIF runs qualify their recorded source. Portable production inputs
@@ -181,7 +189,8 @@ Evidence:
 [rounds 15–16](../evidence/continuation-round15-16-2026-11-20.json), and
 [merged rounds 17–18](../evidence/continuation-round17-18-2026-11-20.json),
 [GIF execution](../evidence/gif-integration-2026-11-20-r20.json), and
-[independent GIF output](../evidence/gif-independent-2026-11-20-r24.json).
+[independent GIF output](../evidence/gif-independent-2026-11-20-r24.json), and
+[host-state execution](../evidence/host-restore-2026-11-20-r26.json).
 Offscreen native/source review evidence does not establish real-DAW, optimized
 performance, TSan, leak, OS-I/O deadline or physical-model qualification. Local
 leak detection was disabled under the tracer. Models remain synthetic and
@@ -208,13 +217,12 @@ PowerShell is unavailable. Exact-source Windows and real pluginval remain open.
 1. Read the live PR #16 head and exact-head CI; repair concrete failures without
    relaxing assertions or acceptance gates. Use an expected old SHA and forward
    ref update, preserving concurrent work and original branches.
-2. Resume host_restore_fix_r26: valid APVTS replacement currently exposes partial
-   old/new parameter configurations to audio. The worker owns adapter publication
-   plus a deterministic test-first regression; root owns native builds and
-   integration. Read the [R25 session audit](../audits/SESSION_PUBLICATION_2026-11-20_R25.md).
-   All R25 workers completed, and both R26 build-gate reviewers completed without
-   new actionable findings. Wait for the host repair to finish, then hand the
-   complete set to fresh code, bug and defensive reviewers.
+2. Complete the fresh R29 code, bug and defensive handoff on fixed-size control
+   snapshots before implementing the bounded next G12 increment. Preserve exact
+   continuation, validation-before-mutation, preparation/map identity and explicit
+   audio-pitch worker ownership. Read the [session audit](../audits/SESSION_PUBLICATION_2026-11-20_R25.md).
+   The host restoration repair is complete and locally qualified; its R28 set
+   finished before these successors began. Root owns builds and integration.
 3. Complete runtime/control/engine/seed checkpoint capture, host-thread handoff,
    stopped-audio restore, compatibility/migration and coordinated dynamic A/B.
    Sound-preset Load/Save and complete scene transactions depend on that contract.

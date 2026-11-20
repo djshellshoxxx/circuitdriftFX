@@ -4,10 +4,12 @@
 
 A fresh bug-hunt worker reviewed source
 `b84d2ba119c03f079cd74886cbd066a2da6013f6` after the complete R24 set.
-This was source inspection only: no builds, application runs, source changes or
-new regression executions. Root independently inspected the current adapter and
-the pinned JUCE state/Standalone call sites. One current P2 defect needs repair;
-full dynamic-session capture remains unfinished rather than newly regressed.
+The original R25 audit was source inspection only. Root then executed a
+deterministic failing regression, integrated a repair and completed fresh reviews.
+R27 found a further stopped-audio exception edge; root reproduced and repaired it.
+Final source `1a3f8f35efd5080f60caf18172ec4454c26dea19` passes all six native
+suites, and all three R28 reviewers completed without a new actionable finding
+in their assigned scopes. Full dynamic-session capture remains unfinished.
 
 ## P2: valid host restore can expose a partial parameter configuration
 
@@ -119,4 +121,53 @@ audible artifact or complete dynamic-session capture.
 The [baseline evidence](../evidence/host-restore-2026-11-20-r26.json),
 [log](../evidence/host-restore-baseline-2026-11-20-r26.log), and
 [JUnit](../evidence/host-restore-baseline-2026-11-20-r26.xml) preserve the failure.
-The production repair and fresh review are pending in this checkpoint.
+## Completed repair and fresh exception handoff — R26–R28
+
+Root pinned the worker repair as `90d647d71ce57ea80e0e5f5f03519f969e4f2113`.
+Final worker `3f49d5fbd4318eae2f4d72bcb5953d7df6bd2ce1` is byte-identical for
+both processor files and the regression header. The first parameter suite passed
+1/1 in 4.67 s; the complete native set passed 6/6 in 58.89 s.
+
+The adapter serializes non-audio host-state publishers, stages complete legacy
+parameter subsets and guards replacement with a monotonic odd/even sequence.
+Audio performs one sequence-checked snapshot attempt and never waits or retries.
+Reentrant saves retain the complete fallback; recursive replacement is rejected.
+Thrown parameter notifications preserve the captured complete configuration for
+save and preparation until successful restore. Raw APVTS/UI values can remain
+partially changed after that exception; this is not full UI or DSP rollback.
+
+Fresh R27 bug and defensive reviewers independently found a composition edge:
+after audio processes A, a successful restore of B without an intervening callback
+and a failing restore of C left the audio cache at A while saves retained B.
+Test-only `92400745f92866cb30145c427775a7cc896d80b9` reproduced exactly four
+failures in 4.36 s against unchanged production. Both Full and LITE failed
+zero-frame adoption and subsequent positive-frame retention of B.
+
+The final repair publishes that complete fallback through the existing
+preallocated SPSC triple buffer before making the sequence odd. Audio acquires
+the fallback only after an unstable raw read; a stable even read returns
+immediately, so a queued old fallback cannot overwrite newly accepted state.
+Host publishers remain serialized, audio is the sole consumer, and lifecycle
+preparation does not reset buffer ownership. The new audio path contains at
+most one dirty check, exchange and fixed-size copy, including LITE bypass.
+
+Final source `1a3f8f35efd5080f60caf18172ec4454c26dea19`, tree
+`7af2c5b76ccf7badead4c314261b6eb7cf7d9f67`, passed **6/6 native suites in 59.50 s**.
+All host restore and host gesture checks pass. The complete R28 code, bug and
+defensive set independently inspected this pin and finished without a new
+actionable finding. Their source reviews establish neither executed concurrency
+coverage nor general security certification.
+
+The three-state positive-frame check follows zero-frame adoption; it is retention
+coverage, not a separate positive-first case. Ordinary automation overlapping
+fallback capture remains untested and does not promise cross-API serializability.
+The concurrent caller fixture proves caller start; serialization is also reviewed
+in source. Allocation hooks cover new/new[], not direct malloc or comprehensive
+lock/I/O instrumentation. Full G12, TSan and real-host qualification remain open.
+
+The [execution record](../evidence/host-restore-2026-11-20-r26.json) links the
+original and three-state failing baselines and both fixed native runs. The
+[source map](../evidence/commit-map-host-restore-2026-11-20.json) records verified
+local/remote tree equality. Fresh R29 code, bug and defensive workers now inspect
+the bounded control-snapshot prerequisite described above; they do not own the
+adapter files or run concurrent builds.

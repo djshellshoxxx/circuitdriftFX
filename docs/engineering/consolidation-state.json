@@ -8,60 +8,60 @@
     "date": "2026-11-20",
     "branch": "codex/cdfx-consolidation-20261119",
     "local_branch": "codex/cdfx-integration-20261120-round14",
-    "source_head": "0c425f815320ebbc2568af8e6428d536fa6e76c4",
-    "local_source_head": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
-    "source_tree": "57c2368dc5cb4e2bd8540c54a2ab3dbd7a0b5431",
-    "source_head_difference": "Latest build/workflow source is51029e0; application/native test source remains b84d2ba, with no intervening C++ changes. Containing publication adds evidence; read live PR16 for publication SHA.",
-    "stage": "build_gates_locally_validated_windows_pending_host_restore_active",
+    "source_head": "452bd97b36dd1bb0227a633ed2a42b558261a9e8",
+    "local_source_head": "1a3f8f35efd5080f60caf18172ec4454c26dea19",
+    "source_tree": "7af2c5b76ccf7badead4c314261b6eb7cf7d9f67",
+    "source_head_difference": "The source pin includes tested host-state fixes. The containing publication adds evidence and handoff documents; read live PR16 for its SHA.",
+    "stage": "host_restore_locally_validated_control_checkpoint_audit_active",
     "validation": {
       "native": {
-        "state": "passed",
-        "source_sha": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
-        "remote_source_sha": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
-        "source_tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+        "source_sha": "1a3f8f35efd5080f60caf18172ec4454c26dea19",
+        "source_tree": "7af2c5b76ccf7badead4c314261b6eb7cf7d9f67",
+        "result": "passed",
         "passed": 6,
         "total": 6,
-        "elapsed_seconds": 61.44,
+        "elapsed_seconds": 59.5,
         "compiler": "Clang 19.1.7",
         "build_type": "Custom -O0 -g0 -DNDEBUG",
         "sanitizers": false,
-        "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
         "cases": [
           {
             "name": "plugin_param_consistency",
-            "seconds": 4.60103,
+            "seconds": 4.30983,
             "result": "passed"
           },
           {
             "name": "ui_snap_contract",
-            "seconds": 0.928752,
+            "seconds": 0.756587,
             "result": "passed"
           },
           {
             "name": "ui_snap_live_bridge",
-            "seconds": 5.84193,
+            "seconds": 4.7735,
             "result": "passed"
           },
           {
             "name": "ui_snap_panels",
-            "seconds": 10.9412,
+            "seconds": 10.558,
             "result": "passed"
           },
           {
             "name": "ui_snap_shell",
-            "seconds": 27.3626,
+            "seconds": 27.274,
             "result": "passed"
           },
           {
             "name": "ui_snap_workbench",
-            "seconds": 11.7411,
+            "seconds": 11.8047,
             "result": "passed"
           }
         ],
-        "scope": "Six native processor/editor console applications; backend session and real-editor GIF regressions execute inside live_bridge and shell respectively.",
-        "log": "docs/evidence/gif-native-2026-11-20-r24.log",
-        "junit": "docs/evidence/gif-native-2026-11-20-r24.xml",
-        "build_note": "All six targets built and linked; final incremental check had no work. An intermediate ambiguous empty JUCE File assignment was repaired with explicit juce::File{}. No test threshold was changed."
+        "log": "docs/evidence/host-fallback-native-2026-11-20-r28.log",
+        "junit": "docs/evidence/host-fallback-native-2026-11-20-r28.xml",
+        "remote_source_sha": "452bd97b36dd1bb0227a633ed2a42b558261a9e8",
+        "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+        "scope": "Six native processor/editor console suites. Host-restore regressions, UI host gestures, 116 registry parameters and all five editor suites pass.",
+        "build_note": "All six targets built and linked serially from this committed source. No test threshold relaxed."
       },
       "portable_resource_tests": {
         "source_sha": "eb97e54ec15ac95eec268e4b516ada1713caa70c",
@@ -141,13 +141,63 @@
       },
       "evidence": "docs/evidence/gif-integration-2026-11-20-r20.json",
       "prior_full_core": "Previous checkpoint retains 31/31 baseline; not a new GIF full-core run.",
-      "build_gates": "docs/evidence/build-gates-2026-11-20-r25-r26.json"
+      "build_gates": "docs/evidence/build-gates-2026-11-20-r25-r26.json",
+      "native_gif_baseline": {
+        "state": "passed",
+        "source_sha": "b84d2ba119c03f079cd74886cbd066a2da6013f6",
+        "remote_source_sha": "7c9ed63e15fcb3167eb2c57d1aee4fdac9019d20",
+        "source_tree": "0c2e17c0ec416991c8a69b130015b1e0aa727780",
+        "passed": 6,
+        "total": 6,
+        "elapsed_seconds": 61.44,
+        "compiler": "Clang 19.1.7",
+        "build_type": "Custom -O0 -g0 -DNDEBUG",
+        "sanitizers": false,
+        "pinned_juce": "dabd5ad13cd869cba41046947fffc8e5ce5cd662",
+        "cases": [
+          {
+            "name": "plugin_param_consistency",
+            "seconds": 4.60103,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_contract",
+            "seconds": 0.928752,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_live_bridge",
+            "seconds": 5.84193,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_panels",
+            "seconds": 10.9412,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_shell",
+            "seconds": 27.3626,
+            "result": "passed"
+          },
+          {
+            "name": "ui_snap_workbench",
+            "seconds": 11.7411,
+            "result": "passed"
+          }
+        ],
+        "scope": "Six native processor/editor console applications; backend session and real-editor GIF regressions execute inside live_bridge and shell respectively.",
+        "log": "docs/evidence/gif-native-2026-11-20-r24.log",
+        "junit": "docs/evidence/gif-native-2026-11-20-r24.xml",
+        "build_note": "All six targets built and linked; final incremental check had no work. An intermediate ambiguous empty JUCE File assignment was repaired with explicit juce::File{}. No test threshold was changed."
+      },
+      "host_restore": "docs/evidence/host-restore-2026-11-20-r26.json"
     },
     "publication": {
       "pr": 16,
       "branch": "codex/cdfx-consolidation-20261119",
       "guard": "Fresh live head; expected_sha; force=false; preserve concurrent advancement.",
-      "commit_map": "docs/evidence/commit-map-build-gates-2026-11-20.json",
+      "commit_map": "docs/evidence/commit-map-host-restore-2026-11-20.json",
       "source_objects": "Full local/remote tree equality verified for mapped source commits."
     },
     "record": "docs/engineering/CONSOLIDATION_HANDOFF.md"
@@ -1097,7 +1147,24 @@
     "source": "51029e0cf8f1e62f42fab11999923ab076f57ab5",
     "evidence": "docs/evidence/build-gates-2026-11-20-r25-r26.json",
     "r25": "All3 completed; release/dependency repairs integrated and G12/session bug handoff retained.",
-    "r26": "Code and defensive reviews complete without new actionable findings; host_restore_fix_r26 remains active.",
+    "r26": "All three workers completed. Code/defensive build-gate reviews found no new actionable issue; host_restore_fix_r26 completed and was integrated as 90d647d before R27 review.",
     "qualification": "CMake4.4.5 actual native configure and registered24cases pass. PowerShell16cases and real Windows pluginval not executed locally."
+  },
+  "host_state_rounds_26_28": {
+    "source": "1a3f8f35efd5080f60caf18172ec4454c26dea19",
+    "evidence": "docs/evidence/host-restore-2026-11-20-r26.json",
+    "r26": "Repair owner completed; exact final worker source matched the pinned local implementation. Original regression reproduced four failures before repair.",
+    "r27": "All three fresh reviewers completed. Bug and defensive workers independently identified stopped-audio B followed by failed C while audio retained A.",
+    "r28": "Four-failure regression executed; fallback handoff repaired. Six native suites pass. All three fresh reviews complete without new actionable finding in scope.",
+    "next_set": {
+      "round": 29,
+      "workers": [
+        "control_code_audit_r29",
+        "control_bug_hunt_r29",
+        "control_security_audit_r29"
+      ],
+      "status": "Active read-only audit and bounded implementation handoff for fixed-size control snapshots; root owns code, builds and integration."
+    },
+    "legacy_pr_inventory": "docs/evidence/legacy-pr-inventory-2026-11-20-r26.json"
   }
 }

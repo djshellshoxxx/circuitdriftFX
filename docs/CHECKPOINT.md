@@ -1,18 +1,26 @@
-# Current checkpoint — 2026-11-19
+# Current checkpoint — 2026-11-20
 
-The active consolidation candidate is `codex/cdfx-consolidation-20261119`, based on
-PR #15 with selected unique work from PR #10. Read the current
+The active consolidation candidate is draft [PR #16](https://github.com/djshellshoxxx/circuitdriftFX/pull/16),
+branch `codex/cdfx-consolidation-20261119`. Read the current
 [consolidation handoff](engineering/CONSOLIDATION_HANDOFF.md),
 [source inventory](engineering/consolidation-state.json), and audit records in
-`docs/audits/` before choosing or reporting work.
+`docs/audits/` before choosing or reporting work. Original branches and main are
+preserved; included child PR #17–#25 are closed. Older PR #9/#10/#14 still need
+semantic reconciliation.
 
-The current source has an integrated circuit/control runtime, JUCE adapter,
-configuration/history/queue primitives, media/network/community modules and recovered
-blueprint/lifecycle/fault primitives. The custom editor still uses a fake service
-bridge in tests; the live processor uses its generic parameter editor. Complete
-session continuity, real service/provider integration, physical calibration and
-native host qualification remain open. The historical claims below describe the
-older integration only and must not be used as current source or test status.
+Current source includes the integrated circuit/control runtime, live custom JUCE
+editor, configuration/history/queue primitives, background preset discovery and
+file operations, Blueprint validation preview, host-persisted UI preferences and
+silent GIF capture. Coherent host-state restoration now includes a bounded
+fallback handoff for stopped-audio notification failures. Exact source 1a3f8f3
+passes 6/6 native suites in 59.50 s; all three fresh R28 reviews completed without
+new actionable findings in scope. See the [host-state evidence](evidence/host-restore-2026-11-20-r26.json).
+
+The fresh R29 code, bug and defensive set is inspecting the fixed-size control
+snapshot prerequisite. Full dynamic session/seed continuity, coordinated sound
+presets and dynamic A/B, graph Apply, remaining providers/MP4, physical calibration,
+Windows validator/pluginval and real-host/performance qualification remain open.
+Historical claims below retain older provenance and are not current test status.
 
 ## Historical checkpoint retained for provenance
 

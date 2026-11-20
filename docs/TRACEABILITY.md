@@ -28,8 +28,11 @@ required. R24 dependency-verification and release-validator findings are repaire
 [the R25 build-gate changes](audits/DEPENDENCY_SOURCE_GATE_2026-11-20_R25.md),
 with passing real native configuration and 24-case CMake fixtures plus clean R26
 code/defensive review. Windows harness/pluginval execution remains open. The
-[R25 session audit](audits/SESSION_PUBLICATION_2026-11-20_R25.md) identified partial
-valid host-state publication; its R26 repair owner is active. Complete sound-preset transactions, Blueprint Apply, dynamic
+[session audit](audits/SESSION_PUBLICATION_2026-11-20_R25.md) records the repaired
+partial host-state publication and stopped-audio exception edge. Final source
+1a3f8f3 passes 6/6 native suites in 59.50 s, and all R28 reviewers completed
+without new actionable findings in scope. Fresh R29 workers inspect the next
+control-snapshot prerequisite. Complete sound-preset transactions, Blueprint Apply, dynamic
 session/seed continuity, MP4 and remaining services, physical calibration and
 real-host/performance qualification remain open. Historical claims below retain
 older provenance and do not describe current test status.
