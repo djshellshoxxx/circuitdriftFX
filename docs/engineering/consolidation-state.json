@@ -438,5 +438,22 @@
     "reviewers": "separate independent code, bug-hunt, security workers unavailable",
     "untouched": "PR #16, PR #17, PR #18, historical branches, main",
     "remaining": "Complete G12 dynamic checkpoints, live sound presets/blueprint/seed transaction, older PR item mapping, hardware/DAW gates"
+  },
+  "atomic_preset_creation_20261120": {
+    "branch": "codex/cdfx-preset-atomic-create-20261120",
+    "base_pr": 19,
+    "base_sha": "e9c00c51cdf155127cd839c446126ae1d8f9f6c6",
+    "scope": "atomic no-replace preset creation; preserves existing overwrite behavior",
+    "files": [
+      "src/state/StateDocument.h",
+      "src/state/StateDocument.cpp",
+      "src/state/PresetLibrary.cpp",
+      "tests/state/test_preset.cpp"
+    ],
+    "risk": "existing no-overwrite path used atomic replace after a non-atomic existence check",
+    "verification": "source-level preflight only; new exact-head Linux/Windows/pluginval required",
+    "independent_review": "unavailable in connector environment",
+    "remaining": "G12 runtime/control/seed persistence; sound load transactions; PR 9/10/14 reconciliation; physical and DAW gates",
+    "integration": "isolated draft child; do not move PR 16/19 during validation"
   }
 }
