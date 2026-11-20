@@ -71,7 +71,8 @@ bool loadState(std::string_view text, StateDocument& out, std::string& error,
 // Throws std::invalid_argument if the complete schema-v1 envelope could not
 // be read back (including size, blueprint, parameter and feature limits), for
 // duplicate/reserved metadata or parameter IDs, or for invalid checkpoint state.
-// Caller-owned JSON payloads are bounded before recursive copying/serialization.
+// Caller-owned JSON depth and complete encoded-envelope bytes are admitted
+// before recursive copying/serialization; the reader still validates semantics.
 // Only for worker/UI threads: serializes and validates; never call on audio.
 std::string saveState(const StateDocument& doc);
 // Community/scene export: requires kind Scene; strips checkpoint, UI preferences and metadata.

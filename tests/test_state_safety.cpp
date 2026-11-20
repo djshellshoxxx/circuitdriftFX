@@ -516,6 +516,137 @@ void writerPayloadLimits() {
     CHECK(rejects());
 }
 
+// Fixtures stay at the schema boundaries; the diagnostic verifies admission
+// before copying/serialization rather than only a later reader rejection.
+void writerResourceBoundary() {
+    using core::JsonValue;
+    state::StateDocument original, doc, checked;
+    std::string error, published;
+    CHECK(state::loadState(kScene, original, error));
+    const auto canonical = state::saveState(original);
+    CHECK(state::publishScene(original, published, error));
+    const auto preflightError = [](std::string_view message) {
+        return message.find("state writer resource preflight:") == 0;
+    };
+    const auto rejects = [&]() {
+        try { (void)state::saveState(doc); return false; }
+        catch (const std::invalid_argument& ex) { return preflightError(ex.what()); }
+    };
+    const auto nested = [](int depth) {
+        auto value = JsonValue::makeObject();
+        for (int level = 1; level < depth; ++level) {
+            auto parent = JsonValue::makeObject();
+            parent.set("nested", std::move(value));
+            value = std::move(parent);
+        }
+        return value;
+    };
+    const auto padding = [](std::size_t encodedBytes) {
+        std::string text(encodedBytes / 6, '\x01');
+        text.append(encodedBytes % 6, 'a');
+        return text;
+    };
+    for (const std::string location : {"ui", "metadata", "blueprint", "macros", "timeline", "faults"}) {
+        // Root consumes one level; the blueprint adds another before its field.
+        const int allowed = core::JsonLimits{}.maxDepth - (location == "blueprint" ? 2 : 1);
+        for (int excess : {0, 1}) {
+            doc = original;
+            JsonValue expected;
+            CHECK(core::parseJson(canonical, expected, error));
+            auto value = nested(allowed + excess);
+            if (location == "ui") { doc.ui = value; expected.set("ui", std::move(value)); }
+            else if (location == "metadata") {
+                doc.metadata.emplace_back("x-depth", value);
+                expected.set("x-depth", std::move(value));
+            } else if (location == "blueprint") {
+                doc.blueprints[0].set("x-depth", value);
+                expected.get("blueprint")->set("x-depth", std::move(value));
+            } else {
+                auto* field = location == "macros" ? &doc.macros : location == "timeline" ? &doc.timeline : &doc.faults;
+                *field = value;
+                expected.set(location, std::move(value));
+            }
+            const auto encoded = core::writeJson(expected);
+            if (!excess) {
+                CHECK(state::loadState(encoded, checked, error));
+                CHECK(state::saveState(doc) == encoded);
+            } else {
+                CHECK(!state::loadState(encoded, checked, error));
+                CHECK(rejects());
+            }
+        }
+    }
+    doc = original;
+    doc.kind = state::DocKind::Session;
+    doc.blueprints.push_back(doc.blueprints.front());
+    JsonValue sessionTree;
+    CHECK(core::parseJson(state::saveState(doc), sessionTree, error));
+    auto sessionDepth = nested(core::JsonLimits{}.maxDepth - 3);  // root + slot array + blueprint
+    doc.blueprints[1].set("x-depth", sessionDepth);
+    sessionTree.get("blueprints")->array[1].set("x-depth", std::move(sessionDepth));
+    CHECK(state::saveState(doc) == core::writeJson(sessionTree));
+    doc.blueprints[1].set("x-depth", nested(core::JsonLimits{}.maxDepth - 2));
+    CHECK(rejects());
+
+    // Metadata counts raw key bytes; the full envelope also counts escaping.
+    doc = original;
+    doc.blueprints[0].set("x-padding", JsonValue::makeString(""));
+    doc.blueprints[0].get("x-padding")->string = padding(state::kBlueprintMaxBytes - core::writeJson(doc.blueprints[0]).size());
+    CHECK(core::writeJson(doc.blueprints[0]).size() == state::kBlueprintMaxBytes);
+    CHECK(state::loadState(state::saveState(doc), checked, error));
+    doc.blueprints[0].get("x-padding")->string += 'a';
+    CHECK(rejects());
+    doc = original;
+    const std::string escapedKey = "x-\"\\";
+    const auto existingMetadata = doc.metadata[0].first.size() + core::writeJson(doc.metadata[0].second).size();
+    doc.metadata.emplace_back(escapedKey, JsonValue::makeString(padding(state::kMetadataMaxBytes - existingMetadata - escapedKey.size() - 2)));
+    CHECK(state::loadState(state::saveState(doc), checked, error));
+    doc.metadata.back().second.string += 'a';
+    CHECK(rejects());
+    for (const auto kind : {state::DocKind::Scene, state::DocKind::Session}) {
+        doc = original;
+        doc.kind = kind;
+        if (kind == state::DocKind::Session) {
+            doc.blueprints.push_back(doc.blueprints.front());
+            doc.checkpoint = state::EngineCheckpoint{"0.0.1-dev", "fixture-v1", 48000, 4, 100, {0.25, -0.0}, {}, {42}};
+        }
+        doc.ui->set("padding", JsonValue::makeString(""));
+        JsonValue expected;
+        CHECK(core::parseJson(state::saveState(doc), expected, error));
+        const auto limit = kind == state::DocKind::Scene ? state::kSceneMaxBytes : state::kSessionMaxBytes;
+        auto text = padding(limit - core::writeJson(expected).size());
+        doc.ui->get("padding")->string = text;
+        expected.get("ui")->get("padding")->string = std::move(text);
+        const auto encoded = core::writeJson(expected);
+        CHECK(encoded.size() == limit && state::saveState(doc) == encoded);
+        doc.ui->get("padding")->string += 'a';
+        CHECK(rejects());
+        if (kind == state::DocKind::Scene) {
+            // Resource-invalid private state is excluded. Retained fields still
+            // pass admission before producing public output.
+            doc.metadata.emplace_back("x-depth", nested(core::JsonLimits{}.maxDepth));
+            doc.checkpoint = state::EngineCheckpoint{};
+            std::string out = "unchanged";
+            CHECK(state::publishScene(doc, out, error) && out == published && error.empty());
+            doc.title = padding(limit + 6);
+            out = "unchanged";
+            CHECK(!state::publishScene(doc, out, error) && out == "unchanged" && preflightError(error));
+        }
+    }
+
+    // Default copies include inactive containers, although writeJson ignores
+    // them. Reject that storage only when the containing value is retained.
+    doc = original;
+    doc.blueprints[0].array.push_back(nested(core::JsonLimits{}.maxDepth));
+    CHECK(rejects());
+    std::string out = "unchanged";
+    CHECK(!state::publishScene(doc, out, error) && out == "unchanged" && preflightError(error));
+    doc = original;
+    doc.ui->array.push_back(nested(core::JsonLimits{}.maxDepth));
+    CHECK(rejects());
+    CHECK(state::publishScene(doc, out, error) && out == published && error.empty());
+}
+
 void manyObjectKeys() {
     std::string text = "{";
     constexpr int count = 20000;
@@ -539,6 +670,21 @@ void publicationBoundary() {
     CHECK(out.find("SYNTHETIC_PRIVATE_PATH") == std::string::npos && out.find("SYNTHETIC_TOKEN") == std::string::npos);
     state::StateDocument back;
     CHECK(state::loadState(out, back, error) && back.baseParameters == doc.baseParameters);
+    const auto original = doc;
+    const auto baseline = out;
+    for (double value : {original.baseParameters.front().second, 42.0}) {
+        doc = original;
+        doc.baseParameters.emplace_back(original.baseParameters.front().first, value);
+        const auto before = doc.baseParameters;
+        out = "unchanged";
+        CHECK(!state::publishScene(doc, out, error) && out == "unchanged" && !error.empty());
+        CHECK(doc.baseParameters == before);  // rejection never edits the source sound
+    }
+    doc = original;
+    doc.metadata.emplace_back("x-another-private-field", core::JsonValue::makeString("LOCAL_ONLY"));
+    doc.checkpoint = state::EngineCheckpoint{"0.0.1-dev", "fixture-v1", 48000, 4, 100, {0.25}, {}, {42}};
+    CHECK(state::publishScene(doc, out, error) && out == baseline && error.empty());
+    CHECK(doc.ui.has_value() && doc.checkpoint.has_value() && doc.metadata.size() == original.metadata.size() + 1);
     for (const char* location : {"macros", "timeline", "faults", "blueprint", "component"}) {
         auto tree = sceneTree();
         auto privateValue = core::JsonValue::makeString("SYNTHETIC_PRIVATE_DATA");
@@ -658,7 +804,7 @@ void atomicFiles() {
 int main() {
     migratedUtf8Boundary();
     utf8WriterBoundary();
-    localeNumbers(); exactIdentitiesAndFeatures(); checkpointAdmissionBoundary(); wholeDocumentWriterBoundary(); writerPayloadLimits(); manyObjectKeys(); publicationBoundary(); atomicFiles();
+    localeNumbers(); exactIdentitiesAndFeatures(); checkpointAdmissionBoundary(); wholeDocumentWriterBoundary(); writerPayloadLimits(); writerResourceBoundary(); manyObjectKeys(); publicationBoundary(); atomicFiles();
     std::printf("state safety regressions: %s (%d failures)\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
 }
