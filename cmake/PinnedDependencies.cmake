@@ -23,6 +23,10 @@ function(cd_acquire_pinned name repo sha submodules)
       message(FATAL_ERROR "${name}: no source checkout at ${source_dir} while fully disconnected. "
                           "Provide FETCHCONTENT_SOURCE_DIR_${upper_name} or populate the cache first.")
     endif()
+    # Older project configurations stored this cache variable in CD_DEPS_CACHE_DIR.
+    # Shadow it locally as well as specifying SUBBUILD_DIR: CMP0168 NEW ignores
+    # SUBBUILD_DIR and still uses FETCHCONTENT_BASE_DIR for download working files.
+    set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps")
     FetchContent_Populate(${name}
       GIT_REPOSITORY "${repo}"
       GIT_TAG "${sha}"

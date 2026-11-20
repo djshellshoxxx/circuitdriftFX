@@ -89,6 +89,7 @@ class DependencyGateTests(unittest.TestCase):
         self.expected = dict(self.pins)
         self.fully_disconnected = False
         self.new_policies = False
+        self.legacy_fetch_base = False
 
     def tearDown(self):
         self.temp.cleanup()
@@ -122,6 +123,8 @@ class DependencyGateTests(unittest.TestCase):
                            for name, path in self.sources.items()})
         if self.fully_disconnected:
             values["FETCHCONTENT_FULLY_DISCONNECTED"] = "ON"
+        if self.legacy_fetch_base:
+            values["FETCHCONTENT_BASE_DIR"] = self.cache
         source = "cmake_minimum_required(VERSION 3.22)\nproject(DependencyGateFixture LANGUAGES NONE)\n"
         if self.new_policies:
             source += ("foreach(policy CMP0168 CMP0169 CMP0170)\n"
@@ -169,6 +172,13 @@ class DependencyGateTests(unittest.TestCase):
     def test_fresh_population_with_new_cmake_policies(self):
         self.overrides = False
         self.new_policies = True
+        self.configure(success=True)
+        self.assertEqual({p.name for p in self.cache.iterdir()}, {"juce-src", "clap_juce_extensions-src"})
+
+    def test_legacy_fetch_base_does_not_put_new_policy_work_files_in_source_cache(self):
+        self.overrides = False
+        self.new_policies = True
+        self.legacy_fetch_base = True
         self.configure(success=True)
         self.assertEqual({p.name for p in self.cache.iterdir()}, {"juce-src", "clap_juce_extensions-src"})
 
