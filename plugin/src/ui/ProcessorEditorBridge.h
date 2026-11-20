@@ -62,6 +62,7 @@ private:
     void record(std::vector<Change> changes, const juce::String& label);
     bool replay(const Step& step, bool forward);
     bool setParameter(const juce::String& id, float normalized);
+    void syncStateEpoch();
 
     CircuitDriftProcessor& processor_;
     UiSettings ui_{};
@@ -72,5 +73,6 @@ private:
     std::vector<Step> steps_;
     std::size_t position_ = 0;
     bool blueprintReportPending_ = false;
+    std::uint64_t lastStateEpoch_ = 0;
 };
 }  // namespace cd::plugin
