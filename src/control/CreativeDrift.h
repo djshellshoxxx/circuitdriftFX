@@ -24,6 +24,7 @@ public:
     static constexpr double kSlewMsPerS = 2.0;      // 0.002 s/s
 
     struct State {
+        double sampleRate = 48000.0;  // exact effective clock identity, independent of seed/slot
         RngState rng[3]{};
         double u[3] = {0, 0, 0};
         double q = 0;
