@@ -36,6 +36,7 @@ public:
     bool importPreset(const juce::File& file, juce::String& error) override;
     bool exportPreset(const juce::String& id, const juce::File& file, juce::String& error) override;
     void commitRestoration(int slot) override;
+    bool supportsRestorationCommit() const override { return false; }
     std::vector<FaultInfo> faults(int slot) override;
     bool applyFault(int slot, const FaultInfo& fault, juce::String& error) override;
     void clearFaults(int slot) override;
