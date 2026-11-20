@@ -58,13 +58,25 @@ ProcessorEditorBridge::Snapshot ProcessorEditorBridge::snapshot() const {
         if (auto* p = tree.getParameter(kBypassParamId)) result.emplace_back(kBypassParamId, p->getValue());
     return result;
 }
+void ProcessorEditorBridge::syncStateEpoch() {
+    const auto epoch = processor_.editorStateEpoch();
+    if (epoch == lastStateEpoch_) return;
+    steps_.clear();
+    position_ = 0;
+    gestureOpen_ = false;
+    gestureBefore_.clear();
+    gestureLabel_.clear();
+    lastStateEpoch_ = epoch;
+}
 void ProcessorEditorBridge::beginGesture(const juce::String& label) {
+    syncStateEpoch();
     if (gestureOpen_) endGesture();
     gestureBefore_ = snapshot();
     gestureLabel_ = label.trim().isEmpty() ? juce::String("Edit parameters") : label;
     gestureOpen_ = true;
 }
 void ProcessorEditorBridge::endGesture() {
+    syncStateEpoch();
     if (!gestureOpen_) return;
     gestureOpen_ = false;
     finish(gestureBefore_, gestureLabel_);
@@ -112,16 +124,19 @@ bool ProcessorEditorBridge::replay(const Step& step, bool forward) {
     return true;
 }
 void ProcessorEditorBridge::undo() {
+    syncStateEpoch();
     if (gestureOpen_ || position_ == 0) return;
     if (replay(steps_[position_ - 1], false)) --position_;
     else { steps_.clear(); position_ = 0; }
 }
 void ProcessorEditorBridge::redo() {
+    syncStateEpoch();
     if (gestureOpen_ || position_ >= steps_.size()) return;
     if (replay(steps_[position_], true)) ++position_;
     else { steps_.clear(); position_ = 0; }
 }
 HistoryInfo ProcessorEditorBridge::history() {
+    syncStateEpoch();
     HistoryInfo info;
     info.canUndo = !gestureOpen_ && position_ > 0;
     info.canRedo = !gestureOpen_ && position_ < steps_.size();
@@ -135,6 +150,7 @@ void ProcessorEditorBridge::setEditSlot(int slot) {
     if (slot == 0 || slot == 1) editSlot_ = slot;
 }
 void ProcessorEditorBridge::copySlot(int from, int to) {
+    syncStateEpoch();
     if (processor_.edition() == Edition::Lite || from < 0 || from > 1 || to < 0 || to > 1 || from == to) return;
     if (gestureOpen_) endGesture();
     const auto before = snapshot();
@@ -152,6 +168,7 @@ void ProcessorEditorBridge::copySlot(int from, int to) {
     finish(before, from == 0 ? "Copy A to B" : "Copy B to A");
 }
 void ProcessorEditorBridge::swapSlots() {
+    syncStateEpoch();
     if (processor_.edition() == Edition::Lite) return;
     if (gestureOpen_) endGesture();
     const auto before = snapshot();
@@ -206,10 +223,13 @@ bool ProcessorEditorBridge::savePng(const juce::Image& image, const juce::File& 
     juce::FileOutputStream output(file);
     if (!output.openedOk()) { error = "Cannot open screenshot destination"; return false; }
     juce::PNGImageFormat png;
-    if (!output.setPosition(0) || !output.truncate() || !png.writeImageToStream(image, output) || !output.flush()) {
-        error = "Could not write PNG image";
+    output.setPosition(0);
+    output.truncate();
+    if (!png.writeImageToStream(image, output)) {
+        error = "Could not encode PNG image";
         return false;
     }
+    output.flush();
     return true;
 }
 UiSettings ProcessorEditorBridge::uiSettings() { return ui_; }
