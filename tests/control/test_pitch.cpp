@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <limits>
 #include <thread>
 #include <vector>
 #include "TestHarness.h"
@@ -15,6 +16,41 @@ static PitchResult feedAll(PitchDetector& d, const std::vector<double>& x, int b
         d.run();
     }
     return d.latest();
+}
+
+static void directPrepareBounds() {
+    PitchDetector d;
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    for (double badRate : {nan, inf, -inf, -48000.0, 0.0, 15999.0, 768001.0}) {
+        d.prepare(badRate);
+        CHECK(!d.prepared(), "reject out-of-range or nonfinite detector rate");
+        CHECK(d.latest().state == PitchState::None, "rejected rate has no published pitch");
+    }
+    d.prepare(48000.0, std::numeric_limits<std::size_t>::max());
+    CHECK(!d.prepared(), "reject SIZE_MAX ring without wrapping or allocating");
+    d.prepare(48000.0, PitchDetector::kMaxRingSamples + 1);
+    CHECK(!d.prepared(), "reject ring above the explicit memory cap");
+    d.prepare(PitchDetector::kMinSampleRate, 0);
+    CHECK(d.prepared(), "minimum rate and legacy zero-size ring request normalize");
+    d.prepare(PitchDetector::kMaxSampleRate, PitchDetector::kMaxRingSamples);
+    CHECK(d.prepared(), "maximum rate and capacity boundaries accepted");
+
+    d.prepare(48000.0);
+    const auto tone = th::sine(220.0, 0.3, 48000.0, 24000);
+    const PitchResult before = feedAll(d, tone);
+    CHECK(before.state == PitchState::Acquired && d.isFresh(before), "acquire before reprepare");
+    d.prepare(48000.0);
+    CHECK(!d.isFresh(before), "same-rate reprepare invalidates saved pitch generation");
+    const PitchResult after = feedAll(d, tone);
+    CHECK(after.state == PitchState::Acquired && d.isFresh(after), "reprepare reacquires");
+    d.prepare(nan);
+    CHECK(!d.prepared() && d.latest().state == PitchState::None,
+          "invalid reprepare clears published pitch");
+    CHECK(!d.isFresh(after) && d.pushedSamples() == 0,
+          "invalid reprepare makes saved results stale and clears input clock");
+    d.push(tone.data(), 480);
+    CHECK(d.pushedSamples() == 0, "unprepared producer ignores audio");
 }
 
 static void cleanTones() {
@@ -234,6 +270,7 @@ static void threadedSpsc() {
 }
 
 int main() {
+    directPrepareBounds();
     cleanTones();
     lowConfidence();
     hopStateMachine();

@@ -230,3 +230,23 @@ persistence work advances G11/G12 without closing their full acceptance criteria
 ADR-0001 records the build/license decision. Do not weaken acceptance criteria or
 convert source, stub, mock, sanitizer timing or documentation checks into physical
 or release qualification.
+
+## Isolated detector admission follow-up — 2026-11-20 UTC
+
+The independent [pitch prepare continuation](../../src/control/PitchDetector.cpp)
+is being developed on `codex/cdfx-pitch-prepare-bounds-20261120`, based on exact PR #16 source
+`b3e05b652147a584ad5fb22e5715d1e61b702318`; **it has not been merged into this PR**. The narrow change
+addresses the explicit direct-API detector follow-up in
+[the runtime review](../audits/RUNTIME_REVIEW_2026-11-20.md): reject
+nonfinite/out-of-range rates and oversized ring requests *before* the
+capacity-doubling loop and allocation; invalidate retained pitch on rejected
+reprepares; and avoid recycling generations on valid reset/reprepare.
+It adds synthetic regression cases to `control_pitch` for both limits and
+saved-result invalidation. See
+[focused handoff](../audits/PITCH_PREPARE_FOLLOWUP_2026-11-20.md).
+
+The source has only connector-backed review/syntax preflight, not a completed
+native CMake/CTest run or independent review. The existing PR #16 Linux/Windows
+qualification remains scoped to its exact head. Do not import this isolated
+branch until it has been built and reviewed, and compare the PR head before
+guarded integration.
