@@ -145,9 +145,11 @@ public:
                              juce::String(c.leak * 100.0, 1) + " % of safe span, added noise +" + juce::String(c.noiseDb, 1) + " dB (only audible when Analog Noise is on), drift x" +
                              juce::String(c.drift, 1) + ". Authored profile, not measured.",
                          Tone::Dim);
-        const bool canCommit = sc.restored && u >= 0.999;
+        const bool supported = bridge.supportsRestorationCommit();
+        const bool canCommit = supported && sc.restored && u >= 0.999;
         commit_->setEnabled(canCommit);
-        ch |= commitNote_->set(canCommit ? "Ready: the Restored ending is selected and the scrubber is at 100 %."
+        ch |= commitNote_->set(!supported ? "Component replacement is unavailable until runtime seed transactions are connected (G12)."
+                                       : canCommit ? "Ready: the Restored ending is selected and the scrubber is at 100 %."
                                          : "Available only with the Restored scenario at 100 %. Previewing never reseeds components.",
                                canCommit ? Tone::Ok : Tone::Dim);
         engine::TelemetryFrame f;
