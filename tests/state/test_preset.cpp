@@ -4,9 +4,11 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <random>
 #include <set>
 #include <string>
+#include <stdexcept>
 #include <vector>
 #include "state/Preset.h"
 #include "state/PresetLibrary.h"
@@ -167,6 +169,22 @@ void testModified() {
     const Config loadedB = applyScene(base, 1, factoryPresets()[3].scene, true);
     CHECK(loadedB.slots[0] == base.slots[0] && loadedB.get(core::indexOf("macro.sag")) == base.get(core::indexOf("macro.sag")));
     CHECK(loadedB.slots[1] == factoryPresets()[3].scene.slot);
+
+    // These public scene helpers are called with a UI/service slot index.
+    // Negative and out-of-range indices must fail before accessing the slots array.
+    const auto slotRejected = [](auto&& operation) {
+        try { operation(); }
+        catch (const std::out_of_range&) { return true; }
+        catch (...) { return false; }
+        return false;
+    };
+    const Config unchanged = base;
+    for (const int invalid : {-1, 2, std::numeric_limits<int>::max()}) {
+        CHECK(slotRejected([&] { (void)captureScene(base, invalid, PresetMeta{}); }));
+        CHECK(slotRejected([&] { (void)applyScene(base, invalid, clean); }));
+        CHECK(slotRejected([&] { (void)matchesScene(base, invalid, clean); }));
+        CHECK(base == unchanged);
+    }
 }
 
 void testHostile() {
