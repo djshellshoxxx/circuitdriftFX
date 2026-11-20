@@ -308,26 +308,63 @@ FlowContent::FlowContent() {
     setLookAndFeel(&laf_);
     setOpaque(true);
 }
+FlowContent::~FlowContent() {
+    for (auto& editor : textEditors_)
+        if (editor != nullptr) editor->removeListener(this);
+    setLookAndFeel(nullptr);
+}
 void FlowContent::setTheme(const Theme& t) {
     theme_ = t;
     applyTheme(laf_, t);
     sendLookAndFeelChange();
+    syncTextEditors();
+    repaint();
+}
+void FlowContent::syncTextEditors() {
+    std::erase_if(textEditors_, [this](auto& editor) {
+        if (editor == nullptr) return true;
+        if (editor->template findParentComponentOfClass<FlowContent>() == this) return false;
+        editor->removeListener(this);
+        return true;
+    });
     // JUCE keeps the colour of existing TextEditor glyphs separately from
-    // LookAndFeel. Update plain-text contents too, so switching themes does
-    // not leave a dark blueprint or search query on a dark background.
+    // LookAndFeel, including colours restored by its undo/redo actions. Keep
+    // plain-text contents and placeholders current without replacing callbacks
+    // or changing the document, selection, caret or editing history.
     const auto updateText = [&](auto&& self, juce::Component& component) -> void {
-        if (auto* editor = dynamic_cast<juce::TextEditor*>(&component))
-            editor->applyColourToAllText(t.text, false);
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(&component);
+            editor != nullptr && editor->findParentComponentOfClass<FlowContent>() == this) {
+            if (std::none_of(textEditors_.begin(), textEditors_.end(),
+                             [editor](const auto& tracked) { return tracked.getComponent() == editor; })) {
+                editor->addListener(this);
+                textEditors_.emplace_back(editor);
+            }
+            editor->applyColourToAllText(theme_.text, false);
+            editor->setTextToShowWhenEmpty(editor->getTextToShowWhenEmpty(), theme_.textDim);
+        }
         for (auto* child : component.getChildren()) self(self, *child);
     };
     updateText(updateText, *this);
-    repaint();
+}
+void FlowContent::textEditorTextChanged(juce::TextEditor& editor) {
+    if (editor.findParentComponentOfClass<FlowContent>() != this) {
+        editor.removeListener(this);
+        std::erase_if(textEditors_, [&editor](const auto& tracked) {
+            return tracked == nullptr || tracked.getComponent() == &editor;
+        });
+        return;
+    }
+    // This only updates glyph colours/repaints; it does not send a text change
+    // notification or create an undo action. JUCE calls listeners before the
+    // field's existing onTextChange callback, on the message thread.
+    editor.applyColourToAllText(theme_.text, false);
 }
 void FlowContent::paint(juce::Graphics& g) { g.fillAll(theme_.panel); }
 
 void FlowContent::addItem(juce::Component& c, int basis, int height, bool full) {
     addAndMakeVisible(c);
     items_.push_back({&c, basis, height, full, {}});
+    syncTextEditors();
 }
 void FlowContent::addNote(NoteLabel& n) {
     addChildComponent(n);

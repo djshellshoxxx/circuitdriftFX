@@ -118,10 +118,10 @@ int textWidth(const juce::String& text, float height, bool bold = false);
 int buttonBasis(const juce::String& text);
 void tip(juce::Component& c, const juce::String& name, const juce::String& tooltip);
 
-class FlowContent : public juce::Component {
+class FlowContent : public juce::Component, private juce::TextEditor::Listener {
 public:
     FlowContent();
-    ~FlowContent() override { setLookAndFeel(nullptr); }
+    ~FlowContent() override;
     struct Item {
         juce::Component* c;
         int basis;
@@ -138,9 +138,12 @@ public:
     const std::vector<Item>& items() const noexcept { return items_; }
 
 private:
+    void syncTextEditors();
+    void textEditorTextChanged(juce::TextEditor&) override;
     Theme theme_ = darkTheme();
     juce::LookAndFeel_V4 laf_;
     std::vector<Item> items_;
+    std::vector<juce::Component::SafePointer<juce::TextEditor>> textEditors_;
 };
 
 const Theme& themeOf(const juce::Component& c);

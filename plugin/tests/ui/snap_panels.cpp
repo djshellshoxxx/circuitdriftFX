@@ -96,6 +96,157 @@ StatusInfo richStatus(FakeBridge& b, bool modified) {
     return s;
 }
 
+juce::Image renderTextEditor(juce::TextEditor& editor) {
+    juce::Image image(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
+    juce::Graphics graphics(image);
+    editor.paintEntireComponent(graphics, false);
+    return image;
+}
+
+bool samePixels(const juce::Image& a, const juce::Image& b) {
+    if (!a.isValid() || !b.isValid() || a.getBounds() != b.getBounds()) return false;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y)) return false;
+    return true;
+}
+
+void expectGlyphColour(juce::TextEditor& editor, juce::Colour colour, const juce::String& message) {
+    // findColour() was already correct in the broken implementation. Compare
+    // the actual stored glyph rendering with the same field normalized to the
+    // intended colour, without changing its text, history or caret/selection.
+    const auto actual = renderTextEditor(editor);
+    editor.applyColourToAllText(colour, false);
+    expect(samePixels(actual, renderTextEditor(editor)), message);
+}
+
+class ThemeHistoryRegression final : private juce::Timer {
+public:
+    void run() {
+        // An editor may outlive its FlowContent, or die before the content.
+        // Dispatching the first queued edit below must not call a dead listener.
+        survivor_.setBounds(0, 0, 240, 32);
+        survivor_.onTextChange = [this] { ++survivorCallbacks_; };
+        {
+            pc::FlowContent owner;
+            owner.addItem(survivor_, 240, 32);
+            survivor_.insertTextAtCaret("Owner gone");
+            auto early = std::make_unique<juce::TextEditor>();
+            owner.addItem(*early, 240, 32);
+            early.reset();
+            owner.setTheme(ui::lightTheme());
+        }
+
+        // A queued notification follows the editor to its new parent. The old
+        // content must neither retain a dangling registration nor recolour it.
+        auto former = std::make_unique<pc::FlowContent>();
+        former->setTheme(ui::lightTheme());
+        moved_.setBounds(0, 0, 240, 32);
+        moved_.setCaretVisible(false);
+        former->addItem(moved_, 240, 32);
+        moved_.insertTextAtCaret("Moved text");
+        currentOwner_ = std::make_unique<pc::FlowContent>();
+        currentOwner_->setTheme(ui::darkTheme());
+        currentOwner_->addItem(moved_, 240, 32);
+        former->setTheme(ui::lightTheme());
+        former.reset();
+
+        startTimer(5000);
+        if (queueNext()) juce::MessageManager::getInstance()->runDispatchLoop();
+        stopTimer();
+    }
+
+private:
+    bool queueNext() {
+        if (juce::MessageManager::callAsync([this] { advance(); })) return true;
+        fail("could not queue theme-history regression");
+        finish();
+        return false;
+    }
+    void finish() {
+        finished_ = true;
+        stopTimer();
+        juce::MessageManager::getInstance()->stopDispatchLoop();
+    }
+    void timerCallback() override { fail("theme-history dispatch timed out"); finish(); }
+    void rememberEdit() {
+        caret_ = editor_->getCaretPosition();
+        selection_ = editor_->getHighlightedRegion();
+    }
+    void checkDelivered(const juce::String& text, const char* operation) {
+        expect(callbacks_ > callbacksBefore_, juce::String(operation) + " delivers the existing text callback");
+        expect(editor_->getText() == text, juce::String(operation) + " preserves the expected draft");
+        expect(editor_->getCaretPosition() == caret_ && editor_->getHighlightedRegion() == selection_,
+               juce::String(operation) + " listener preserves the edit's caret and selection");
+        expectGlyphColour(*editor_, ui::themeFor(!initialDark_).text,
+                          juce::String(operation) + " restores glyphs in the current theme");
+    }
+    void advance() {
+        if (finished_) return;
+        if (scenario_ == 4) { finish(); return; }
+        initialDark_ = scenario_ >= 2;
+        const bool deletion = (scenario_ % 2) != 0;
+        currentCase = juce::String("theme-history-") + (initialDark_ ? "dark-to-light-" : "light-to-dark-") +
+                      (deletion ? "deletion" : "insertion");
+        if (phase_ == 0) {
+            if (scenario_ == 0) {
+                expect(survivorCallbacks_ == 1, "queued editor callback survives content destruction");
+                expectGlyphColour(moved_, ui::darkTheme().text, "reparented editor uses its current content theme");
+            }
+            UiSettings settings; settings.darkTheme = initialDark_;
+            bridge_.setUiSettings(settings);
+            panel_ = ui::createPanel(ui::PanelId::Blueprint, bridge_);
+            panel_->setBounds(0, 0, 420, 1400);
+            editor_ = findByTitle<juce::TextEditor>(*panel_, "Blueprint JSON");
+            if (editor_ == nullptr) { fail("theme-history blueprint editor missing"); finish(); return; }
+            editor_->setCaretVisible(false);
+            editor_->setFont(juce::Font(juce::FontOptions(22.0f)));
+            editor_->setText(deletion ? "MMWW" : "MM", false);
+            callbacks_ = 0;
+            const auto original = editor_->onTextChange;
+            editor_->onTextChange = [this, original] { ++callbacks_; if (original) original(); };
+            if (deletion) editor_->setHighlightedRegion({2, 4});
+            else editor_->setCaretPosition(2);
+            editor_->insertTextAtCaret(deletion ? "" : "WW");
+        } else if (phase_ == 1) {
+            expect(callbacks_ > 0, "initial edit uses the real asynchronous callback");
+            const auto draft = editor_->getText();
+            editor_->setHighlightedRegion({0, 1});
+            rememberEdit();
+            UiSettings settings; settings.darkTheme = !initialDark_;
+            panel_->settingsChanged(settings);
+            expect(editor_->getText() == draft && editor_->getCaretPosition() == caret_ &&
+                   editor_->getHighlightedRegion() == selection_, "theme switch preserves draft, caret and selection");
+            callbacksBefore_ = callbacks_;
+            expect(editor_->undo(), "theme switch preserves undo history");
+            rememberEdit();
+        } else if (phase_ == 2) {
+            checkDelivered(deletion ? "MMWW" : "MM", "undo");
+            callbacksBefore_ = callbacks_;
+            expect(editor_->redo(), "colour normalization preserves redo history");
+            rememberEdit();
+        } else {
+            checkDelivered(deletion ? "MM" : "MMWW", "redo");
+            panel_.reset();
+            editor_ = nullptr;
+            ++scenario_;
+            phase_ = -1;
+        }
+        ++phase_;
+        queueNext();
+    }
+
+    FakeBridge bridge_;
+    std::unique_ptr<ui::Panel> panel_;
+    juce::TextEditor* editor_ = nullptr;
+    juce::TextEditor survivor_, moved_;
+    std::unique_ptr<pc::FlowContent> currentOwner_;
+    juce::Range<int> selection_;
+    int scenario_ = 0, phase_ = 0, caret_ = 0;
+    int callbacks_ = 0, callbacksBefore_ = 0, survivorCallbacks_ = 0;
+    bool initialDark_ = false, finished_ = false;
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -334,6 +485,34 @@ int main(int argc, char** argv) {
             expect(selectionBridge.loadedId == "factory:mint-1968-console", "reselection targets the new factory result");
         } else fail("preset search/selection controls");
     }
+
+    {
+        currentCase = "theme-placeholder-colours";
+        for (bool initialDark : {false, true}) {
+            FakeBridge themedBridge;
+            UiSettings settings; settings.darkTheme = initialDark;
+            themedBridge.setUiSettings(settings);
+            auto panel = ui::createPanel(ui::PanelId::Presets, themedBridge);
+            panel->setBounds(0, 0, 420, 1400);
+            settings.darkTheme = !initialDark;
+            panel->settingsChanged(settings);
+            for (const auto* title : {"Search presets", "Preset name"}) {
+                auto* editor = findByTitle<juce::TextEditor>(*panel, title);
+                expect(editor != nullptr && editor->isEmpty(), juce::String(title) + " starts empty");
+                if (editor == nullptr) continue;
+                editor->setCaretVisible(false);
+                const auto actual = renderTextEditor(*editor);
+                editor->setTextToShowWhenEmpty(editor->getTextToShowWhenEmpty(), ui::themeFor(!initialDark).textDim);
+                expect(samePixels(actual, renderTextEditor(*editor)), juce::String(title) + " placeholder follows the current theme");
+            }
+        }
+    }
+
+    // Run exactly one message loop, last: JUCE_MODAL_LOOPS_PERMITTED is disabled.
+    // Each assertion is queued after genuine editor notifications; no direct
+    // onTextChange calls stand in for listener delivery in this regression.
+    ThemeHistoryRegression themeHistory;
+    themeHistory.run();
 
     std::printf(failures ? "UI panels snapshot FAILED (%d)\n" : "UI panels snapshot passed\n", failures);
     return failures ? 1 : 0;
