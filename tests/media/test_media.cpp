@@ -93,6 +93,93 @@ void testPng() {
     mediatest::DecodedPng d; CHECK(!mediatest::decodePng(png, d));
 }
 
+void testGifLzwTermination() {
+    // Independent, hand-packed LSB-first streams. With minimum code size 2,
+    // clear=4 and EOI=5; the third data code installs entry 7 and widens EOI
+    // from 3 to 4 bits. With minimum 3, the seventh data code widens 4 to 5.
+    struct ValidFixture { unsigned minimum; const char* packed; Bytes pixels; };
+    const ValidFixture valid[] = {
+        {2, "440a", {0, 1}},                 // 4/3, 0/3, 1/3, 5/3: before widening.
+        {2, "4454", {0, 1, 2}},              // 4/3, 0/3, 1/3, 2/3, 5/4: EOI widens.
+        {2, "443405", {0, 1, 2, 3}},         // Final literal 3 and EOI both use 4 bits.
+        {2, "445c", {0, 1, 0, 1}},           // Final dictionary code 6/3, then EOI 5/4.
+        {2, "840b", {0, 0, 0}},              // 4/3, 0/3, 6/3, 5/3: code==next case.
+        {3, "08214395", {0, 1, 2, 3, 4, 5}},
+        {3, "0821436509", {0, 1, 2, 3, 4, 5, 6}},
+        {3, "082143652701", {0, 1, 2, 3, 4, 5, 6, 7}},
+        // Extra clear codes move EOI's last zero bit into its own byte.
+        // That byte is required even though the lower bits already equal EOI.
+        {2, "2489a800", {0, 1, 2}},          // 4,4,4,4,0,1,2 at 3 bits; EOI at 4.
+        {3, "881032549600", {0, 1, 2, 3, 4, 5, 6}}, // 8,8,0..6 at 4 bits; EOI at 5.
+        {2, "2c", {}}                       // Clear followed by EOI, with no pixels.
+    };
+    for (const auto& fixture : valid) {
+        Bytes decoded;
+        CHECK(mediatest::lzwDecode(unhex(fixture.packed), fixture.minimum, fixture.pixels.size(), decoded));
+        CHECK(decoded == fixture.pixels);
+    }
+
+    struct InvalidFixture { unsigned minimum; const char* packed; std::size_t pixels; };
+    const InvalidFixture invalid[] = {
+        {2, "4434", 4},              // All four pixels, then EOF on a byte boundary: no EOI.
+        {2, "2489a8", 3},            // All pixels and three of EOI's four bits.
+        {3, "8810325496", 7},        // All pixels and four of EOI's five bits.
+        {2, "440a", 3},              // Premature EOI after only two pixels.
+        {2, "2c", 1},                // Premature EOI before the first pixel.
+        {2, "443405", 3},            // An extra literal after the expected pixels.
+        {2, "445c", 2},              // An extra dictionary code after the expected pixels.
+        {2, "445c", 3},              // A dictionary expansion exceeds the remaining count.
+        {2, "840b", 1},              // An extra code==next expansion after the expected pixels.
+        {2, "840b", 2},              // Its repeated first byte exceeds the remaining count.
+        {2, "", 0}                   // Even zero expected pixels require a complete EOI.
+    };
+    for (const auto& fixture : invalid) {
+        Bytes decoded;
+        CHECK(!mediatest::lzwDecode(unhex(fixture.packed), fixture.minimum, fixture.pixels, decoded));
+        CHECK(decoded.size() <= fixture.pixels);
+    }
+
+    // A valid GIF envelope and trailer must not conceal malformed LZW data.
+    const auto gifWithData = [](unsigned width, const char* packed) {
+        const Bytes data = unhex(packed);
+        Bytes gif = {'G', 'I', 'F', '8', '9', 'a', std::uint8_t(width), 0, 1, 0, 0x81, 0, 0,
+                     0, 0, 0, 85, 85, 85, 170, 170, 170, 255, 255, 255,
+                     0x2c, 0, 0, 0, 0, std::uint8_t(width), 0, 1, 0, 0, 2,
+                     std::uint8_t(data.size())};
+        gif.insert(gif.end(), data.begin(), data.end());
+        gif.push_back(0); gif.push_back(0x3b);
+        return gif;
+    };
+    mediatest::DecodedGif complete, missing, truncated, premature, extra;
+    CHECK(mediatest::decodeGif(gifWithData(4, "443405"), complete));
+    CHECK(complete.trailer && complete.frames.size() == 1 && complete.frames[0].rgba.size() == 16);
+    CHECK(!mediatest::decodeGif(gifWithData(4, "4434"), missing));
+    CHECK(!mediatest::decodeGif(gifWithData(3, "2489a8"), truncated));
+    CHECK(!mediatest::decodeGif(gifWithData(4, "4454"), premature));
+    CHECK(!mediatest::decodeGif(gifWithData(3, "443405"), extra));
+
+    // Exercise the production writer immediately before, at and after the same
+    // final-data/EOI width transitions, in addition to the fixed fixtures above.
+    for (const unsigned width : {2u, 3u, 4u, 6u, 7u, 8u}) {
+        Bytes pixels;
+        for (unsigned i = 0; i < width; ++i) {
+            const auto value = std::uint8_t(i * 31);
+            pixels.insert(pixels.end(), {value, value, value, 255});
+        }
+        std::string error;
+        GifWriter writer;
+        GifOptions options; options.loop = false;
+        CHECK(writer.begin(width, 1, options, {}, error));
+        CHECK(writer.addFrame(pixels.data(), pixels.size(), error));
+        Bytes gif;
+        CHECK(writer.finish(gif, error));
+        mediatest::DecodedGif decoded;
+        CHECK(mediatest::decodeGif(gif, decoded));
+        CHECK(decoded.trailer && decoded.frames.size() == 1);
+        if (decoded.frames.size() == 1) CHECK(decoded.frames[0].rgba == pixels);
+    }
+}
+
 void testGif() {
     std::string err;
     // Frame set: exact palettes, a subset palette (reuses global), a disjoint palette (local table), 2 colours.
@@ -455,7 +542,7 @@ void testAv() {
 }  // namespace
 
 int main() {
-    testChecksums(); testInflateFixed(); testPng(); testGif(); testGifByteLimits(); testGifRepeatedFrames(); testQueue(); testMp4(); testAv();
+    testChecksums(); testInflateFixed(); testPng(); testGifLzwTermination(); testGif(); testGifByteLimits(); testGifRepeatedFrames(); testQueue(); testMp4(); testAv();
     if (failures) { std::printf("%d media check(s) FAILED\n", failures); return 1; }
     std::printf("media tests passed\n");
     return 0;

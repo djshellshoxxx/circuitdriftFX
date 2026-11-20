@@ -114,7 +114,7 @@ struct GifFrameOut { unsigned delayCs = 0; Bytes rgba; };
 struct DecodedGif { std::uint32_t w = 0, h = 0; bool hasLoopExt = false; unsigned loops = 1; std::vector<GifFrameOut> frames; bool trailer = false; };
 
 inline bool lzwDecode(const Bytes& packed, unsigned minCode, std::size_t expect, Bytes& out) {
-    if (minCode < 2 || minCode > 8) return false;
+    if (minCode < 2 || minCode > 8 || out.size() > expect) return false;
     const unsigned clear = 1u << minCode, eoi = clear + 1;
     std::vector<std::uint16_t> prefix(4096, 0); std::vector<std::uint8_t> suffix(4096, 0), first(4096, 0);
     for (unsigned i = 0; i < clear; ++i) { suffix[i] = std::uint8_t(i); first[i] = std::uint8_t(i); }
@@ -124,24 +124,27 @@ inline bool lzwDecode(const Bytes& packed, unsigned minCode, std::size_t expect,
         Bytes tmp;
         while (code >= clear) { tmp.push_back(suffix[code]); code = prefix[code]; if (tmp.size() > 4096) return false; }
         tmp.push_back(suffix[code]);
+        if (tmp.size() > expect - out.size()) return false;
         out.insert(out.end(), tmp.rbegin(), tmp.rend());
         return true;
     };
-    while (out.size() < expect) {
+    // Pixel count alone cannot terminate the stream: EOI must be read in full,
+    // including any width increase caused by the final data code.
+    for (;;) {
         const unsigned code = br.get(size);
         if (br.eof) return false;
         if (code == clear) { next = eoi + 1; size = minCode + 1; prev = -1; continue; }
-        if (code == eoi) break;
+        if (code == eoi) return out.size() == expect;
+        if (out.size() == expect) return false;
         if (prev < 0) { if (code >= clear) return false; out.push_back(std::uint8_t(code)); prev = int(code); continue; }
         unsigned f;
         if (code < next) { if (!emit(code)) return false; f = first[code]; }
-        else if (code == next) { f = first[unsigned(prev)]; if (!emit(unsigned(prev))) return false; out.push_back(std::uint8_t(f)); }
+        else if (code == next) { f = first[unsigned(prev)]; if (!emit(unsigned(prev)) || out.size() == expect) return false; out.push_back(std::uint8_t(f)); }
         else return false;
         if (next < 4096) { prefix[next] = std::uint16_t(prev); suffix[next] = std::uint8_t(f); first[next] = first[unsigned(prev)]; ++next; }
         if (next == (1u << size) && size < 12) ++size;
         prev = int(code);
     }
-    return out.size() == expect;
 }
 
 inline bool decodeGif(const Bytes& f, DecodedGif& g) {
