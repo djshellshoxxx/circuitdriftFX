@@ -129,3 +129,77 @@ services remain separate work. Do not mark G12 complete from these repairs.
 Integrate the three source commits with the other workers' reviewed changes,
 then run the combined state/runtime/plugin gates. Keep the older branches until
 their remaining snapshot and edition features have an explicit disposition.
+
+## Follow-up: queue ordering failure from combined qualification
+
+The coordinator's later combined core run passed 29/30 suites and exposed a
+failure of the existing `state_queue` monotonic assertion. Its queue diagnostics
+reported 6,459 ring pushes and 9,541 coalesced pushes. The earlier five-suite pass
+above remains evidence for that particular execution; it did not establish that
+all queue schedules were correct. The failing assertion was retained unchanged.
+
+### Cause and repair
+
+The consumer snapshots the ring tail to bound each drain. After it releases the
+consumed ring slots, the producer can append new ring events and publish an even
+newer coalesced value before that drain's coalescing phase. The consumer can thus
+apply the newest value and encounter an older ring event on its next drain.
+The previous separate value/gesture atomics also did not transfer one coherent
+publication after the pending flag was cleared.
+
+Source commit `43d2d777670e068c6be3d6aa7724a7afca403035` replaces each
+coalescing slot with a three-slot SPSC mailbox and gives every accepted event a
+per-parameter sequence number. The consumer remembers the newest sequence it
+has applied and skips older ring events already superseded by a coalesced value.
+Numerical decreases remain valid; freshness is decided by sequence, not value.
+Sequence exhaustion rejects further pushes with an explicit false return and
+rejection count instead of wrapping.
+
+Mailbox ownership remains disjoint: the producer owns its back slot, the
+consumer owns its front slot, and an atomic middle slot transfers ownership.
+An acquire/release exchange publishes a fully initialized event and returns a
+slot whose prior owner has finished using it. The producer cannot overwrite the
+consumer's active slot. The complete value, gesture identifier and sequence
+therefore travel together. Coalesced events still use sample offset zero and no
+gesture kind, as in the existing overflow contract.
+
+The callback retains its fixed bound of at most the ring capacity plus the
+parameter count. It introduces no allocation, lock, wait, retry loop, or I/O.
+Lock-free compile-time checks cover the mailbox index, ring sequence atomics,
+queue ownership guards, and the separate snapshot publisher's atomic doubles.
+
+### Regressions and independent review
+
+- A deterministic test pauses between the actual production ring and coalesced
+  drain phases. It appends an older ring update and a newer coalesced update,
+  then verifies that the next drain cannot replay the older value or event
+  record. A subsequent genuine value decrease is still delivered.
+- A focused concurrent overflow test checks that every observed value matches
+  its gesture identifier, records remain ordered, callback work is bounded, and
+  the final accepted value is delivered. Overflow is guaranteed before the
+  consumer starts.
+- A bounded counter-boundary test verifies explicit exhaustion rejection.
+- Existing overflow counts, monotonicity, final-value delivery, ownership,
+  no-allocation, `noexcept`, and coherent snapshot assertions remain enabled.
+
+A separate read-only reviewer checked the mailbox's C++ ownership/memory-order
+argument, stale-event suppression, and deterministic test. No blocking finding
+remained. The review's request to retain the atomic-double lock-free assertion
+was resolved by placing it with `ParamSnapshotPublisher`, which still uses it.
+
+### Follow-up validation
+
+The exact source and tests in `43d2d77` passed **25 fixed repetitions** of
+`state_queue` in **4.52 seconds** using GCC 14.2, C++20, `-O1 -g -DNDEBUG`,
+ASan, UBSan, and float-cast-overflow instrumentation. The command stopped on the
+first failure; all 25 passed. No assertion or acceptance threshold was reduced.
+
+```sh
+cmake -S . -B ../cdfx-queue-build -DCD_SANITIZE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS_RELWITHDEBINFO='-O1 -g -DNDEBUG' -DCD_BUILD_PLUGIN=OFF
+cmake --build ../cdfx-queue-build --target cd_state_queue_tests -j2
+ASAN_OPTIONS=detect_leaks=0 ctest --test-dir ../cdfx-queue-build --output-on-failure -R '^state_queue$' --repeat until-fail:25
+```
+
+This is focused verification of the queue repair, not a replacement for the
+coordinator's full combined run. No ThreadSanitizer, Windows, native plugin,
+physical-model, or release-performance result is claimed by this follow-up.
