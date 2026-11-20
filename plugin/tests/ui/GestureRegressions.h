@@ -3,6 +3,7 @@
 #include "FakeBridge.h"
 #include "ui/panels/PanelCommon.h"
 #include "ui/workbench/ParamOps.h"
+#include "ui/shell/ShellWidgets.h"
 
 #include <cstdio>
 #include <limits>
@@ -153,6 +154,41 @@ inline int run() {
         check(gestures.begins == 1 && gestures.ends == 1 && bridge.open == 0,
               "destroying a dragging slider closes its live binding once");
         check(teardownCallbacks == 0, "slider callbacks detach before referenced members die");
+    }
+    {
+        namespace shell = cd::plugin::ui::shell;
+        shell::ShellContext context;
+        auto& age = *bridge.parameters().getParameter("macro.age");
+        HostGestures gestures(age);
+        auto knob = std::make_unique<shell::Knob>(context, bridge, "macro.age", "Age", shell::Fmt::Percent);
+        knob->setSize(120, 120);
+        knob->nudgeNormalized(0.1, false);
+        knob->nudgeNormalized(0.1, false);
+        check(gestures.begins == 1 && gestures.ends == 0 && bridge.open == 1,
+              "keyboard and wheel knob changes share one open host gesture");
+        knob->focusLost(juce::Component::focusChangedDirectly);
+        check(gestures.begins == 1 && gestures.ends == 1 && bridge.open == 0,
+              "focus loss closes both knob host and undo gestures");
+        check(knob->commitText("40 %"), "knob accepts valid numeric edit");
+        knob->resetToDefault();
+        check(gestures.begins == 3 && gestures.ends == 3 && bridge.open == 0,
+              "numeric edit and reset each publish a complete host gesture");
+
+        int teardownCallbacks = 0;
+        auto originalEnd = knob->onDragEnd;
+        knob->onDragEnd = [&] { ++teardownCallbacks; originalEnd(); };
+        const juce::Point<float> position{60.0f, 50.0f};
+        const auto now = juce::Time::getCurrentTime();
+        const juce::MouseEvent down(juce::Desktop::getInstance().getMainMouseSource(), position,
+                                   juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier),
+                                   1.0f, 0.0f, 0.0f, 0.0f, 0.0f, knob.get(), knob.get(), now, position, now, 1, false);
+        knob->mouseDown(down);
+        check(gestures.begins == 4 && gestures.ends == 3 && bridge.open == 1,
+              "actual knob mouse down opens one host gesture");
+        knob.reset();
+        check(gestures.begins == 4 && gestures.ends == 4 && bridge.open == 0,
+              "destroying a dragging knob closes the host and undo gestures once");
+        check(teardownCallbacks == 0, "knob callbacks detach before derived members are destroyed");
     }
     numericPanelRegressions(bridge);
     if (!failures) std::puts("UI host-gesture regressions passed");

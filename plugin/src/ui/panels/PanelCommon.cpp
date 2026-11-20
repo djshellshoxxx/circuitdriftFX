@@ -143,6 +143,7 @@ void ParamBinding::setComplete(float v) {
     if (!attach_ || !std::isfinite(v)) return;
     if (inPart_) { setPart(v); return; }
     bridge_.beginGesture(label_);
+    bridge_.touchParameter(id_);
     attach_->setValueAsCompleteGesture(v);
     bridge_.endGesture();
 }
@@ -150,6 +151,7 @@ void ParamBinding::beginPart() {
     if (!attach_ || inPart_) return;
     inPart_ = true;
     bridge_.beginGesture(label_);
+    bridge_.touchParameter(id_);
     attach_->beginGesture();
 }
 void ParamBinding::setPart(float v) {

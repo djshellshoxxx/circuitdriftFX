@@ -45,6 +45,7 @@ private:
     void timerCallback() override { endKeyGesture(); }
     void beginKeyGesture();
     void endKeyGesture();
+    void setValueAsUserGesture(const juce::String& label, double value);
     bool horizontal() const noexcept { return getWidth() > getHeight() * 1.7f; }
     void geometry(juce::Rectangle<float>& knob, juce::Rectangle<float>& label, juce::Rectangle<float>& value) const;
 
@@ -54,7 +55,7 @@ private:
     Fmt fmt_;
     std::unique_ptr<juce::SliderParameterAttachment> attachment_;
     std::unique_ptr<juce::TextEditor> entry_;
-    bool hover_ = false, keyGesture_ = false, bipolar_ = false;
+    bool hover_ = false, keyGesture_ = false, dragGesture_ = false, bipolar_ = false;
     float decoration_ = 1.0f;
 };
 

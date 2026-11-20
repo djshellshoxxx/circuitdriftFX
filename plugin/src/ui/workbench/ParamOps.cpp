@@ -41,7 +41,10 @@ bool ParamOps::begin(const juce::String& label, const std::vector<juce::String>&
             touched_.push_back({n, p, p->getValue()});
     }
     bridge_.beginGesture(label);
-    for (auto& t : touched_) t.parameter->beginChangeGesture();
+    for (auto& t : touched_) {
+        bridge_.touchParameter(t.parameter->getParameterID());
+        t.parameter->beginChangeGesture();
+    }
     active_ = true;
     return true;
 }

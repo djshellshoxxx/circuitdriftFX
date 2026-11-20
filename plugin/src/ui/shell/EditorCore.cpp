@@ -942,6 +942,7 @@ void EditorCore::applyScene(int index) {
     auto& apvts = p_->bridge.parameters();
     auto set = [&](const char* id, double v) {
         if (auto* prm = apvts.getParameter(id)) {
+            p_->bridge.touchParameter(id);
             prm->beginChangeGesture();
             prm->setValueNotifyingHost(prm->convertTo0to1(static_cast<float>(v)));
             prm->endChangeGesture();

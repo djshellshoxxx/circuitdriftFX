@@ -124,6 +124,9 @@ public:
 
     // Transactions and history (CD-F09). Gestures group parameter edits into one undo step.
     virtual void beginGesture(const juce::String& label) = 0;
+    // Declare each parameter before its first write. Unrelated host automation must not
+    // become part of a local undo transaction. Repeated declarations keep the first value.
+    virtual void touchParameter(const juce::String&) {}
     virtual void endGesture() = 0;
     virtual void undo() = 0;
     virtual void redo() = 0;
@@ -161,6 +164,7 @@ public:
 
     // Engine reset (Warm/Cold) and re-prepare request after a staged quality change.
     virtual void resetEngine(bool cold) = 0;
+    virtual bool supportsEngineReset() const { return true; }
 
     // Capture/export (CD-F03). The editor renders frames of its own canvas and submits them;
     // encoding and file writes happen on a worker.

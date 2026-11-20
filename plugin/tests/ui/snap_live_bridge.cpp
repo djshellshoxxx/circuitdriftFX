@@ -3,6 +3,8 @@
 #include "PluginProcessor.h"
 #include "ui/PluginEditor.h"
 #include "ui/ProcessorEditorBridge.h"
+#include "ui/panels/PanelCommon.h"
+#include "ui/workbench/ParamOps.h"
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -37,6 +39,7 @@ int main() {
         const float initialA = a->getValue(), initialB = b->getValue();
         const float changed = initialA < 0.4f ? 0.8f : 0.1f;
         bridge.beginGesture("Drive A");
+        bridge.touchParameter(a->getParameterID());
         write(*a, changed);
         bridge.endGesture();
         check(bridge.history().canUndo && bridge.history().position == 1, "gesture recorded once");
@@ -61,8 +64,51 @@ int main() {
         check(closeTo(a->getValue(), beforeSwapA) && closeTo(b->getValue(), beforeSwapB) &&
               closeTo(crossfade->getValue(), fade), "swap undo restores slots and crossfade");
 
+        // An unrelated host parameter may move while a UI gesture is still open.
+        // Only the user's declared parameter belongs to that gesture's undo step.
+        {
+            const float initial = a->getValue();
+            ui::pc::ParamBinding binding(bridge, "Scoped drive edit");
+            binding.bind(a->getParameterID(), [](float) {});
+            binding.beginPart();
+            binding.setPart(a->convertFrom0to1(0.4f));
+            write(*b, 0.65f);
+            binding.endPart();
+            bridge.undo();
+            check(closeTo(a->getValue(), initial) && closeTo(b->getValue(), 0.65f),
+                  "panel undo leaves unrelated host automation unchanged");
+            bridge.redo();
+            check(closeTo(a->getValue(), 0.4f) && closeTo(b->getValue(), 0.65f),
+                  "panel redo reapplies only the declared parameter");
+        }
+        {
+            bridge.setEditSlot(0);
+            const float initial = a->getValue();
+            ui::ParamOps ops(bridge);
+            check(ops.begin("Scoped workbench drive", {"stage.drive", "stage.drive"}),
+                  "real workbench gesture opens");
+            ops.setNormalized("stage.drive", 0.25f);
+            write(*b, 0.75f);
+            ops.end();
+            bridge.undo();
+            check(closeTo(a->getValue(), initial) && closeTo(b->getValue(), 0.75f),
+                  "workbench undo retains first captured value and excludes unrelated automation");
+        }
+        {
+            const float initial = a->getValue();
+            bridge.beginGesture("Repeated declaration");
+            bridge.touchParameter(a->getParameterID());
+            write(*a, 0.2f);
+            bridge.touchParameter(a->getParameterID());
+            write(*a, 0.3f);
+            bridge.endGesture();
+            bridge.undo();
+            check(closeTo(a->getValue(), initial), "repeated touch keeps the first pre-edit value");
+        }
+
         // Host automation after a local transaction must never be overwritten by undo.
         bridge.beginGesture("Host conflict");
+        bridge.touchParameter(a->getParameterID());
         write(*a, 0.45f);
         bridge.endGesture();
         write(*a, 0.65f);
@@ -71,6 +117,7 @@ int main() {
               "stale local undo rejected rather than overwriting host changes");
 
         bridge.beginGesture("Session load invalidation");
+        bridge.touchParameter(a->getParameterID());
         write(*a, 0.3f);
         bridge.endGesture();
         juce::MemoryBlock state;
@@ -84,6 +131,7 @@ int main() {
     if (a) {
         for (int i = 0; i < 23; ++i) {
             bridge.beginGesture("Bounded edit " + juce::String(i));
+            bridge.touchParameter(a->getParameterID());
             write(*a, 0.10f + static_cast<float>(i) * 0.02f);
             bridge.endGesture();
         }
@@ -91,6 +139,19 @@ int main() {
               "history retention capped at twenty completed transactions");
     }
 
+    check(!bridge.supportsEngineReset(), "unprepared live processor disables engine reset");
+    {
+        auto quality = ui::pc::makeQualityPanel(bridge);
+        int disabledResets = 0;
+        const auto inspect = [&](auto&& self, juce::Component& component) -> void {
+            if (auto* button = dynamic_cast<juce::TextButton*>(&component))
+                if ((button->getButtonText() == "Reset Warm" || button->getButtonText() == "Reset Cold") &&
+                    !button->isEnabled()) ++disabledResets;
+            for (auto* child : component.getChildren()) self(self, *child);
+        };
+        inspect(inspect, *quality);
+        check(disabledResets == 2, "quality panel exposes disabled reset actions before preparation");
+    }
     check(!bridge.supportsRestorationCommit(),
           "live UI must disable unavailable seed-restoration action");
     juce::String error;

@@ -34,17 +34,47 @@ StatusInfo ProcessorEditorBridge::status() {
     s.communityStatus = "No catalog service configured (G06)";
     s.presetName = "Current session";
     s.presetModified = !steps_.empty();
-    engine::TelemetryFrame frame{};
-    if (processor_.readEditorTelemetry(frame)) {
+    CircuitDriftProcessor::EditorSnapshot snapshot{};
+    if (processor_.readEditorSnapshot(snapshot)) {
+        const auto& frame = snapshot.telemetry;
+        const auto& controls = snapshot.controls;
         s.latencySamples = frame.latencySamples;
         s.sampleRate = frame.sampleRate;
         s.activeOversampling = frame.activeFactor;
         s.pendingOversampling = frame.pendingFactor;
+        s.activeIir = frame.activeFamilyIir != 0;
+        s.pendingIir = frame.pendingFamilyIir != 0;
+        s.reprepareRequired = frame.reprepareRequired;
+        s.qualityTransition = frame.qualityTransition;
+        s.zeroLatency = frame.activeZeroLatency;
+        s.pitchDriftActive = frame.activePitchDrift && !frame.activeZeroLatency;
+        s.draftQuality = frame.activeFactor <= 2 || frame.activeZeroLatency;
         s.solverFallback = frame.solverFallback;
+        s.needsReset = frame.needsReset;
+        s.bypassed = frame.bypassed;
+        s.tempoFallback = controls.tempoFallback;
+        s.bpm = snapshot.bpm;
+        s.pitchHz = controls.pitchHz;
+        s.pitchConfidence = controls.pitchConfidence;
+        s.sidechainConnected = controls.sidechainConnected;
+        for (int slot = 0; slot < engine::kSlots; ++slot)
+            s.harmonicAvailable[slot] = controls.harmonicAvailable[slot];
+        switch (controls.keyState) {
+            case control::KeyState::Off: s.keyState = "Off"; break;
+            case control::KeyState::ManualReference: s.keyState = "Manual reference"; break;
+            case control::KeyState::NoteActive: s.keyState = "Note active"; break;
+            case control::KeyState::NoteHold: s.keyState = "Last note held"; break;
+            case control::KeyState::Returning: s.keyState = "Returning to reference"; break;
+        }
+        if (controls.pitchDriftHeld) s.keyState += "; pitch drift held";
     }
     return s;
 }
-engine::EffectiveTargets ProcessorEditorBridge::effectiveTargets(int) { return {}; }
+engine::EffectiveTargets ProcessorEditorBridge::effectiveTargets(int slot) {
+    if (slot < 0 || slot >= engine::kSlots) return {};
+    CircuitDriftProcessor::EditorSnapshot snapshot{};
+    return processor_.readEditorSnapshot(snapshot) ? snapshot.targets[slot] : engine::EffectiveTargets{};
+}
 
 ProcessorEditorBridge::Snapshot ProcessorEditorBridge::snapshot() const {
     Snapshot result;
@@ -71,9 +101,16 @@ void ProcessorEditorBridge::syncStateEpoch() {
 void ProcessorEditorBridge::beginGesture(const juce::String& label) {
     syncStateEpoch();
     if (gestureOpen_) endGesture();
-    gestureBefore_ = snapshot();
+    gestureBefore_.clear();
     gestureLabel_ = label.trim().isEmpty() ? juce::String("Edit parameters") : label;
     gestureOpen_ = true;
+}
+void ProcessorEditorBridge::touchParameter(const juce::String& id) {
+    syncStateEpoch();
+    if (!gestureOpen_ || std::any_of(gestureBefore_.begin(), gestureBefore_.end(),
+                                  [&](const auto& value) { return value.first == id; })) return;
+    if (auto* parameter = processor_.parameters().getParameter(id))
+        gestureBefore_.emplace_back(id, parameter->getValue());
 }
 void ProcessorEditorBridge::endGesture() {
     syncStateEpoch();
@@ -84,13 +121,12 @@ void ProcessorEditorBridge::endGesture() {
     gestureLabel_.clear();
 }
 void ProcessorEditorBridge::finish(const Snapshot& before, const juce::String& label) {
-    const auto after = snapshot();
-    if (after.size() != before.size()) return; // the edition/parameter layout changed
     std::vector<Change> changes;
-    for (std::size_t i = 0; i < after.size(); ++i) {
-        if (after[i].first != before[i].first) return;
-        if (!sameValue(before[i].second, after[i].second))
-            changes.push_back({after[i].first, before[i].second, after[i].second});
+    for (const auto& [id, initial] : before) {
+        auto* parameter = processor_.parameters().getParameter(id);
+        if (parameter == nullptr) return;
+        const auto current = parameter->getValue();
+        if (!sameValue(initial, current)) changes.push_back({id, initial, current});
     }
     record(std::move(changes), label);
 }
@@ -164,8 +200,12 @@ void ProcessorEditorBridge::copySlot(int from, int to) {
         if (processor_.parameters().getParameter(id) == nullptr) return;
         changes.emplace_back(id, item.second);
     }
-    for (const auto& item : changes) setParameter(item.first, item.second);
-    finish(before, from == 0 ? "Copy A to B" : "Copy B to A");
+    beginGesture(from == 0 ? "Copy A to B" : "Copy B to A");
+    for (const auto& item : changes) {
+        touchParameter(item.first);
+        setParameter(item.first, item.second);
+    }
+    endGesture();
 }
 void ProcessorEditorBridge::swapSlots() {
     syncStateEpoch();
@@ -181,11 +221,15 @@ void ProcessorEditorBridge::swapSlots() {
         if (found == before.end()) return;
         changes.emplace_back(item.first, found->second);
     }
-    for (const auto& item : changes) setParameter(item.first, item.second);
-    // Mirroring the 0..1 crossfade preserves the audible blend when the slots exchange places.
-    if (auto* p = processor_.parameters().getParameter("ab.crossfade"))
-        setParameter("ab.crossfade", 1.0f - p->getValue());
-    finish(before, "Swap A and B");
+    // Stage the crossfade with both slots, before host notifications can change parameters.
+    for (const auto& item : before)
+        if (item.first == "ab.crossfade") changes.emplace_back(item.first, 1.0f - item.second);
+    beginGesture("Swap A and B");
+    for (const auto& item : changes) {
+        touchParameter(item.first);
+        setParameter(item.first, item.second);
+    }
+    endGesture();
 }
 
 std::vector<PresetEntry> ProcessorEditorBridge::listPresets(const juce::String&) { return {}; }
@@ -208,7 +252,12 @@ bool ProcessorEditorBridge::blueprintReport(BlueprintReport& out) {
     return true;
 }
 bool ProcessorEditorBridge::applyBlueprint(int, const juce::String&, juce::String& error) { return unavailable(error); }
-void ProcessorEditorBridge::resetEngine(bool) {} // Never reset worker-owned state from the UI while audio is running.
+void ProcessorEditorBridge::resetEngine(bool cold) {
+    if (supportsEngineReset()) processor_.requestEngineReset(cold);
+}
+bool ProcessorEditorBridge::supportsEngineReset() const {
+    return processor_.edition() == Edition::Full && processor_.editorSampleRate() > 0.0;
+}
 bool ProcessorEditorBridge::startCapture(const CaptureRequest&, juce::String& error) { return unavailable(error); }
 void ProcessorEditorBridge::submitCaptureFrame(const juce::Image&) {}
 void ProcessorEditorBridge::stopCapture() {}

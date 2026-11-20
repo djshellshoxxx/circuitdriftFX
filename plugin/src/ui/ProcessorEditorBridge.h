@@ -21,6 +21,7 @@ public:
     engine::EffectiveTargets effectiveTargets(int slot) override;
 
     void beginGesture(const juce::String& label) override;
+    void touchParameter(const juce::String& id) override;
     void endGesture() override;
     void undo() override;
     void redo() override;
@@ -45,6 +46,7 @@ public:
     bool blueprintReport(BlueprintReport& out) override;
     bool applyBlueprint(int slot, const juce::String& json, juce::String& error) override;
     void resetEngine(bool cold) override;
+    bool supportsEngineReset() const override;
     bool startCapture(const CaptureRequest& request, juce::String& error) override;
     void submitCaptureFrame(const juce::Image& frame) override;
     void stopCapture() override;

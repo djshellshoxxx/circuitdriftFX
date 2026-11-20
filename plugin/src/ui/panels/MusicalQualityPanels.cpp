@@ -226,10 +226,12 @@ public:
         content_.addItem(*warm_, buttonBasis("Reset Warm"), 30);
         content_.addItem(*cold_, buttonBasis("Reset Cold"), 30);
         note("Warm keeps heat and rail state; Cold behaves like switching the unit on from room temperature.");
+        resetStatus_ = note("", Tone::Warn);
+        refreshResetAvailability();
     }
 
     void refresh(const StatusInfo& s) override {
-        bool ch = false;
+        bool ch = refreshResetAvailability();
         const double sr = s.sampleRate;
         auto lat = [sr](int samples) { return juce::String(samples) + " samples" + (sr > 0 ? " (" + juce::String(samples * 1000.0 / sr, 2) + " ms)" : juce::String()); };
         const bool draftNow = s.draftQuality || s.activeOversampling <= 2 || s.zeroLatency;
@@ -254,9 +256,15 @@ public:
     }
 
 private:
+    bool refreshResetAvailability() {
+        const bool canReset = bridge.supportsEngineReset();
+        warm_->setEnabled(canReset);
+        cold_->setEnabled(canReset);
+        return resetStatus_->set(canReset ? "" : "Engine reset is unavailable while the processor is not prepared.", Tone::Warn);
+    }
     ParamChoice mode_, os_, phase_;
     ParamToggle zero_, soft_, hpf_;
-    NoteLabel *draft_ = nullptr, *zeroNote_ = nullptr, *active_ = nullptr, *pending_ = nullptr, *latency_ = nullptr, *protect_ = nullptr;
+    NoteLabel *draft_ = nullptr, *zeroNote_ = nullptr, *active_ = nullptr, *pending_ = nullptr, *latency_ = nullptr, *protect_ = nullptr, *resetStatus_ = nullptr;
     std::unique_ptr<juce::TextButton> warm_, cold_;
 };
 

@@ -33,13 +33,37 @@ Knob::Knob(ShellContext& ctx, EditorBridge& bridge, const juce::String& paramId,
         };
         bipolar_ = getMinimum() < 0.0 && getMaximum() > 0.0;
     }
-    onDragStart = [this] { bridge_.beginGesture("Adjust " + label_); };
-    onDragEnd = [this] { bridge_.endGesture(); };
+    onDragStart = [this] {
+        dragGesture_ = true;
+        bridge_.beginGesture("Adjust " + label_);
+        bridge_.touchParameter(paramId_);
+    };
+    onDragEnd = [this] {
+        dragGesture_ = false;
+        bridge_.endGesture();
+    };
 }
 
 Knob::~Knob() {
     stopTimer();
     endKeyGesture();
+    if (dragGesture_) {
+        // The attachment is removed before JUCE destroys its current drag scope.
+        // Close its host gesture now, while the parameter and bridge are alive.
+        if (auto* parameter = bridge_.parameters().getParameter(paramId_)) parameter->endChangeGesture();
+        dragGesture_ = false;
+        bridge_.endGesture();
+    }
+    onDragStart = {};
+    onDragEnd = {};
+    textFromValueFunction = {};
+    valueFromTextFunction = {};
+    if (entry_) {
+        entry_->onFocusLost = {};
+        entry_->onReturnKey = {};
+        entry_->onEscapeKey = {};
+        entry_.reset();
+    }
     attachment_.reset();
 }
 
@@ -128,8 +152,11 @@ void Knob::paint(juce::Graphics& g) {
 }
 
 void Knob::beginKeyGesture() {
+    if (dragGesture_) return;
     if (!keyGesture_) {
         bridge_.beginGesture("Adjust " + label_);
+        bridge_.touchParameter(paramId_);
+        if (auto* parameter = bridge_.parameters().getParameter(paramId_)) parameter->beginChangeGesture();
         keyGesture_ = true;
     }
     startTimer(500);
@@ -139,6 +166,7 @@ void Knob::endKeyGesture() {
     stopTimer();
     if (keyGesture_) {
         keyGesture_ = false;
+        if (auto* parameter = bridge_.parameters().getParameter(paramId_)) parameter->endChangeGesture();
         bridge_.endGesture();
     }
 }
@@ -173,6 +201,7 @@ bool Knob::keyPressed(const juce::KeyPress& k) {
 }
 
 void Knob::mouseDown(const juce::MouseEvent& e) {
+    endKeyGesture();
     grabKeyboardFocus();
     if (e.mods.isPopupMenu()) {
         juce::PopupMenu m;
@@ -191,11 +220,24 @@ void Knob::mouseDown(const juce::MouseEvent& e) {
 
 void Knob::mouseDoubleClick(const juce::MouseEvent&) { resetToDefault(); }
 
+void Knob::setValueAsUserGesture(const juce::String& label, double value) {
+    endKeyGesture();
+    if (dragGesture_) {
+        setValue(value, juce::sendNotificationSync);
+        return;
+    }
+    bridge_.beginGesture(label);
+    bridge_.touchParameter(paramId_);
+    auto* parameter = bridge_.parameters().getParameter(paramId_);
+    if (parameter) parameter->beginChangeGesture();
+    setValue(value, juce::sendNotificationSync);
+    if (parameter) parameter->endChangeGesture();
+    bridge_.endGesture();
+}
+
 void Knob::resetToDefault() {
     if (!isAttached()) return;
-    bridge_.beginGesture("Reset " + label_);
-    setValue(getDoubleClickReturnValue(), juce::sendNotificationSync);
-    bridge_.endGesture();
+    setValueAsUserGesture("Reset " + label_, getDoubleClickReturnValue());
 }
 
 void Knob::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w) {
@@ -245,9 +287,7 @@ bool Knob::commitText(const juce::String& text) {
     if (text.trim() == valueText()) return true;
     double v = 0;
     if (!parseValue(fmt_, text, v) || v < getMinimum() || v > getMaximum()) return false;
-    bridge_.beginGesture("Set " + label_);
-    setValue(v, juce::sendNotificationSync);
-    bridge_.endGesture();
+    setValueAsUserGesture("Set " + label_, v);
     return true;
 }
 
@@ -279,6 +319,7 @@ void Switch::clicked() {
     if (attachment_ && !indicator_ && userAction_ && !gestureOpen_) {
         gestureOpen_ = true;
         bridge_.beginGesture("Toggle " + label_);
+        bridge_.touchParameter(paramId_);
     }
 }
 
