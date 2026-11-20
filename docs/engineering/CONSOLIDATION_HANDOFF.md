@@ -202,3 +202,22 @@ any genuine validator failures, then pursue real EditorBridge transactions and
 versioned runtime/seed/session persistence. Separate security, bug and code
 review workers were not available in this tool context; the saved reviews are
 not new independent signoffs.
+
+## PR #16 guarded integration — continuation ownership
+
+The original Windows run reached a completed state before integration.
+PR #16 was fast-forwarded **without force**, with a checked expected SHA,
+from `e721e9eea044b352546abd3a1b945fa1f3745038` to child source head
+`cb53cd812700e5edbcf7323653b84e470da77cfc` (five descendant commits).
+This incorporated the pitch-worker seek/epoch fix, cache pin cleanup, CI launcher
+repair and their regressions. Original branches were preserved. The draft PR
+description now records the live head, original Windows failure and exact-head
+requalification requirements.
+
+[New PR #16 CI run 44674618903](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44674618903)
+was queued on the integrated commit. **Do not advance PR #16 again while this
+new run is in progress.** This documentation-only successor is kept on the child
+branch; it does not yet modify the new PR head or cancel CI. Check live refs
+and exact-run results next time. Correct real failures; do not rerun already
+verified suites merely to demonstrate activity. Worker spawning/review was
+unavailable during this pass; no independent signoff is implied.
