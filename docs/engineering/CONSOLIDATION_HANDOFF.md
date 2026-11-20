@@ -171,3 +171,34 @@ claim complete multi-process atomicity. The change has not yet run under CI.
 
 Child-branch last production commit: `63c33686bca432c807c93112e6aa65dc349d49e2`.
 Do not count the base PR #16 Linux pass as verification of this later code.
+
+## 2026-11-20 Windows CI diagnosis and guarded follow-up
+
+Original PR #16 head `e721e9eea044b352546abd3a1b945fa1f3745038`
+completed [CI run 44662769491](https://github.com/djshellshoxxx/circuitdriftFX/actions/runs/44662769491).
+Linux succeeded. Windows configured, compiled, ran CTest, staged VST3/CLAP/
+standalone and uploaded packages successfully, but the pluginval step failed.
+The job log prints both "pluginval failed" messages **before** either validator
+prints "Started validating". The artifact contains two **zero-byte** validator
+logs. This is consistent with PowerShell invoking the Windows GUI-subsystem
+pluginval executable without waiting, then checking a stale `$LASTEXITCODE`;
+it is **not evidence that plugin compatibility itself failed**. The GitHub
+pull_request checkout also used synthetic merge SHA `33fbe24c...` by
+default, not the exact feature-head commit despite the run's head label.
+
+The isolated continuation now fixes the CI invocation to use
+`Start-Process -Wait -PassThru -NoNewWindow`, checks each *completed*
+validator's exit and nonempty new report, and preserves strictness level 5,
+all plugin formats, all host checks and artifacts. Both checkout actions
+explicitly select the pull request head SHA; artifact names use the same source
+SHA. These are runner/attribution repairs, not a waiver of failed validation.
+The new pluginval invocation and exact-head qualification must still execute
+on Windows after the PR head advances. No plugin pass, screenshot, native-host
+test or real circuit-model evidence is claimed by this commit.
+
+Before integrating this child with PR #16, check its latest head for competing
+workers and fast-forward with a lease. Next: read new exact-head CI logs, inspect
+any genuine validator failures, then pursue real EditorBridge transactions and
+versioned runtime/seed/session persistence. Separate security, bug and code
+review workers were not available in this tool context; the saved reviews are
+not new independent signoffs.

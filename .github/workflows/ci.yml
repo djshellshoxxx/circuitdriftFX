@@ -18,7 +18,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 1, persist-credentials: false }
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          # PR merge commits are not the feature head; qualify and label the exact source commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCD_SANITIZE=ON
       - run: cmake --build build --parallel 4
       - run: ctest --test-dir build --output-on-failure --parallel 4
@@ -34,7 +38,11 @@ jobs:
       CD_DEPS_CACHE_DIR: ${{ github.workspace }}/.deps-cache
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 1, persist-credentials: false }
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          # PR merge commits are not the feature head; qualify and label the exact source commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       # Dependency sources only (JUCE, clap-juce-extensions + submodules); never build trees.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -67,7 +75,7 @@ jobs:
         run: bash plugin/packaging/stage_windows.sh build-plugin dist Release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: circuitdrift-windows-x64-${{ github.sha }}
+          name: circuitdrift-windows-x64-${{ github.event.pull_request.head.sha || github.sha }}
           path: dist
           retention-days: 14
           if-no-files-found: error
@@ -84,17 +92,33 @@ jobs:
           if ($actual -ne $env:PLUGINVAL_SHA256) { throw "pluginval hash mismatch: $actual" }
           Expand-Archive pluginval.zip -DestinationPath pluginval-tool
           New-Item -ItemType Directory -Force pluginval-logs | Out-Null
+          # pluginval is a Windows GUI-subsystem executable: invoking with '&' may
+          # return before validation has finished. Check the completed process,
+          # not the stale LASTEXITCODE of a detached GUI launch.
+          $validator = (Resolve-Path 'pluginval-tool/pluginval.exe').Path
+          $logs = (Resolve-Path 'pluginval-logs').Path
+          $bundles = @(Get-ChildItem 'dist/VST3' -Directory)
+          if ($bundles.Count -eq 0) { throw 'No VST3 bundles to validate' }
           $failed = $false
-          foreach ($bundle in Get-ChildItem dist/VST3 -Directory) {
-            & pluginval-tool/pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 300000 `
-              --output-dir pluginval-logs $bundle.FullName
-            if ($LASTEXITCODE -ne 0) { Write-Host "pluginval failed for $($bundle.Name)"; $failed = $true }
+          foreach ($bundle in $bundles) {
+            $existing = @(Get-ChildItem -LiteralPath $logs -Filter '*.txt' -File | ForEach-Object FullName)
+            # Quote both Windows paths: the LITE bundle contains a space.
+            $arguments = '--strictness-level 5 --validate-in-process --timeout-ms 300000 --output-dir "{0}" "{1}"' -f $logs, $bundle.FullName
+            $process = Start-Process -FilePath $validator -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+            $newLogs = @(Get-ChildItem -LiteralPath $logs -Filter '*.txt' -File |
+              Where-Object { $_.FullName -notin $existing })
+            $emptyLogs = @($newLogs | Where-Object { $_.Length -eq 0 })
+            if ($process.ExitCode -ne 0 -or $newLogs.Count -eq 0 -or $emptyLogs.Count -ne 0) {
+              Write-Host "pluginval failed for $($bundle.Name): exit=$($process.ExitCode), logs=$($newLogs.Count), empty=$($emptyLogs.Count)"
+              foreach ($log in $newLogs) { Get-Content -LiteralPath $log.FullName -Tail 80 }
+              $failed = $true
+            }
           }
           if ($failed) { exit 1 }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: pluginval-logs-${{ github.sha }}
+          name: pluginval-logs-${{ github.event.pull_request.head.sha || github.sha }}
           path: pluginval-logs
           retention-days: 14
           if-no-files-found: ignore

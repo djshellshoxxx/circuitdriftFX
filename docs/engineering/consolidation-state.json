@@ -162,11 +162,14 @@
     "integration_status": "isolated_not_in_pr16",
     "validation": {
       "pr16_linux": "passed_on_base_sha",
-      "pr16_windows": "building_on_base_sha",
-      "child": "not_yet_ci_qualified"
+      "pr16_windows": "failed_pluginval_invocation_only_after_build_ctest_and_staging_passed",
+      "child": "not_yet_ci_qualified",
+      "windows_run_id": 44662769491,
+      "windows_tested_checkout": "33fbe24c62c134998bf6fe080b592772c390300c (PR synthetic merge checkout)",
+      "exact_head_requalification": "pending_after_ref_move"
     },
     "unresolved": [
-      "Windows/pluginval base qualification",
+      "Exact PR-head Windows/pluginval rerun after GUI-process wait fix",
       "independent regression/security review",
       "child branch CI",
       "custom EditorBridge and session migration",
