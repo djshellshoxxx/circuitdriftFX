@@ -25,7 +25,8 @@ int main() {
     juce::ScopedJuceInitialiser_GUI gui;
     CircuitDriftProcessor processor(Edition::Full, "CircuitDrift");
     ProcessorEditorBridge bridge(processor);
-    check(!bridge.readTelemetry(*std::make_unique<cd::engine::TelemetryFrame>()),
+    auto telemetry = std::make_unique<cd::engine::TelemetryFrame>();
+    check(!bridge.readTelemetry(*telemetry),
           "unprepared processor cannot publish synthetic telemetry");
 
     auto* a = processor.parameters().getParameter("slot.a.stage.drive");
@@ -77,6 +78,17 @@ int main() {
         processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
         check(!bridge.history().canUndo && !bridge.history().canRedo,
               "replacing host session invalidates local undo stack");
+    }
+
+    // Retention: a new gesture after twenty steps evicts the oldest without growing unbounded.
+    if (a) {
+        for (int i = 0; i < 23; ++i) {
+            bridge.beginGesture("Bounded edit " + juce::String(i));
+            write(*a, 0.10f + static_cast<float>(i) * 0.02f);
+            bridge.endGesture();
+        }
+        check(bridge.history().entries.size() == 20 && bridge.history().position == 20,
+              "history retention capped at twenty completed transactions");
     }
 
     juce::String error;
