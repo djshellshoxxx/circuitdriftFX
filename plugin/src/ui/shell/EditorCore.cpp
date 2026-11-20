@@ -561,6 +561,11 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
     ~Parts() override {
         host.removeComponentListener(this);
         stopTimer();
+        // The editor owns frame production. Finalize before its visual surfaces disappear;
+        // the bridge's worker owns any already submitted images and has no borrowed renderer.
+        const auto captureState = bridge.captureStatus().state;
+        if (captureState == CaptureState::Armed || captureState == CaptureState::Recording)
+            bridge.stopCapture();
         help.reset();
         if (root) root->setLookAndFeel(nullptr);
     }
@@ -737,6 +742,9 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
         } else {
             stopTimer();
             help->dismiss();
+            // No painting while hidden. The capture worker keeps its own deadline and repeats
+            // the last admitted frame for remaining ticks, so closing a host window cannot
+            // leave a recording waiting for another visible drawer refresh.
         }
     }
     void componentVisibilityChanged(juce::Component&) override { setActive(host.isShowing()); }
@@ -798,9 +806,54 @@ struct EditorCore::Parts : private juce::Timer, private juce::ComponentListener 
         easy->sphere.update(si, dt);
         for (int i = 0; i < static_cast<int>(easy->scenes.size()); ++i)
             easy->scenes[static_cast<size_t>(i)]->setToggleState(owner.sceneMatches(i), juce::dontSendNotification);
-        if (workbench && workbench->isVisible()) workbench->updateFrame(frame, valid && !stale);
+        // A narrow drawer covers the selected view, but it remains the capture source.
+        if (workbench && !lite && ctx.ui.view == EditorView::Workbench)
+            workbench->updateFrame(frame, valid && !stale);
+        pumpCaptureFrame();
         if (drawer->isVisible())
             if (auto* p = drawer->currentPanel()) p->refresh(st);
+    }
+
+    juce::Image captureSnapshot(CaptureFormat format, CaptureFraming framing) {
+        const auto size = captureDimensions(format, framing);
+        if (size.width <= 0 || size.height <= 0) return {};
+        auto* surface = !lite && ctx.ui.view == EditorView::Workbench
+                            ? static_cast<juce::Component*>(workbench.get())
+                            : static_cast<juce::Component*>(easy.get());
+        if (surface == nullptr || surface->getWidth() <= 0 || surface->getHeight() <= 0) return {};
+        try {
+            // Allocate only the shared output size, directly in CPU memory. Rendering a scaled
+            // host snapshot and then resampling would retain an extra, potentially large image
+            // and can silently select a native/GPU image type on some hosts.
+            juce::Image image(juce::Image::ARGB, size.width, size.height, true, juce::SoftwareImageType());
+            if (!image.isValid()) return {};
+            juce::Graphics graphics(image);
+            graphics.fillAll(ctx.theme().background);
+            const float scale = std::max(static_cast<float>(size.width) / surface->getWidth(),
+                                         static_cast<float>(size.height) / surface->getHeight());
+            const float x = (size.width - surface->getWidth() * scale) * 0.5f;
+            const float y = (size.height - surface->getHeight() * scale) * 0.5f;
+            graphics.addTransform(juce::AffineTransform::scale(scale).translated(x, y));
+            // paintEntireComponent paints this explicitly owned subtree even when the drawer
+            // has hidden it. It never visits a parent, the editor header, or a host sibling.
+            surface->paintEntireComponent(graphics, true);
+            return image;
+        } catch (...) {
+            // The recording backend treats an invalid submitted image as a terminal failure;
+            // still-image actions show their own render failure without escaping the UI callback.
+            return {};
+        }
+    }
+
+    void pumpCaptureFrame() {
+        const auto request = bridge.takeCaptureFrameRequest();
+        if (!request) return;
+        const auto size = captureDimensions(CaptureFormat::Gif, request->framing);
+        // One current frame per UI opportunity; the worker fills missed absolute clock ticks.
+        // Do not allocate from request dimensions independently of the shared admitted sizes.
+        auto image = size.width == request->width && size.height == request->height
+                         ? captureSnapshot(CaptureFormat::Gif, request->framing) : juce::Image{};
+        bridge.submitCaptureFrame(*request, image);
     }
 
     void updateHeader(const StatusInfo& st) {
@@ -903,6 +956,10 @@ EditorCore* EditorCore::find(const juce::Component* host) {
 void EditorCore::hostResized() { p_->hostResized(); }
 void EditorCore::setActive(bool visible) { p_->setActive(visible); }
 void EditorCore::pumpFrame(double dt, juce::uint32 nowMs) { p_->pumpFrame(dt, nowMs); }
+juce::Image EditorCore::captureSnapshot(CaptureFormat format, CaptureFraming framing) {
+    p_->syncSettings();
+    return p_->captureSnapshot(format, framing);
+}
 ShellContext& EditorCore::context() noexcept { return p_->ctx; }
 HelpOverlay& EditorCore::help() noexcept { return *p_->help; }
 ToneSphere& EditorCore::sphere() noexcept { return p_->easy->sphere; }

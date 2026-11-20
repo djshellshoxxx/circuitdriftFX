@@ -12,6 +12,7 @@
 #include "PluginProcessor.h"
 #include "ui/EditorBridge.h"
 #include "FakeBridge.h"
+#include "CaptureUiRegressions.h"
 #include "core/ParameterRegistry.h"
 #include "ui/Education.h"
 #include "ui/PluginEditor.h"
@@ -450,6 +451,7 @@ int main(int argc, char** argv) {
     testEducation();
     testSphereMapping();
     testOpenEditorStateRestore();
+    g_failures += test::capture_ui_regressions::run(outDir);
 
     {
         test::FakeBridge bridge;

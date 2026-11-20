@@ -28,6 +28,10 @@ public:
     // One UI frame: reads telemetry ONCE and fans it out (sphere, workbench, panels, badges).
     void pumpFrame(double dtSeconds, juce::uint32 nowMs);
 
+    // Paint only this editor's selected Easy/Workbench surface into an exact-size software image.
+    // The selected surface can be covered by the drawer. No parent or host content is traversed.
+    juce::Image captureSnapshot(CaptureFormat format, CaptureFraming framing);
+
     // ---- State ----
     ShellContext& context() noexcept;
     HelpOverlay& help() noexcept;

@@ -1,6 +1,8 @@
 // Capture (CD-F03), Network (CD-F11) and Community (CD-F04) panels.
 #include <cmath>
+#include "ui/panels/CapturePanelTestHooks.h"
 #include "ui/panels/PanelCommon.h"
+#include "ui/shell/EditorCore.h"
 #include "ui/workbench/GestureMath.h"
 
 namespace cd::plugin::ui::pc {
@@ -41,7 +43,7 @@ public:
         content_.addItem(framing_, 240, ParamChoice::kHeight, true);
         duration_.slider.setRange(1.0, 15.0, 1.0);
         duration_.slider.setValue(10.0, juce::dontSendNotification);
-        duration_.slider.onValueChange = nullptr;
+        duration_.slider.onValueChange = [this] { clearActionResult(); };
         duration_.slider.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + " s"; };
         duration_.slider.valueFromTextFunction = [this](const juce::String& t) {
             return gesture::parseBoundedQuantity(t.toStdString(), "s", duration_.slider.getMinimum(), duration_.slider.getMaximum())
@@ -51,6 +53,9 @@ public:
         content_.addItem(duration_, 240, ParamSlider::kHeight, true);
         durNote_ = note("", Tone::Dim);
         loop_.setToggleState(true, juce::dontSendNotification);
+        framing_.box.onChange = [this] { clearActionResult(); };
+        audio_.onClick = [this] { clearActionResult(); };
+        loop_.onClick = [this] { clearActionResult(); };
         content_.addItem(audio_, 200, ParamToggle::kHeight);
         content_.addItem(loop_, 200, ParamToggle::kHeight);
         heading("Destination");
@@ -62,7 +67,7 @@ public:
         record_ = makeButton("Record", "Start recording the canvas to the chosen destination");
         stop_ = makeButton("Stop", "Stop recording and finish the file");
         record_->onClick = [this] { startRecording(); };
-        stop_->onClick = [this] { bridge.stopCapture(); };
+        stop_->onClick = [this] { clearActionResult(); bridge.stopCapture(); refresh(bridge.status()); };
         content_.addItem(*record_, buttonBasis("Save PNG"), 32);
         content_.addItem(*stop_, buttonBasis("Stop"), 32);
         progress_.reset(new juce::ProgressBar(progressValue_));
@@ -70,26 +75,29 @@ public:
         content_.addItem(*progress_, 240, 22, true);
         state_ = note("", Tone::Normal);
         msg_ = note("", Tone::Normal);
+        state_->setTitle("Capture state");
+        msg_->setTitle("Capture result");
         note("PNG captures the current canvas at the chosen aspect. GIF: 20 FPS, 256 colours, no audio. MP4: H.264 30 FPS, optional stereo AAC. A format is never silently swapped for another.");
         setFormat(CaptureFormat::Gif);
         gif_.setToggleState(true, juce::dontSendNotification);
         refresh(bridge.status());
     }
-    ~CapturePanel() override { if (recording_) bridge.stopCapture(); }
-
     void refresh(const StatusInfo&) override {
         const auto cs = bridge.captureStatus();
         bool ch = false;
         ch |= mp4Reason_->set(cs.mp4Available ? "" : "MP4 disabled: " + (cs.mp4Reason.isEmpty() ? juce::String("no native encoder available") : cs.mp4Reason) + ". Use GIF or PNG instead.", Tone::Warn);
-        if (!cs.mp4Available && format_ == CaptureFormat::Mp4) { setFormat(CaptureFormat::Gif); gif_.setToggleState(true, juce::dontSendNotification); }
         static const char* const names[] = {"Idle", "Armed", "Recording", "Finalizing", "Completed", "Cancelled", "Failed"};
         const int si = juce::jlimit(0, 6, static_cast<int>(cs.state));
         const bool busy = cs.state == CaptureState::Armed || cs.state == CaptureState::Recording || cs.state == CaptureState::Finalizing;
         ch |= state_->set(juce::String("State: ") + names[si] + (busy || cs.framesWritten > 0 ? ".  Frames written " + juce::String(cs.framesWritten) + ", repeated " + juce::String(cs.framesRepeated) : juce::String()),
                           cs.state == CaptureState::Failed ? Tone::Danger : cs.state == CaptureState::Completed ? Tone::Ok : Tone::Normal);
-        ch |= msg_->set(cs.message, cs.state == CaptureState::Failed ? Tone::Danger : Tone::Dim);
+        // A still-save or rejected-start result belongs to the user action, not to this poll.
+        // Keep it until another action or an actual capture state transition supersedes it.
+        if (hasActionResult_ && cs.state != actionResultState_) hasActionResult_ = false;
+        ch |= msg_->set(hasActionResult_ ? actionResult_ : cs.message,
+                        hasActionResult_ ? actionResultTone_ : cs.state == CaptureState::Failed ? Tone::Danger : Tone::Dim);
         progressValue_ = juce::jlimit(0.0, 1.0, cs.progress);
-        record_->setEnabled(!busy && dest_file_ != juce::File());
+        record_->setEnabled(!busy && dest_file_ != juce::File() && (format_ != CaptureFormat::Mp4 || cs.mp4Available));
         stop_->setEnabled(busy);
         const bool png = format_ == CaptureFormat::Png;
         for (auto* c : std::initializer_list<juce::Component*>{&png_, &gif_, &mp4_, &framing_.box, &dest_ctl()}) c->setEnabled(!busy && (c != &mp4_ || cs.mp4Available));
@@ -97,16 +105,21 @@ public:
         audio_.setEnabled(!busy && format_ == CaptureFormat::Mp4);
         loop_.setEnabled(!busy && format_ == CaptureFormat::Gif);
         ch |= destNote_->set(dest_file_ == juce::File() ? "No destination chosen yet: choose a file before recording." : "Destination: " + dest_file_.getFullPathName(), dest_file_ == juce::File() ? Tone::Warn : Tone::Dim);
-        // The editor canvas is captured here at the format's frame rate while recording.
-        if (recording_ && cs.state == CaptureState::Recording) pumpFrame();
-        if (recording_ && !busy) recording_ = false;
         if (ch) relayout();
+    }
+
+    void setDestination(const juce::File& destination) {
+        if (destination == juce::File()) return;
+        clearActionResult();
+        dest_file_ = destination.getFileExtension().isEmpty() ? destination.withFileExtension(ext()) : destination;
+        refresh(bridge.status());
     }
 
 private:
     juce::Component& dest_ctl() { return *dest_; }
     juce::TextButton& fmtButton(int i) { return i == 0 ? png_ : i == 1 ? gif_ : mp4_; }
     void setFormat(CaptureFormat f) {
+        if (format_ != f) clearActionResult();
         format_ = f;
         const double maxS = f == CaptureFormat::Mp4 ? 60.0 : 15.0;
         duration_.slider.setRange(1.0, maxS, 1.0);
@@ -127,38 +140,33 @@ private:
         chooser_->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                               [safe](const juce::FileChooser& fc) {
                                   if (safe == nullptr) return;
-                                  auto f = fc.getResult();
-                                  if (f == juce::File()) return;
-                                  if (f.getFileExtension().isEmpty()) f = f.withFileExtension(safe->ext());
-                                  safe->dest_file_ = f;
-                                  safe->refresh(safe->bridge.status());
+                                  safe->setDestination(fc.getResult());
                               });
     }
-    juce::Rectangle<int> cropRect(juce::Component& top) const {
-        const double aspect = framing_.index() == 1 ? 1.0 : framing_.index() == 2 ? 16.0 / 9.0 : 9.0 / 16.0;
-        auto b = top.getLocalBounds();
-        int w = b.getWidth(), h = b.getHeight();
-        if (static_cast<double>(w) / std::max(1, h) > aspect) w = juce::roundToInt(h * aspect); else h = juce::roundToInt(w / aspect);
-        return juce::Rectangle<int>(w, h).withCentre(b.getCentre());
+    void clearActionResult() { hasActionResult_ = false; }
+    void showActionResult(const juce::String& message, Tone tone) {
+        actionResult_ = message;
+        actionResultTone_ = tone;
+        actionResultState_ = bridge.captureStatus().state;
+        hasActionResult_ = true;
+        msg_->set(message, tone);
     }
     juce::Image snapshot() {
-        auto* top = getTopLevelComponent();
-        if (top == nullptr) return {};
-        const auto r = cropRect(*top);
-        int outW = 540;
-        if (format_ == CaptureFormat::Mp4) outW = framing_.index() == 2 ? 1920 : 1080;
-        else if (format_ == CaptureFormat::Png) outW = framing_.index() == 2 ? 1920 : 1080;
-        else outW = framing_.index() == 2 ? 960 : 540;
-        const float scale = static_cast<float>(outW) / static_cast<float>(std::max(1, r.getWidth()));
-        return top->createComponentSnapshot(r, true, scale);
+        const auto framing = static_cast<CaptureFraming>(juce::jlimit(0, 2, framing_.index()));
+        // Resolve only an explicitly registered editor among this panel's ancestors.
+        // A standalone panel has no capture source; arbitrary parents are never a fallback.
+        for (auto* ancestor = getParentComponent(); ancestor != nullptr; ancestor = ancestor->getParentComponent())
+            if (auto* editor = shell::EditorCore::find(ancestor)) return editor->captureSnapshot(format_, framing);
+        return {};
     }
     void startRecording() {
         juce::String err;
         if (dest_file_ == juce::File()) return;
+        clearActionResult();
         if (format_ == CaptureFormat::Png) {
             auto img = snapshot();
-            if (!img.isValid() || !bridge.savePng(img, dest_file_, err)) msg_->set("PNG failed: " + (err.isEmpty() ? juce::String("could not render the canvas") : err), Tone::Danger);
-            else msg_->set("Saved " + dest_file_.getFullPathName(), Tone::Ok);
+            if (!img.isValid() || !bridge.savePng(img, dest_file_, err)) showActionResult("PNG failed: " + (err.isEmpty() ? juce::String("could not render the canvas") : err), Tone::Danger);
+            else showActionResult("Saved " + dest_file_.getFullPathName(), Tone::Ok);
             relayout();
             return;
         }
@@ -169,21 +177,8 @@ private:
         rq.includeAudio = format_ == CaptureFormat::Mp4 && audio_.getToggleState();
         rq.loop = loop_.getToggleState();
         rq.destination = dest_file_;
-        if (!bridge.startCapture(rq, err)) { msg_->set("Could not start: " + err, Tone::Danger); relayout(); return; }
-        recording_ = true;
-        startMs_ = juce::Time::getMillisecondCounterHiRes();
-        lastFrameMs_ = 0;
-        msg_->set("");
-        relayout();
-    }
-    void pumpFrame() {
-        const double now = juce::Time::getMillisecondCounterHiRes();
-        if (now - startMs_ >= duration_.slider.getValue() * 1000.0) { bridge.stopCapture(); return; }
-        const double period = format_ == CaptureFormat::Gif ? 50.0 : 1000.0 / 30.0;
-        if (now - lastFrameMs_ < period) return;
-        lastFrameMs_ = now;
-        auto img = snapshot();
-        if (img.isValid()) bridge.submitCaptureFrame(img);
+        if (!bridge.startCapture(rq, err)) { showActionResult("Could not start: " + err, Tone::Danger); relayout(); return; }
+        refresh(bridge.status());
     }
 
     ParamChoice framing_;
@@ -197,8 +192,10 @@ private:
     CaptureFormat format_ = CaptureFormat::Gif;
     juce::File dest_file_;
     std::unique_ptr<juce::FileChooser> chooser_;
-    bool recording_ = false;
-    double startMs_ = 0, lastFrameMs_ = 0;
+    bool hasActionResult_ = false;
+    juce::String actionResult_;
+    Tone actionResultTone_ = Tone::Normal;
+    CaptureState actionResultState_ = CaptureState::Idle;
 };
 
 // ------------------------------------------------------------------------------------ Network
@@ -268,5 +265,13 @@ private:
 std::unique_ptr<Panel> makeCapturePanel(EditorBridge& b) { return std::make_unique<CapturePanel>(b); }
 std::unique_ptr<Panel> makeNetworkPanel(EditorBridge& b) { return std::make_unique<NetworkPanel>(b); }
 std::unique_ptr<Panel> makeCommunityPanel(EditorBridge& b) { return std::make_unique<CommunityPanel>(b); }
+
+bool testing::setCaptureDestination(Panel& panel, const juce::File& destination) {
+    if (auto* capture = dynamic_cast<CapturePanel*>(&panel)) {
+        capture->setDestination(destination);
+        return true;
+    }
+    return false;
+}
 
 }  // namespace cd::plugin::ui::pc
